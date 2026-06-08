@@ -1,6 +1,6 @@
 /**
  * One-shot extractors that populate brand profile slots, wins bank, and
- * micro-stories bank from Anna's core files via Claude.
+ * micro-stories bank from the creator's core files via Claude.
  *
  * Triggered manually (POST /api/seed/from-core?target=slots|wins|stories|all).
  * Safe to re-run - merge logic prevents overwriting existing values.

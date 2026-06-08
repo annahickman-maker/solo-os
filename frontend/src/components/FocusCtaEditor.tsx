@@ -77,7 +77,7 @@ export function FocusCtaEditor({ channel }: { channel: 'instagram' | 'youtube' }
           />
           <Field
             label="link"
-            placeholder="https://www.skool.com/mastermind-5724/about"
+            placeholder=""
             value={ctaUrl}
             onSave={saveUrl}
           />

@@ -288,7 +288,8 @@ app.patch('/:id/suggestions', async (c) => {
 
 // Defaults match server/src/routes/settings.ts DEFAULTS.focus_cta_*. Kept
 // here so this route can run independently if state.md is unreadable.
-const FOCUS_CTA_TEXT_DEFAULT = '';
+const FOCUS_CTA_TEXT_DEFAULT =
+  'want my system for building a one-person business that fits your brain? link in bio.';
 const FOCUS_CTA_URL_DEFAULT = '';
 
 function getFocusCta(): { text: string; url: string } {

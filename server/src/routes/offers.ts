@@ -233,7 +233,7 @@ app.get('/link-stats', async (c) => {
   const slug = c.req.query('slug');
   const days = c.req.query('days') ?? '30';
   if (!slug) return c.json({ error: 'slug query param required' }, 400);
-  const workerBase = process.env.LINK_STATS_BASE_URL ?? 'http://localhost';
+  const workerBase = process.env.LINK_STATS_BASE_URL ?? 'https://yourdomain.com';
   const url = `${workerBase}/link-stats?slug=${encodeURIComponent(slug)}&days=${encodeURIComponent(days)}`;
   try {
     const res = await fetch(url);
@@ -394,7 +394,7 @@ app.post('/pricing-rungs/:id/generate-tracking-link', async (c) => {
   return c.json({
     ok: true,
     slug,
-    short_url: `http://localhost/go/${slug}`,
+    short_url: `https://yourdomain.com/go/${slug}`,
     deploy_command: `cd ${WORKER_DIR_REL} && npm run deploy`,
     needs_deploy: true,
   });
@@ -566,7 +566,7 @@ app.post('/short-form-links/:id/generate-tracking-link', async (c) => {
   return c.json({
     ok: true,
     slug,
-    short_url: `http://localhost/go/${slug}`,
+    short_url: `https://yourdomain.com/go/${slug}`,
     deploy_command: `cd ${WORKER_DIR_REL} && npm run deploy`,
     needs_deploy: true,
   });
@@ -739,7 +739,7 @@ app.post('/avatars/:id/generate-card-summary', async (c) => {
   ].filter(Boolean).join('\n\n');
 
   const systemPrompt = [
-    "You write one-sentence card-sized descriptions of customer avatars for Anna Hickman's dashboard.",
+    "You write one-sentence card-sized descriptions of customer avatars for the creator's dashboard.",
     '',
     'Output requirements:',
     '- EXACTLY ONE sentence.',
@@ -759,7 +759,7 @@ app.post('/avatars/:id/generate-card-summary', async (c) => {
 
   let bridgeRes: Response;
   try {
-    bridgeRes = await fetch('http://localhost:8789/run', {
+    bridgeRes = await fetch('http://localhost:8788/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -222,7 +222,7 @@ app.post('/transcripts/upload', async (c) => {
   const explicitType = (form.get('type') as string | null) || null;
   const validTypes = TRANSCRIPT_DIRS.map((d) => d.type);
   // Auto-detect type from filename when not explicitly set. Patterns
-  // align with how Anna's existing automation names files:
+  // align with how the creator's existing automation names files:
   //   yt-*       → video
   //   workshop*  → workshop
   //   client*    → client

@@ -1295,7 +1295,7 @@ export interface OfferPricingRung {
   id: string;
   // Anna-facing label for the offer's price (e.g. "$47/mo", "$10K+").
   price_label: string;
-  // Short name for the offer (e.g. "Solopreneur Systems", "OS Builds").
+  // Short name for the offer (e.g. "the offer", "OS Builds").
   // Sits next to the price in the row head.
   name: string;
   // What the offer is - one paragraph. Used to surface what's actually being
@@ -1313,7 +1313,7 @@ export interface OfferPricingRung {
   // Optional avatar attached to this rung. Links to an OfferAvatar.id from
   // the avatar section. Null = no avatar assigned yet.
   avatar_id: string | null;
-  // Exactly one rung is featured at a time. The featured offer is Anna's
+  // Exactly one rung is featured at a time. The featured offer is the creator's
   // current focus - shown big at the top of the suite, and its score flows
   // into Today + Focus pages under the 90-day sprint (Phase 2).
   featured: boolean;
@@ -1366,7 +1366,7 @@ export interface OfferPricingRung {
     content: string[];
   };
   // Per-rung validation state. Each rung has its own independent
-  // ticked checks - what's ticked on Solopreneur Systems doesn't
+  // ticked checks - what's ticked on the offer doesn't
   // apply to OS Builds. Slots live at offer_rung_<rungId>_vcheck_<id>.
   validation_phases?: OfferValidationPhase[];
   current_validation_phase?: OfferValidationPhase['id'];

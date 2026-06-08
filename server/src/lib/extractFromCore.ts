@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import { abs, loadCollection, loadFile, saveFile } from '../vault.js';
 
-const BRIDGE_URL = 'http://localhost:8789/run';
+const BRIDGE_URL = 'http://localhost:8788/run';
 
 function readCore(filename: string): string {
   try {
@@ -203,7 +203,7 @@ export async function extractMicroStories(): Promise<Array<{ text: string; sourc
 // ─── Verbatim micro-stories from video transcripts ─────────────────────────
 // The paraphrased version (extractMicroStories) is removed in favour of this.
 // Pulls exact quotes from published video transcripts so each micro-story is
-// something the creator actually said on camera, with attribution.
+// something Anna actually said on camera, with attribution.
 
 const VERBATIM_STORIES_PROMPT = `You are reading published YouTube video transcripts. Extract VERBATIM micro-stories - small, specific, vivid moments the creator tells in her own voice.
 

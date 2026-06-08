@@ -121,6 +121,7 @@ These have structural differences in the template and must be edited directly in
 | `frontend/src/components/NavRail.tsx` | Brand text: `solo os` |
 | `frontend/src/auth.tsx` | Password gate brand: `solo os.` |
 | `frontend/src/pages/Today.tsx` | Greeting: `hello` (not `hello, anna`) |
+| `frontend/src/pages/Projects.tsx` | Eyebrow label: `projects` (not `solopreneur systems`) |
 | `frontend/vite.config.ts` | Ports 5174/8791 to avoid colliding with your live dashboard |
 | `start-local.sh` | Template-specific paths, log names, port numbers |
 | `claude-bridge/server.ts` | Default `CLAUDE_BIN` is `claude` (not your absolute path) |

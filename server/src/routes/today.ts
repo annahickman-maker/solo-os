@@ -272,7 +272,7 @@ function buildGoalShape(
   const title = (entry.body.match(/^#\s+(.+?)\s*$/m)?.[1] ?? entry.id) as string;
   let current = fm.current_value ?? 0;
   // Heuristic: if the goal mentions paid members, current = live count.
-  if (/paid members|solopreneur systems/i.test(title)) {
+  if (/paid members|the offer/i.test(title)) {
     current = ssMembers || current;
   }
   // Parse target_date - tolerate ISO date strings ("2026-07-13") and unix

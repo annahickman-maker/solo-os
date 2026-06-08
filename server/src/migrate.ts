@@ -157,7 +157,7 @@ const TASK_PROJECT_KEYWORDS: Array<{ id: string; patterns: RegExp[] }> = [
   { id: 'proj-ss-vsl', patterns: [/\bvsl\b/i, /video sales letter/i] },
   { id: 'ss-instagram-skills', patterns: [/\binstagram\b/i, /\bIG\b/, /\breel/i, /\bcarousel/i] },
   { id: 'ss-web-design-os', patterns: [/web design os/i, /\bweb design\b/i] },
-  { id: 'ss-solopreneur-os', patterns: [/solopreneur os/i, /solopreneur systems/i] },
+  { id: 'ss-solopreneur-os', patterns: [/solopreneur os/i, /the offer/i] },
   { id: 'ss-foundation', patterns: [/\bfoundation\b/i, /onboarding/i, /workshop/i] },
 ];
 
@@ -356,13 +356,13 @@ function migrateGoals() {
   }> = [
     {
       id: 'focus-primary',
-      title: 'Get Solopreneur Systems generating consistent monthly revenue.',
+      title: 'Get the offer generating consistent monthly revenue.',
       target_value: 25,
       target_date: '2026-07-13',
     },
     {
       id: 'focus-sub-25-paid-members',
-      title: '25+ paid members in Solopreneur Systems',
+      title: '25+ paid members in the offer',
       target_value: 25,
       parent_id: 'focus-primary',
     },

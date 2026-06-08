@@ -135,7 +135,7 @@ app.get('/', (c) => {
     const titleMatch = g.body.match(/^#\s+(.+?)\s*$/m);
     const title = titleMatch ? titleMatch[1]! : g.id;
     let current = fm.current_value ?? 0;
-    if (/paid members|solopreneur systems/i.test(title)) {
+    if (/paid members|the offer/i.test(title)) {
       current = ssMembers || current;
     }
     // Convert ISO date string to unix seconds (frontend expects number)

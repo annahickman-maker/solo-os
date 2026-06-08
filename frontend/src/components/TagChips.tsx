@@ -1,5 +1,5 @@
 /**
- * Topic-tag chip editor. Anna's topic taxonomy is locked to 8 options (see
+ * Topic-tag chip editor. the creator's topic taxonomy is locked to 8 options (see
  * lib/topics.ts) — you don't type freeform, you pick from the dropdown.
  *
  * Slash-namespaced YAML metadata tags (e.g. type/asset, domain/povs) are

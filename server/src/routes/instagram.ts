@@ -16,14 +16,14 @@ import { loadPosts, syncInstagram } from '../lib/instagramSync.js';
 const IG_QUEUE = abs('00_System', 'instagram-queue.json');
 const STATE_FILE_REL = ['00_System', 'state.md'] as const;
 const VOICE_FILE_REL = ['01_Core', 'core_voice-style.md'] as const;
-const BRIDGE_URL = 'http://localhost:8789/run';
+const BRIDGE_URL = 'http://localhost:8788/run';
 
 // Defaults match server/src/routes/settings.ts DEFAULTS.focus_cta_*. Both
-// point at Anna's SS Skool. Kept here so this route can run independently of
+// point at the creator's SS Skool. Kept here so this route can run independently of
 // the settings route if state.md is unreadable.
 const FOCUS_CTA_TEXT_DEFAULT =
   'want my system for building a one-person business that fits your brain? link in bio.';
-const FOCUS_CTA_URL_DEFAULT = 'https://www.skool.com/mastermind-5724/about';
+const FOCUS_CTA_URL_DEFAULT = '';
 
 type IgItem = {
   id: string;
@@ -372,7 +372,7 @@ function getVoiceSummary(): string {
   }
 }
 
-const CAPTION_SYSTEM = `You write Instagram reel captions in Anna Hickman's voice for @theannahickman.
+const CAPTION_SYSTEM = `You write Instagram reel captions in the creator's voice for the channel.
 
 NON-NEGOTIABLES:
 - NEVER use the em dash character (—). Use a hyphen with spaces ( - ) instead. Zero exceptions.
@@ -386,7 +386,7 @@ CAPTION STRUCTURE (in this order, no labels in the output):
 1) HOOK (1-2 short sentences). Concrete and specific. Either a number/result, a contrarian belief flip, or a small admission of struggle. Makes the reader want to expand "more".
 2) STORY ARC + VALUE (3-6 short sentences). The arc: what she used to believe / try / experience, what shifted, what she does now. Bake in one piece of usable value the reader can actually apply.
 3) CTA (1 sentence). Use the provided CTA text verbatim, exactly as given. Do not paraphrase.
-4) Blank line, then a single line with exactly 5 hashtags, lowercase, no spaces inside each tag, separated by single spaces. Target Anna's audience: creative freelancers, solopreneurs, web designers, online business owners, content creators. Use specific tags like #solopreneur #onepersonbusiness #creativefreelancer #onlinebusiness #contentstrategy. Pick the 5 that fit this specific reel best.
+4) Blank line, then a single line with exactly 5 hashtags, lowercase, no spaces inside each tag, separated by single spaces. Target the creator's audience: creative freelancers, solopreneurs, web designers, online business owners, content creators. Use specific tags like #solopreneur #onepersonbusiness #creativefreelancer #onlinebusiness #contentstrategy. Pick the 5 that fit this specific reel best.
 
 OUTPUT FORMAT — return a JSON object only, no commentary, no markdown fences:
 {
@@ -465,7 +465,7 @@ app.post('/queue/:id/caption', async (c) => {
           .join('\n')}`
       : '',
     `\n# CTA to include verbatim (do not paraphrase)\n${cta.text}`,
-    voice ? `\n# Anna's voice (calibrate to this)\n${voice}` : '',
+    voice ? `\n# the creator's voice (calibrate to this)\n${voice}` : '',
   ]
     .filter(Boolean)
     .join('\n');

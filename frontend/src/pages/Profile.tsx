@@ -24,7 +24,7 @@ const PHASE_HELP: Record<string, string> = {
 };
 
 // Gradient from neutral gray (0% complete) to vivid green (100% complete).
-// Anna's ask: complete = green, partial = a shade of gray gradually warming
+// the creator's ask: complete = green, partial = a shade of gray gradually warming
 // toward green. Single hue family the whole way through.
 function gradualPhaseColor(completion: number): string {
   const t = Math.max(0, Math.min(1, completion / 100));

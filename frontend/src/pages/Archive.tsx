@@ -414,7 +414,7 @@ function TranscriptPanel({ id, onClose }: { id: string; onClose: () => void }) {
             <div className="stack" style={{ gap: 4 }}>
               <h3 className="rep-section__title">extracted quotes</h3>
               <p className="rep-section__sub">
-                claude pulls verbatim quotes from you only and tags each one. edit, change the tag, then approve to bank or queue to instagram.
+                claude pulls verbatim quotes from anna only and tags each one. edit, change the tag, then approve to bank or queue to instagram.
               </p>
             </div>
             <button
@@ -448,7 +448,7 @@ function TranscriptPanel({ id, onClose }: { id: string; onClose: () => void }) {
                     synthesized stories <span className="tx-meta">{stories.length}</span>
                   </h4>
                   <p className="rep-section__sub" style={{ marginTop: -4 }}>
-                    related quotes from this transcript woven into cohesive pieces, fillers stripped, your words preserved. select a story + extra quotes to merge them.
+                    related quotes from this transcript woven into cohesive pieces, fillers stripped, anna's words preserved. select a story + extra quotes to merge them.
                   </p>
                   <div className="rep-list">
                     {stories.map((s) => (
@@ -488,7 +488,7 @@ function TranscriptPanel({ id, onClose }: { id: string; onClose: () => void }) {
           )}
         </section>
 
-        {/* Audience quotes - separate from Anna's quotes above */}
+        {/* Audience quotes - separate from the creator's quotes above */}
         <AudienceQuotesSection transcriptId={id} />
 
         {/* Raw transcript */}
@@ -567,7 +567,7 @@ function AudienceQuotesSection({ transcriptId }: { transcriptId: string }) {
         <div className="stack" style={{ gap: 4 }}>
           <h3 className="rep-section__title">extract quotes from audience</h3>
           <p className="rep-section__sub">
-            claude pulls verbatim quotes spoken by students / callers / clients in this transcript - NOT you. attach each quote to an avatar, sort into struggle / want, and push the gold ones to your proof bank.
+            claude pulls verbatim quotes spoken by students / callers / clients in this transcript - NOT anna. attach each quote to an avatar, sort into struggle / want, and push the gold ones to your proof bank.
           </p>
         </div>
         <button
@@ -593,7 +593,7 @@ function AudienceQuotesSection({ transcriptId }: { transcriptId: string }) {
         <p className="rep-section__sub">loading…</p>
       ) : quotes.length === 0 ? (
         <p className="rep-section__sub">
-          no audience quotes yet. click extract to scan the transcript for non-host speech.
+          no audience quotes yet. click extract to scan the transcript for non-anna speech.
         </p>
       ) : (
         <div className="stack" style={{ gap: 'var(--space-5)' }}>

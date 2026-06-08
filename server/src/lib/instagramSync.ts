@@ -8,7 +8,7 @@
  * Requires three env vars to be set:
  *   INSTAGRAM_ACCESS_TOKEN       - long-lived token (60-day expiry)
  *   INSTAGRAM_BUSINESS_ACCOUNT_ID - the creator's IG Business Account ID (a numeric id)
- *   INSTAGRAM_HANDLE             - display only (e.g. @theannahickman)
+ *   INSTAGRAM_HANDLE             - display only (e.g. the channel)
  *
  * Without these, the sync is a no-op and the dashboard falls back to the
  * existing posted_at field on queue items.

@@ -2,9 +2,9 @@
  * Audience-quote extraction.
  *
  * Pulls quotes spoken BY other people (audience members, students, callers,
- * clients) from a transcript - NOT the creator herself. Each quote is classified as
+ * clients) from a transcript - NOT Anna herself. Each quote is classified as
  * either a "struggle" (something they're dealing with) or a "want" (something
- * they're trying to achieve). the creator then attaches each quote to a specific
+ * they're trying to achieve). Anna then attaches each quote to a specific
  * avatar and can optionally promote one to the proof bank as a customer
  * testimonial.
  *
@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { abs } from '../vault.js';
 
-const BRIDGE_URL = 'http://localhost:8789/run';
+const BRIDGE_URL = 'http://localhost:8788/run';
 const AUDIENCE_BANK = abs('00_System', 'audience-quotes.json');
 const MAX_TRANSCRIPT_CHARS = 100_000;
 
@@ -26,7 +26,7 @@ export type AudienceQuoteCategory = 'struggle' | 'desire' | 'win';
 function normalizeCategory(v: unknown): AudienceQuoteCategory {
   if (v === 'struggle' || v === 'desire' || v === 'win') return v;
   if (v === 'want') return 'desire';
-  // Unknown / unsorted / missing → treat as a struggle by default. the creator can
+  // Unknown / unsorted / missing → treat as a struggle by default. Anna can
   // flip it to desire/win with one chip click.
   return 'struggle';
 }
@@ -126,7 +126,7 @@ async function callBridge(system: string, user: string): Promise<string> {
 
 const SYSTEM_PROMPT = `You extract clean, near-verbatim quotes spoken by AUDIENCE members - students, callers, clients, prospects - in the creator's transcripts. You are NOT extracting the creator's own words. You extract what OTHER people say to her.
 
-The creator runs Q&A calls, coaching calls, and group conversations where students/callers speak. Your job is to surface those moments - the ones where someone other than the creator reveals a struggle they're dealing with or a desire they want to achieve.
+Anna runs Q&A calls, coaching calls, and group conversations where students/callers speak. Your job is to surface those moments - the ones where someone other than Anna reveals a struggle they're dealing with or a desire they want to achieve.
 
 CLEANING (very important):
 Quotes must preserve the speaker's meaning and voice but be cleaned up for readability:
@@ -139,7 +139,7 @@ Quotes must preserve the speaker's meaning and voice but be cleaned up for reada
 
 For each audience quote you extract:
 - text:           the cleaned-up quote (per the rules above).
-- speaker_label:  who said it. Use the name if mentioned in transcript ("Sarah", "Maria"). Otherwise use a generic label ("Student", "Caller", "Group member", "Client"). NEVER use the creator name.
+- speaker_label:  who said it. Use the name if mentioned in transcript ("Sarah", "Maria"). Otherwise use a generic label ("Student", "Caller", "Group member", "Client"). NEVER use "Anna".
 - category:       MUST be exactly one of:
                   "struggle" - something they're dealing with, fearing, or stuck on
                   "desire"   - something they want to achieve, build, become, or have
@@ -161,9 +161,9 @@ For each audience quote you extract:
 - timestamp:      if the transcript has timestamps near the quote, include the closest one in [hh:mm:ss] or [mm:ss] format. Otherwise empty string.
 
 Rules:
-- the creator is the host. She speaks much more than anyone else. SKIP her speech entirely.
-- Only extract quotes where it is unambiguous that someone other than the creator is speaking. If you cannot tell who is speaking, skip the quote.
-- Prefer specific, emotionally rich quotes over generic "thanks [creator]" filler.
+- Anna is the host. She speaks much more than anyone else. SKIP her speech entirely.
+- Only extract quotes where it is unambiguous that someone other than Anna is speaking. If you cannot tell who is speaking, skip the quote.
+- Prefer specific, emotionally rich quotes over generic "thanks Anna" filler.
 - Aim for 5-20 quotes per transcript depending on how much audience speech is present. Zero is acceptable if there is no audience speech.
 - Return JSON ONLY. No prose outside the JSON.
 
@@ -203,7 +203,7 @@ export async function extractAudienceQuotesFromTranscript(args: {
   const userPrompt = [
     `Transcript: ${args.transcriptFilename}`,
     '',
-    'Extract verbatim audience quotes per the system prompt. the creator is the host - skip everything SHE says.',
+    'Extract verbatim audience quotes per the system prompt. Anna is the host - skip everything SHE says.',
     '',
     '--- TRANSCRIPT ---',
     text,
@@ -242,7 +242,7 @@ export async function extractAudienceQuotesFromTranscript(args: {
 }
 
 // ─── Sync audience-quote attachments into the avatar's lists ─────────────
-// When the creator attaches a struggle quote to Alyssa, the quote text shows up in
+// When Anna attaches a struggle quote to Alyssa, the quote text shows up in
 // Alyssa's "what they struggle with" list automatically. Same for desires
 // → outcomes. Detach / category change / text edit / delete all reconcile.
 

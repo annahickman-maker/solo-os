@@ -1,8 +1,8 @@
 /**
  * YouTube sync v2 - writes to vault video files instead of D1.
  *
- * The rule that fixes Anna's pain:
- *   YouTube sync only writes YouTube-derived fields. Anna's edits to title,
+ * The rule that fixes the creator's pain:
+ *   YouTube sync only writes YouTube-derived fields. the creator's edits to title,
  *   archived, queue_order, status, notes, and the body of a video file are
  *   PRESERVED across syncs because we never touch those fields once the
  *   file exists.
@@ -100,7 +100,7 @@ async function updateExistingVideoFile(
 ): Promise<{ transcriptFetched: boolean }> {
   const entry = loadFile(filePath);
   if (!entry) return { transcriptFetched: false };
-  // PRESERVE Anna's manual fields: title, archived, queue_order, status,
+  // PRESERVE the creator's manual fields: title, archived, queue_order, status,
   // body, cta, anything else she set. Only update YT-derived stats.
   const next = {
     ...entry.frontmatter,
@@ -176,7 +176,7 @@ function writeStateFile(updates: Record<string, unknown>): void {
   saveFile(filePath, fm as Record<string, unknown>, body);
 }
 
-const DEFAULT_HANDLE = '@theannahickman';
+const DEFAULT_HANDLE = 'the channel';
 
 app.post('/sync', async (c) => {
   const apiKey = process.env.YOUTUBE_API_KEY;

@@ -1,6 +1,6 @@
 /**
  * Claude synthesises an avatar's profile fields from the audience quotes
- * the creator has attached to them. Produces concise, in-voice bullets for the
+ * Anna has attached to them. Produces concise, in-voice bullets for the
  * before/struggles/after/outcomes fields - not generic corporate-speak.
  *
  * Input:
@@ -12,7 +12,7 @@
 
 import type { AudienceQuote } from './audienceQuotes.js';
 
-const BRIDGE_URL = 'http://localhost:8789/run';
+const BRIDGE_URL = 'http://localhost:8788/run';
 
 export type SynthesisResult = {
   before_state: string;
@@ -52,7 +52,7 @@ async function callBridge(system: string, user: string): Promise<string> {
   }
 }
 
-const SYSTEM_PROMPT = `You synthesise an avatar profile from real quotes spoken by this avatar in transcripts. The avatar is the creator's ideal customer - a real human the creator serves.
+const SYSTEM_PROMPT = `You synthesise an avatar profile from real quotes spoken by this avatar in transcripts. The avatar is the creator's ideal customer - a real human Anna serves.
 
 You will receive:
 - The avatar's current profile (name, before/after state, existing bullets).

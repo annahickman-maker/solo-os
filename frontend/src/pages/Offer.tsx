@@ -2301,7 +2301,7 @@ function UpstreamLinkBlock({
     ? (linkClicks / views) * 100
     : null;
   const convDisplay = convPct !== null ? `${convPct.toFixed(2)}%` : '-';
-  const trackingHref = slug ? `https://annahickman.com/go/${slug}` : null;
+  const trackingHref = slug ? `https://yourdomain.com/go/${slug}` : null;
   // Button is disabled until BOTH the sales page URL (set in
   // SalesPageBlock above) and this video's URL are filled - the
   // tracking link points at the sales page from this video, so both
@@ -2387,7 +2387,7 @@ function UpstreamLinkBlock({
           <TrackingSetupPrompt
             prompt={
               setupStatus.data?.setup_prompt ??
-              'Set up the Cloudflare worker tracking-link system (worker at 03_Projects/agents/worker/, manifest at scripts/link_manifest.json). The worker should handle annahickman.com/go/<slug>, read the manifest at deploy time, log clicks to LINK_CLICKS KV, and 302 redirect to the destination.'
+              'Set up the Cloudflare worker tracking-link system (worker at 03_Projects/agents/worker/, manifest at scripts/link_manifest.json). The worker should handle yourdomain.com/go/<slug>, read the manifest at deploy time, log clicks to LINK_CLICKS KV, and 302 redirect to the destination.'
             }
           />
         ) : (
@@ -2574,7 +2574,7 @@ function YouTubeContentPlaceholder({ rungId, salesPageUrlSet }: { rungId: string
 
 // ─── EmailsBlock ──────────────────────────────────────────────────────────
 // Lists every email driving traffic to this offer's sales page. Each row
-// is just subject + kind + one manual conversion rate (whatever Anna's
+// is just subject + kind + one manual conversion rate (whatever the creator's
 // email platform reports). No tracking links - emails track themselves.
 function EmailsBlock({ rungId }: { rungId: string }) {
   const qc = useQueryClient();
@@ -2933,7 +2933,7 @@ function ShortFormRow({ link, salesPageUrlSet, rungId }: { link: OfferShortFormL
       )}
 
       {/* 3 metrics: views (manual) / sales page clicks (auto from worker)
-          / CTAs made (manual). Actions field removed per Anna's feedback. */}
+          / CTAs made (manual). Actions field removed per the creator's feedback. */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--space-2)' }}>
         <FieldGroup label="views (last 30d)" hint="manual - platform-specific API integration would auto-pull this">
           <NumberInput
@@ -3033,7 +3033,7 @@ function ShortFormRow({ link, salesPageUrlSet, rungId }: { link: OfferShortFormL
 // flashes "copied" for 2s. Whole strip is also click-to-copy for big
 // hit area.
 function CopyableTrackingLink({ slug }: { slug: string }) {
-  const fullUrl = `https://annahickman.com/go/${slug}`;
+  const fullUrl = `https://yourdomain.com/go/${slug}`;
   const [copied, setCopied] = useState(false);
   function copy() {
     navigator.clipboard.writeText(fullUrl).then(() => {
@@ -3331,7 +3331,7 @@ function OfferProfileCard({
       <InlineField
         slot="offer_name"
         value={profile.name}
-        placeholder="The offer name. Solopreneur Systems / OS Builds / etc."
+        placeholder="The offer name. the offer / OS Builds / etc."
         large
         onSave={onSave}
       />
@@ -4861,7 +4861,7 @@ function PricingRungRow({
                     onSave({ name: draftName.trim() });
                   }
                 }}
-                placeholder="Solopreneur Systems"
+                placeholder="the offer"
               />
             </label>
           </div>

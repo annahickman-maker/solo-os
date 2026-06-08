@@ -185,7 +185,7 @@ function loadStoryActions(slots: Slots): Array<{ id: string; label: string; hint
  * Approved-from-transcript POVs - same source folder as the legacy pov_bank
  * (`05_Assets/POVs/asset_pov-*.md`), but filtered to entries that have a
  * `source_transcript` frontmatter field. These come from the vault approve
- * flow and we surface them in their own section so the creator can see what she's
+ * flow and we surface them in their own section so Anna can see what she's
  * banked from her actual speech, separate from her older authored POVs.
  */
 function loadApprovedPovsFromTranscripts(): ApprovedBankEntry[] {
