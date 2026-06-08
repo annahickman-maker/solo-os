@@ -132,10 +132,15 @@ If you find yourself porting the same edit from live → template repeatedly, th
 
 ## Future: reduce template overrides
 
-Right now the brand and personal references are hardcoded in your live dashboard. The cleanest version would env-drive everything:
+The template already has a few unlocks done:
 
-- `OWNER_NAME` → renders in `hello, {ownerName}` greeting (blank → `hello`)
-- `BRAND_NAME` → renders in NavRail / auth gate (default → `solo os`)
-- `CHANNEL_HANDLE` → AI prompts pull the handle from env
+- **Owner name** is dynamic. `state.md` has a `creator_name` field. The server reads it and constructs the greeting (`hello, tharros` when set, plain `hello` when blank). Set it via Settings or by editing `state.md`.
+- **AI prompts** are personalised. The template has `server/src/lib/creatorContext.ts` that loads name + positioning + voice style + POVs from the vault. Every AI lib file wraps its system prompt with `personalize()` (or uses `buildXSystem(ctx)`), so Tharros's prompts reference his positioning, not anyone else's.
 
-When you next refactor those files, set them up to read from env so you can delete entries from the template-owned list and sync stops needing to skip them.
+What still needs work to unlock more sync:
+
+- **Backport `creatorContext.ts` + `personalize()` to your live dashboard.** Your live AI lib files still hardcode "the creator" etc. without the wrapper. When you backport, those files can come off the sync exclude list and changes will flow cleanly. Files affected:
+  - `server/src/lib/creatorContext.ts` (new file - copy from template)
+  - `server/src/lib/titleGen.ts`, `youtubeScriptBuilder.ts`, `extractQuotes.ts`, `extractFromCore.ts`, `audienceQuotes.ts`, `contentAnalysis.ts`, `videoDescription.ts`, `avatarSynthesis.ts`, `offerAnalysis.ts` (import + wrap bridge calls with `personalize()`)
+  - Add `creator_name: 'Anna'` to your live `00_System/state.md`
+- **Env-drive the remaining brand strings** (`BRAND_NAME`, `CHANNEL_HANDLE`). NavRail, auth gate, index.html title. Once these read from env, you can remove them from the exclude list too. They're hardcoded for now since you wanted Solo OS to stay as the template brand.

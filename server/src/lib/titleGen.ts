@@ -4,54 +4,13 @@
  * Calls the local claude-bridge so titles are generated using your Claude Code
  * subscription instead of metered API spend.
  *
- * Channel positioning is loaded from the vault's 00_System/state.md (the
- * `slot_*` fields populated by onboarding). If those slots are empty the
- * prompt falls back to a generic shape - good enough to test, fill in the
- * onboarding for actually-good results.
+ * Channel positioning + voice style are pulled from the vault via
+ * loadCreatorContext() - every title set adapts to whoever's onboarded.
  */
 
-import { loadFile, abs } from '../vault.js';
+import { loadCreatorContext, buildPositioningBlock, buildVoiceStyleBlock } from './creatorContext.js';
 
 const BRIDGE_URL = 'http://localhost:8789/run';
-
-function buildPositioning(): string {
-  const state = loadFile<Record<string, string>>(abs('00_System', 'state.md'));
-  const s = (state?.frontmatter ?? {}) as Record<string, string>;
-
-  const has = (key: string) => typeof s[key] === 'string' && s[key].trim().length > 0;
-
-  if (!has('slot_who_you_help') && !has('slot_positioning_statement')) {
-    return `
-CHANNEL POSITIONING
-
-(Onboarding not complete - generate titles in a calm, honest, direct voice. No hype, no guru language, no emojis. Lowercase. Avoid "ultimate", "secrets", "you won't believe".)
-`.trim();
-  }
-
-  const povs = [s.slot_pov_1_flip, s.slot_pov_2_flip, s.slot_pov_3_flip]
-    .filter(Boolean)
-    .map((p) => `- ${p}`)
-    .join('\n');
-
-  return `
-CHANNEL POSITIONING
-
-POSITIONING: ${s.slot_positioning_statement ?? ''}
-
-WHO IT'S FOR: ${s.slot_who_you_help ?? ''}
-
-BEFORE: ${s.slot_before_state ?? ''}
-
-AFTER: ${s.slot_after_state ?? ''}
-
-TRANSFORMATION: ${s.slot_transformation_statement ?? s.slot_transformation_result ?? ''}
-
-${povs ? `THE BIG POVS:\n${povs}\n` : ''}
-VOICE STYLE: Lowercase YouTube titles. No emojis. Conversational, honest, direct, no guru language.
-
-ANTI-PATTERNS: Don't write generic "X steps to Y" titles. Don't use buzzwords like "ultimate", "secrets", "you won't believe".
-`.trim();
-}
 
 const TITLE_FORMULAS = `
 6 PROVEN TITLE FORMULAS (cover at least 4 across the 10 titles):
@@ -65,11 +24,16 @@ const TITLE_FORMULAS = `
 `.trim();
 
 function buildSystemPrompt(): string {
-  return `You generate YouTube title and thumbnail options for a creator's channel.
+  const ctx = loadCreatorContext();
+  const voiceBlock = buildVoiceStyleBlock(ctx);
+  const intro = ctx.name
+    ? `You generate YouTube title and thumbnail options for ${ctx.possessive} channel${ctx.channelHandle ? ` ${ctx.channelHandle}` : ''}.`
+    : `You generate YouTube title and thumbnail options for a creator's channel.`;
+  return `${intro}
 
-${buildPositioning()}
+${buildPositioningBlock(ctx)}
 
-${TITLE_FORMULAS}
+${voiceBlock ? voiceBlock + '\n\n' : ''}${TITLE_FORMULAS}
 
 OUTPUT FORMAT - RETURN ONLY VALID JSON, no markdown fences, no prose:
 {
@@ -94,10 +58,9 @@ CRITICAL:
 - Titles 6-10 must NOT name the audience
 - Thumbnail phrases must communicate something the title doesn't
 - Max 1 word in ALL CAPS per thumbnail phrase
-- Sound like the creator - honest, direct, no guru language
+- Match the voice style above exactly
 - NO em dashes (U+2014) anywhere - plain hyphens only`;
 }
-const SYSTEM_PROMPT_PLACEHOLDER = '';
 
 export type SuggestionItem = { title?: string; phrase?: string; formula?: string; gap?: string; liked?: boolean };
 export type Suggestions = {

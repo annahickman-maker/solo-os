@@ -16,7 +16,7 @@ import { loadPosts, syncInstagram } from '../lib/instagramSync.js';
 const IG_QUEUE = abs('00_System', 'instagram-queue.json');
 const STATE_FILE_REL = ['00_System', 'state.md'] as const;
 const VOICE_FILE_REL = ['01_Core', 'core_voice-style.md'] as const;
-const BRIDGE_URL = 'http://localhost:8788/run';
+const BRIDGE_URL = 'http://localhost:8789/run';
 
 // Defaults match server/src/routes/settings.ts DEFAULTS.focus_cta_*. Both
 // point at the creator's SS Skool. Kept here so this route can run independently of

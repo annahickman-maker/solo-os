@@ -9,11 +9,12 @@
  */
 
 import fs from 'node:fs';
+import { personalize } from './creatorContext.js';
 import path from 'node:path';
 import { abs, loadCollection, loadFile } from '../vault.js';
 
 const CACHE_FILE_REL = ['00_System', 'reputation-analysis.json'] as const;
-const BRIDGE_URL = 'http://localhost:8788/run';
+const BRIDGE_URL = 'http://localhost:8789/run';
 
 export type DimensionAnalysis = {
   id: 'value' | 'authority' | 'point_of_view' | 'connection';
@@ -264,7 +265,7 @@ async function callClaude(system: string, user: string): Promise<string> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       type: 'contentAnalysis',
-      system,
+      system: personalize(system),
       user,
       maxTokens: 3500,
       expectJson: true,

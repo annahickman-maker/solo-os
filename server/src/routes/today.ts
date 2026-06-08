@@ -11,6 +11,7 @@
 import { Hono } from 'hono';
 import fs from 'node:fs';
 import { abs, loadCollection, loadFile } from '../vault.js';
+import { loadCreatorContext } from '../lib/creatorContext.js';
 
 const app = new Hono();
 
@@ -32,8 +33,9 @@ type GoalFrontmatter = {
   parent_id?: string | null;
 };
 
-function greetingFromHour(_h?: number): string {
-  return 'hello';
+function buildGreeting(): string {
+  const ctx = loadCreatorContext();
+  return ctx.name ? `hello, ${ctx.name.toLowerCase()}` : 'hello';
 }
 
 // Local wall-clock YYYY-MM-DD. We use local time everywhere so "today"
@@ -243,7 +245,7 @@ app.get('/', async (c) => {
   const strainScore = computeStrain(completedTasksForStrain, dayBlocks);
 
   return c.json({
-    greeting: greetingFromHour(),
+    greeting: buildGreeting(),
     date: requestedDate ?? localYmd(new Date()),
     focus_goal,
     top_tasks: top,

@@ -13,8 +13,9 @@
  */
 
 import { abs, loadFile } from '../vault.js';
+import { personalize } from './creatorContext.js';
 
-const BRIDGE_URL = 'http://localhost:8788/run';
+const BRIDGE_URL = 'http://localhost:8789/run';
 const VOICE_FILE_REL = ['01_Core', 'core_voice-style.md'] as const;
 
 export type GenerateDescriptionInput = {
@@ -89,7 +90,7 @@ async function callBridge(system: string, user: string, maxTokens = 2500): Promi
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'videoDescription',
-        system,
+        system: personalize(system),
         user,
         maxTokens,
         expectJson: true,

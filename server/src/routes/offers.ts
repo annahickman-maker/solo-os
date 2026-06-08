@@ -759,7 +759,7 @@ app.post('/avatars/:id/generate-card-summary', async (c) => {
 
   let bridgeRes: Response;
   try {
-    bridgeRes = await fetch('http://localhost:8788/run', {
+    bridgeRes = await fetch('http://localhost:8789/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

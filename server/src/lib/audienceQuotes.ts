@@ -12,10 +12,11 @@
  */
 
 import fs from 'node:fs';
+import { personalize } from './creatorContext.js';
 import path from 'node:path';
 import { abs } from '../vault.js';
 
-const BRIDGE_URL = 'http://localhost:8788/run';
+const BRIDGE_URL = 'http://localhost:8789/run';
 const AUDIENCE_BANK = abs('00_System', 'audience-quotes.json');
 const MAX_TRANSCRIPT_CHARS = 100_000;
 
@@ -108,7 +109,7 @@ async function callBridge(system: string, user: string): Promise<string> {
     const res = await fetch(BRIDGE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'audienceQuotes', system, user, maxTokens: 6000, expectJson: true }),
+      body: JSON.stringify({ type: 'audienceQuotes', system: personalize(system), user, maxTokens: 6000, expectJson: true }),
       signal: controller.signal,
     });
     if (!res.ok) throw new Error(`claude-bridge ${res.status}: ${await res.text()}`);

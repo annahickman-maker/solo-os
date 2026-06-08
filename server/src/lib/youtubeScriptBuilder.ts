@@ -15,8 +15,18 @@
 
 import fs from 'node:fs';
 import { abs, loadCollection } from '../vault.js';
+import {
+  loadCreatorContext,
+  buildVoiceStyleBlock,
+  type CreatorContext,
+} from './creatorContext.js';
 
 const BRIDGE_URL = 'http://localhost:8789/run';
+
+function voicePrefix(ctx: CreatorContext): string {
+  const block = buildVoiceStyleBlock(ctx);
+  return block ? `${block}\n\n` : '';
+}
 
 export type BankKind = 'pov' | 'framework' | 'story' | 'proof';
 export type StructureMode = 'infer' | 'fixed' | 'hybrid';
@@ -188,7 +198,8 @@ function parseJson(raw: string): any {
 
 // ─── Suggest anchors ─────────────────────────────────────────────────────
 
-const SUGGEST_SYSTEM = `You are the creator's content strategist. You have access to the creator's approved verbatim bank items - POVs, teaching frameworks, personal stories, proof/connection moments. Every one of these is something she actually said on a call, in a workshop, or in a past video. Her own words.
+function buildSuggestSystem(ctx: CreatorContext): string {
+  return `${voicePrefix(ctx)}You are ${ctx.possessive} content strategist. You have access to ${ctx.possessive} approved verbatim bank items - POVs, teaching frameworks, personal stories, proof/connection moments. Every one of these is something ${ctx.thirdPerson} actually said on a call, in a workshop, or in a past video. ${ctx.possessive.charAt(0).toUpperCase() + ctx.possessive.slice(1)} own words.
 
 Your job: given a video title + transformation, pick 8-15 bank items that would make the strongest backbone for that script. A good YouTube video needs:
 - 1-2 personal stories (open with story, possibly a second one as midroll connection)
@@ -208,6 +219,7 @@ Return ONLY a JSON object:
 }
 
 Hard rule: NO em dashes (U+2014). Plain hyphens only.`;
+}
 
 export async function suggestAnchorsForVideo(args: {
   videoTitle: string;
@@ -232,7 +244,7 @@ export async function suggestAnchorsForVideo(args: {
     'Pick 8-15 items for this video. Return JSON per the system prompt.',
   ].join('\n');
 
-  const raw = await callBridge(SUGGEST_SYSTEM, lines, 4000);
+  const raw = await callBridge(buildSuggestSystem(loadCreatorContext()), lines, 4000);
   const parsed = parseJson(raw);
   const list = Array.isArray(parsed?.suggestions) ? parsed.suggestions : [];
   // Filter to valid IDs
@@ -244,14 +256,15 @@ export async function suggestAnchorsForVideo(args: {
 
 // ─── Draft script ────────────────────────────────────────────────────────
 
-const DRAFT_SYSTEM = `You are synthesizing a YouTube script for the creator using ONLY her own verbatim bank items. She wrote all of this herself - she said these things on calls, in workshops, in past videos. Your job is to weave them into one cohesive script.
+function buildDraftSystem(ctx: CreatorContext): string {
+  return `${voicePrefix(ctx)}You are synthesizing a YouTube script for ${ctx.thirdPerson} using ONLY ${ctx.possessive} own verbatim bank items. ${ctx.thirdPerson} wrote all of this - these things were said on calls, in workshops, in past videos. Your job is to weave them into one cohesive script.
 
 Hard rules:
 1. Use ONLY phrasing from the bank items. Where you need to bridge between items, add minimal connective tissue (1-2 sentences max per bridge).
 2. Light cleanup OK: strip "like", "kind of", "you know", "sort of", "I mean", restarts, repetition. Do NOT paraphrase or rewrite meaning.
 3. Do NOT invent claims, examples, dollar amounts, names, or specifics not present in the bank items.
-4. Do NOT use generic YouTube voice. BANNED phrases: "hey guys", "what's up", "in this video", "by the end of this video you'll", "let's dive in", "without further ado", "make sure to like and subscribe", "I'm going to show you", "stay tuned". the creator doesn't talk like this. She opens with a story or a moment, gets to the point, and lets the value speak.
-5. The script should sound like the creator sat down and recorded the whole thing cleanly in one take using only ideas she's already said.
+4. Do NOT use generic YouTube voice. BANNED phrases: "hey guys", "what's up", "in this video", "by the end of this video you'll", "let's dive in", "without further ado", "make sure to like and subscribe", "I'm going to show you", "stay tuned". Match the voice style above.
+5. The script should sound like ${ctx.thirdPerson} sat down and recorded the whole thing cleanly in one take using only ideas already said.
 
 Target: 1500-3000 words (8-15 min spoken).
 
@@ -264,8 +277,8 @@ Structure modes:
 
 Return ONLY a JSON object:
 {
-  "title_suggestion": "if the working title could be sharper, a 1-line suggestion (lowercase, anna's voice). Or null if the working title is already strong.",
-  "script": "the full word-for-word script the creator will read",
+  "title_suggestion": "if the working title could be sharper, a 1-line suggestion (lowercase, matching the voice style above). Or null if the working title is already strong.",
+  "script": "the full word-for-word script ${ctx.thirdPerson} will read",
   "outline": [
     { "section": "intro" | "reframe" | "value" | "cta" | "outro", "anchor_ids_used": ["..."], "summary": "1 line of what this section is" }
   ],
@@ -273,6 +286,7 @@ Return ONLY a JSON object:
 }
 
 NO em dashes (U+2014). Plain hyphens only.`;
+}
 
 // ─── Sectioned variants - suggest per-section + draft per-section ────────
 
@@ -306,33 +320,34 @@ export function normalizeSectionKind(kind: string): SectionKind {
   return 'value'; // safe default
 }
 
-const SUGGEST_SECTIONED_SYSTEM = `You are the creator's content strategist. You have access to the creator's approved verbatim bank items - core file sections, POVs, teaching frameworks, personal stories, proof / connection moments. Every one of these is something she actually wrote or said.
+function buildSuggestSectionedSystem(ctx: CreatorContext): string {
+  return `${voicePrefix(ctx)}You are ${ctx.possessive} content strategist. You have access to ${ctx.possessive} approved verbatim bank items - core file sections, POVs, teaching frameworks, personal stories, proof / connection moments. Every one of these is something ${ctx.thirdPerson} actually wrote or said.
 
 Your job: given a video's GOAL (what it teaches the viewer + the outcome they walk away with) and section briefs, assign bank items to EACH section based on what directly serves THIS specific video.
 
 ═══════════════════════════════════════════════════════════
 THE GOAL IS THE FILTER. NOTHING ELSE MATTERS AS MUCH.
 ═══════════════════════════════════════════════════════════
-Before you pick anything, hold the GOAL in your head. The goal tells you the SPECIFIC topic this video teaches. Every item you pick must directly help the creator teach THAT topic to THAT viewer.
+Before you pick anything, hold the GOAL in your head. The goal tells you the SPECIFIC topic this video teaches. Every item you pick must directly help teach THAT topic to THAT viewer.
 
 Topical relevance test (run this for every candidate):
-1. Read the goal. What is the specific subject? (e.g. "packaging AI work as a $5k operating system, not a website project")
+1. Read the goal. What is the specific subject?
 2. Read the candidate's title + snippet.
 3. Ask: would a viewer of this video, who wants exactly what the goal promises, find this item directly USEFUL or ILLUSTRATIVE for THAT subject?
-4. If you'd have to stretch, hand-wave, or say "well it's about success/effort/audience generally" - REJECT it. Loose thematic match is not relevance.
+4. If you'd have to stretch, hand-wave, or say "well it's about [adjacent topic] generally" - REJECT it. Loose thematic match is not relevance.
 
-Examples of loose-match items to REJECT for a video about packaging AI as $5k operating systems:
-- A personal "crying on the phone to mum" story (about resilience, not about packaging AI)
-- A "you don't need a big audience to launch" framework (about audience size, not about packaging)
-- A student win about $2,500 with 42 subscribers (about audience size, not about packaging)
-- A POV about consistency over years (about mindset, not about packaging)
-These items can be GREAT for other videos. They are wrong for THIS one. Do not pick them.
+What "loose-match" looks like in general:
+- A personal story about resilience / motivation / general mindset, when the goal is a specific tactical subject
+- A framework about a related-but-different topic that the goal does not name
+- A proof point about an outcome adjacent to the goal but not the goal itself
+- A POV about a broad belief shift when the goal is a narrow how-to
+These items can be GREAT for OTHER videos. They are wrong for THIS one. Do not pick them.
 
-Examples of items that WOULD be on-topic for that video:
-- A teaching framework about scoping a client engagement as a system rather than a deliverable
-- A proof point where the creator or a student delivered an AI workflow as a productised offer at a specific price
-- A personal moment where the creator realised clients pay for outcomes not artefacts
-- A POV about why "websites" undersells what designers/freelancers actually deliver
+What "on-topic" looks like in general:
+- A teaching framework that directly addresses the specific subject named in the goal
+- A proof point where ${ctx.thirdPerson} or a student got the EXACT outcome the goal promises
+- A personal moment where ${ctx.thirdPerson} realised the specific belief shift the goal teaches
+- A POV that directly flips the wrong belief about the goal's subject
 
 Section intents (apply ONLY after the topical filter passes):
 - intro: ${SECTION_INTENTS.intro}
@@ -349,28 +364,28 @@ Rules:
 - Read each section's brief CAREFULLY. The brief refines what THIS section needs within the goal. If brief is empty, fall back to the section's general intent - but the goal still gates.
 - intros: pick 1-2 items max. Prefer proof moments or personal stories that frame the SPECIFIC outcome named in the goal.
 - context: pick 1-2 items max. POVs that flip the wrong belief about THIS subject, or background framing about THIS subject.
-- value sections: **EACH VALUE SECTION IS ONE COHERENT TEACHING POINT.** Pick ONE teaching framework that drives the section's specific point home, then OPTIONALLY pair it with a proof point OR a connection story that directly demonstrates THAT SAME teaching point. Every item in a value section must be about the same single point - if your framework is about "scoping engagements as systems" then the proof must be about that exact thing, not a generic "the creator made $X" win. If you can't find a proof or story that demonstrates THIS specific framework, leave it framework-only. Do NOT stuff a section with unrelated wins or stories just because the section is "value". Typical shape: 1 framework + 1 demo (proof or story). Max 3 items per value section, and only if all 3 hammer the same point.
+- value sections: **EACH VALUE SECTION IS ONE COHERENT TEACHING POINT.** Pick ONE teaching framework that drives the section's specific point home, then OPTIONALLY pair it with a proof point OR a connection story that directly demonstrates THAT SAME teaching point. Every item in a value section must be about the same single point - if your framework is about subject X, the proof must be about subject X, not a generic win on a different subject. If you can't find a proof or story that demonstrates THIS specific framework, leave it framework-only. Do NOT stuff a section with unrelated wins or stories just because the section is "value". Typical shape: 1 framework + 1 demo (proof or story). Max 3 items per value section, and only if all 3 hammer the same point.
 - **value sections must be DISTINCT teaching points from each other.** value-1 teaches point A, value-2 teaches point B, value-3 teaches point C - they're different angles on the goal, not three takes on the same idea.
-- cta: pick 0-1 items. **NO STORIES in the CTA.** The CTA is a soft pitch, not narrative time. If you pick anything at all, pick a single proof point that establishes the creator's authority on THIS subject so the offer feels earned. Most CTAs need 0 items - Claude writes the pitch from scratch using context, not bank items.
+- cta: pick 0-1 items. **NO STORIES in the CTA.** The CTA is a soft pitch, not narrative time. If you pick anything at all, pick a single proof point that establishes ${ctx.possessive} authority on THIS subject so the offer feels earned. Most CTAs need 0 items - Claude writes the pitch from scratch using context, not bank items.
 - outro: usually 0 picks. Leave empty unless a single story closes the loop on THIS subject.
 - Each anchor appears in AT MOST ONE section.
 
 ═══════════════════════════════════════════════════════════
-LOCKED ITEMS (the arc the creator is setting)
+LOCKED ITEMS (the arc ${ctx.thirdPerson} is setting)
 ═══════════════════════════════════════════════════════════
-When sections have "locked" picks, the creator has already committed to those items. They are NON-NEGOTIABLE in three ways:
+When sections have "locked" picks, ${ctx.thirdPerson} has already committed to those items. They are NON-NEGOTIABLE in three ways:
 
 1. **STRUCTURAL:** You CANNOT remove them, replace them, or re-suggest them. The frontend already has them; only return NEW picks.
 
 2. **PER-SECTION complement rule:** Your suggestions for a section with locks must COMPLEMENT the locks, not duplicate or compete with them.
    - A locked framework gets a proof or connection story that DEMONSTRATES THAT EXACT framework. Never a second framework.
    - A locked story or proof gets the framework that the moment teaches.
-   - The complement must be on the SAME teaching point as the locked item. If the locked framework is about "scoping engagements as systems," then the proof you add must demonstrate that exact thing - not a general win.
+   - The complement must be on the SAME teaching point as the locked item.
    - If the section already has enough (typically 2-3 items that all hammer the same point), ADD NOTHING. Return an empty picks array for that section.
 
-3. **GLOBAL arc rule (this is the big one):** The locked picks across ALL sections together reveal the SPECIFIC arc the creator wants. The angle. The sub-topics. The narrative thread.
+3. **GLOBAL arc rule (this is the big one):** The locked picks across ALL sections together reveal the SPECIFIC arc ${ctx.thirdPerson} wants. The angle. The sub-topics. The narrative thread.
    - For sections WITHOUT locks (open / empty sections), do NOT just suggest items that match the goal in the abstract. Suggest items that fit the arc the locked picks reveal.
-   - Example: video goal is "package AI work as a $5k operating system." the creator has locked a framework about "scoping engagements as systems" in value-1 and a story about "Angie's AI brain" in value-2. That tells you the arc is concrete: productised AI workflows for designers, not abstract pricing strategy. For the intro, pick a proof of THAT specific outcome (a productised AI engagement). For context, pick a POV that flips the wrong belief about THAT (e.g. "you're selling websites when you should be selling systems"). For value-3, pick a framework that extends THAT arc (e.g. "how to scope the AI brain before quoting"). Reject items that are vaguely about freelancing or general pricing wins.
+   - General pattern: if the locked picks across value sections all point at one specific sub-angle of the goal, the intro / context / remaining value / cta picks should reinforce THAT sub-angle. Reject items that match the goal generically but don't fit the specific arc the locks have set.
    - The arc filter is STRICTER than the goal filter. The goal sets the subject. The arc sets the specific take on the subject.
 
 Return ONLY JSON in this shape:
@@ -381,6 +396,7 @@ Return ONLY JSON in this shape:
 }
 
 NO em dashes (U+2014). Plain hyphens only.`;
+}
 
 export async function suggestAnchorsBySection(args: {
   videoTitle: string;
@@ -403,6 +419,9 @@ export async function suggestAnchorsBySection(args: {
       .map((b) => ({ section: `${s.label} (${s.kind})`, item: b }))
   );
 
+  const ctx = loadCreatorContext();
+  const ownerLabel = ctx.name ? ctx.name.toUpperCase() : 'THE CREATOR';
+
   const lines = [
     '╔══════════════════════════════════════════════════════════╗',
     '║  THE GOAL OF THIS VIDEO (your ONLY filter for relevance)  ║',
@@ -414,13 +433,13 @@ export async function suggestAnchorsBySection(args: {
     globalLocks.length > 0
       ? [
           '╔══════════════════════════════════════════════════════════╗',
-          '║  THE ARC ANNA HAS SET (locked picks across the video)    ║',
+          `║  THE ARC ${ownerLabel} HAS SET (locked picks across the video)`.padEnd(60) + '║',
           '╚══════════════════════════════════════════════════════════╝',
-          'the creator has already committed to the items below. They reveal the SPECIFIC',
-          'angle, sub-topics, and arc she wants this video to follow. Read them',
+          `${ctx.thirdPerson} has already committed to the items below. They reveal the SPECIFIC`,
+          'angle, sub-topics, and arc this video should follow. Read them',
           'carefully. EVERY suggestion you make for ANY section must fit this arc',
           '- not just the goal in the abstract. If a candidate item is technically',
-          'on-goal but does not echo / extend / set up / pay off the arc the creator has',
+          `on-goal but does not echo / extend / set up / pay off the arc ${ctx.thirdPerson} has`,
           'committed to here, REJECT it.',
           '',
           ...globalLocks.map(({ section, item }) => {
@@ -467,12 +486,12 @@ export async function suggestAnchorsBySection(args: {
     'For every pick: would a viewer who clicked this video specifically to learn about',
     goal ? `"${goal}"` : 'the goal above',
     'find this item directly useful? If you have to bend the link, REJECT it.',
-    'Empty sections are correct when nothing fits. Forced picks make the creator look generic.',
+    `Empty sections are correct when nothing fits. Forced picks make ${ctx.thirdPerson} look generic.`,
     '',
     'Return ONLY the JSON described in the system prompt.',
   ].join('\n');
 
-  const raw = await callBridge(SUGGEST_SECTIONED_SYSTEM, lines, 6000);
+  const raw = await callBridge(buildSuggestSectionedSystem(loadCreatorContext()), lines, 6000);
   const parsed = parseJson(raw);
   const list = Array.isArray(parsed?.assignments) ? parsed.assignments : [];
   const validIds = new Set(args.bank.map((b) => b.id));
@@ -503,22 +522,24 @@ export async function suggestAnchorsBySection(args: {
 
 // Synthesize one section in isolation. The prompt is the same DNA but scoped
 // to the section's intent + brief + only its anchors.
-const DRAFT_SECTION_SYSTEM = `You are writing one section of a YouTube script for the creator. Use ONLY the verbatim bank items provided. the creator said all of this herself - your job is to weave the relevant pieces into this single section.
+function buildDraftSectionSystem(ctx: CreatorContext): string {
+  return `${voicePrefix(ctx)}You are writing one section of a YouTube script for ${ctx.thirdPerson}. Use ONLY the verbatim bank items provided. ${ctx.thirdPerson} said all of this - your job is to weave the relevant pieces into this single section.
 
 Hard rules:
 1. Use ONLY phrasing from the bank items. Where you need to bridge between items, add minimal connective tissue (1-2 sentences max per bridge).
 2. Light cleanup OK: strip "like", "kind of", "you know", "sort of", "I mean", restarts. Do NOT paraphrase.
 3. Do NOT invent claims, examples, dollar amounts, names, or specifics not in the bank items.
-4. Do NOT use generic YouTube voice. BANNED phrases: "hey guys", "what's up", "in this video", "by the end of this video you'll", "let's dive in", "without further ado", "make sure to like and subscribe", "I'm going to show you", "stay tuned".
-5. Match the section's intent and the user's brief. The brief tells you exactly what the creator wants this section to do for THIS video.
+4. Do NOT use generic YouTube voice. BANNED phrases: "hey guys", "what's up", "in this video", "by the end of this video you'll", "let's dive in", "without further ado", "make sure to like and subscribe", "I'm going to show you", "stay tuned". Match the voice style above.
+5. Match the section's intent and the user's brief. The brief tells you exactly what ${ctx.thirdPerson} wants this section to do for THIS video.
 6. Target section length: intro 150-300 words, reframe 200-400 words, value 300-600 words each, outro 100-200 words.
 
 Return ONLY JSON:
 {
-  "text": "the section's full word-for-word script - what anna will read"
+  "text": "the section's full word-for-word script - what ${ctx.thirdPerson} will read"
 }
 
 NO em dashes (U+2014). Plain hyphens only.`;
+}
 
 export async function draftOneSection(args: {
   videoTitle: string;
@@ -548,7 +569,7 @@ export async function draftOneSection(args: {
     'Write this section per the rules. Return JSON.',
   ].join('\n');
 
-  const raw = await callBridge(DRAFT_SECTION_SYSTEM, lines, 4000);
+  const raw = await callBridge(buildDraftSectionSystem(loadCreatorContext()), lines, 4000);
   const parsed = parseJson(raw);
   const text = String(parsed?.text ?? '').trim();
   if (!text) throw new Error(`empty section: ${args.section.id}`);
@@ -587,7 +608,7 @@ export async function draftScriptFromAnchors(args: {
     'Weave these into one cohesive YouTube script per the system prompt rules. Return JSON.',
   ].join('\n');
 
-  const raw = await callBridge(DRAFT_SYSTEM, lines, 14000);
+  const raw = await callBridge(buildDraftSystem(loadCreatorContext()), lines, 14000);
   const parsed = parseJson(raw);
   const script = String(parsed?.script ?? '').trim();
   if (!script) throw new Error('synthesizer returned no script');
