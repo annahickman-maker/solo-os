@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+**/dist/
+*.tsbuildinfo
+
+# Vite cache
+.vite/
+**/.vite/
+
+# Environment secrets - per-install
+.env
+server/.env
+.dev.vars
+
+# Logs
+*.log
+/tmp/solo-os-*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor settings (per-machine)
+.vscode/
+.idea/
+
+# Lock-file hygiene: keep them. They pin dep versions for every install.
+# !package-lock.json
+
+# Each install has its own VAULT_ROOT. The bundled sample-vault is committed
+# so a fresh clone boots into example data. Users with a real vault should
+# point VAULT_ROOT elsewhere - don't put their data inside this repo.

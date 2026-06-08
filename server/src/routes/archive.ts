@@ -1,0 +1,432 @@
+/**
+ * Archive views - read-only listings for POVs, transcripts, and videos.
+ * These mirror the old `/api/archive/*` shape so the Vault page renders.
+ *
+ * All sources are vault files; no D1.
+ */
+
+import { Hono } from 'hono';
+import fs from 'node:fs';
+import path from 'node:path';
+import { abs, loadCollection, loadFile } from '../vault.js';
+
+const app = new Hono();
+
+// ─── POVs ─────────────────────────────────────────────────────────────────
+
+function categorizePOV(title: string): string {
+  const t = title.toLowerCase();
+  if (/personal brand|reputation|audience/.test(t)) return 'Brand';
+  if (/offer|proof|product|price|launch/.test(t)) return 'Offer';
+  if (/content|video|youtube|hook|insight|information/.test(t)) return 'Content';
+  if (/story|origin|connection|vulnerab/.test(t)) return 'Connection';
+  return 'Other';
+}
+
+app.get('/povs', (c) => {
+  const items = loadCollection('05_Assets/POVs', { type: 'pov' }).map((e) => {
+    const fm = e.frontmatter as any;
+    const title = fm.title ?? e.id;
+    // Extract the POV section if present, else first paragraph.
+    const povSection = e.body.match(/##\s+POV\s*\n+([\s\S]*?)(?=\n##\s|$)/i);
+    const opinion = povSection ? povSection[1]!.trim() : e.body.split('\n').find((l) => l.trim() && !l.startsWith('#')) ?? '';
+    return {
+      id: fm.id ?? e.id,
+      title,
+      original_title: e.id,
+      format: fm.format ?? 'short',
+      category: categorizePOV(title),
+      opinion: opinion.slice(0, 240),
+    };
+  });
+  items.sort((a, b) => a.title.localeCompare(b.title));
+  return c.json({ items });
+});
+
+app.get('/povs/:id', (c) => {
+  const id = c.req.param('id');
+  const e = loadCollection('05_Assets/POVs', { type: 'pov' }).find(
+    (x) => (x.frontmatter as any).id === id || x.id === id
+  );
+  if (!e) return c.json({ error: 'not found' }, 404);
+  const fm = e.frontmatter as any;
+  return c.json({
+    id: fm.id ?? e.id,
+    title: fm.title ?? e.id,
+    format: fm.format ?? 'short',
+    content: e.body,
+  });
+});
+
+// ─── Transcripts ──────────────────────────────────────────────────────────
+
+type TranscriptInfo = {
+  id: string;
+  filename: string;
+  title?: string;
+  type: string;
+  date: number | null;
+  processed: number;
+  pov_count: number;
+  created_at: number;
+  updated_at: number;
+  summary: string;
+  excerpt: string;
+  client: string | null;
+  source_rel?: string; // for files outside TRANSCRIPT_DIRS (e.g. 04_Channel video files)
+  youtube_url?: string | null;
+  has_raw?: boolean; // true when a sibling raw/ file exists with full word-for-word transcript
+};
+
+const TRANSCRIPT_DIRS: Array<{ rel: string; type: string }> = [
+  { rel: path.join('05_Assets', 'Transcripts', 'QA-Calls'), type: 'qa' },
+  { rel: path.join('05_Assets', 'Transcripts', 'Live-Workshops'), type: 'workshop' },
+  { rel: path.join('05_Assets', 'Transcripts', 'YouTube-Videos'), type: 'video' },
+  { rel: path.join('05_Assets', 'Transcripts', 'Client-Calls'), type: 'client' },
+];
+
+function detectClient(filename: string): string | null {
+  const f = filename.toLowerCase();
+  for (const name of ['fab', 'angie', 'tharros']) if (f.includes(name)) return name;
+  return null;
+}
+
+function dateFromFilename(filename: string): number | null {
+  const m = filename.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const t = Date.parse(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`);
+  return Number.isNaN(t) ? null : Math.floor(t / 1000);
+}
+
+function scanTranscripts(): TranscriptInfo[] {
+  const out: TranscriptInfo[] = [];
+  for (const { rel, type } of TRANSCRIPT_DIRS) {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(abs(rel), { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const e of entries) {
+      if (!e.isFile()) continue;
+      if (!e.name.endsWith('.md') && !e.name.endsWith('.txt')) continue;
+      if (e.name.startsWith('.') || e.name.startsWith('_')) continue;
+      const full = path.join(abs(rel), e.name);
+      let stat: fs.Stats;
+      try {
+        stat = fs.statSync(full);
+      } catch {
+        continue;
+      }
+      // Quick excerpt: first ~200 chars of body (strip frontmatter if present).
+      let raw = '';
+      try {
+        raw = fs.readFileSync(full, 'utf8');
+      } catch {}
+      const body = raw.replace(/^---\n[\s\S]*?\n---\n/, '').trim();
+      const excerpt = body.replace(/\s+/g, ' ').slice(0, 200);
+      // Summary: pull a `summary:` frontmatter line if present.
+      const summaryMatch = raw.match(/^summary:\s*"?(.+?)"?\s*$/m);
+      const summary = summaryMatch ? summaryMatch[1]!.slice(0, 200) : '';
+      const hasRaw = findRawTranscript(rel, e.name) != null;
+      out.push({
+        id: `transcript-${e.name.replace(/\.(md|txt)$/, '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+        filename: e.name,
+        type,
+        date: dateFromFilename(e.name),
+        processed: 1,
+        pov_count: 0,
+        created_at: Math.floor(stat.mtimeMs / 1000),
+        updated_at: Math.floor(stat.mtimeMs / 1000),
+        summary,
+        excerpt,
+        client: detectClient(e.name),
+        has_raw: hasRaw,
+      });
+    }
+  }
+  return out;
+}
+
+// Pull YouTube transcripts that the API/youtube-transcript package stored as the
+// `## Transcript` section inside 04_Channel/04_Projects/<video>.md files.
+function scanVideoFileTranscripts(): TranscriptInfo[] {
+  const out: TranscriptInfo[] = [];
+  const videos = loadCollection('04_Channel/04_Projects', { type: 'video' });
+  for (const e of videos) {
+    const fm = e.frontmatter as any;
+    if (fm?.status !== 'published') continue;
+    const transcriptMatch = e.body.match(/##\s+Transcript\s*\n+([\s\S]*?)(?=\n##\s|$)/i);
+    if (!transcriptMatch) continue;
+    const transcript = transcriptMatch[1]!.trim();
+    if (!transcript || transcript.length < 50) continue; // skip stubs
+    let publishDate: number | null = null;
+    if (typeof fm.publish_date === 'number') publishDate = fm.publish_date;
+    else if (typeof fm.publish_date === 'string' && fm.publish_date) {
+      const t = Date.parse(fm.publish_date);
+      if (!Number.isNaN(t)) publishDate = Math.floor(t / 1000);
+    }
+    const title = fm.title ?? e.id;
+    const filename = path.basename(e.relPath);
+    out.push({
+      id: `yt-${(fm.id ?? e.id).replace(/[^a-z0-9-]+/gi, '-').toLowerCase()}`,
+      filename,
+      title,
+      type: 'video',
+      date: publishDate,
+      processed: 1,
+      pov_count: 0,
+      created_at: e.mtimeSec,
+      updated_at: e.mtimeSec,
+      summary: '',
+      excerpt: transcript.replace(/\s+/g, ' ').slice(0, 200),
+      client: null,
+      source_rel: e.relPath,
+      youtube_url: fm.youtube_url ?? null,
+    });
+  }
+  return out;
+}
+
+function allTranscripts(): TranscriptInfo[] {
+  const all = [...scanTranscripts(), ...scanVideoFileTranscripts()];
+  all.sort((a, b) => (b.date ?? 0) - (a.date ?? 0));
+  return all;
+}
+
+app.get('/transcripts', (c) => {
+  return c.json({ items: allTranscripts() });
+});
+
+/**
+ * POST /api/archive/transcripts/upload
+ *
+ * Accepts a multipart/form-data upload with:
+ *   - file:  the transcript file (.md / .txt / .vtt / .srt)
+ *   - type:  optional category id ('qa' | 'workshop' | 'video' | 'client').
+ *            If omitted, type is auto-detected from the filename.
+ *
+ * Saves the file into the appropriate 05_Assets/Transcripts/<folder>/
+ * directory, returns the new transcript's id so the frontend can kick
+ * off extraction immediately. The filename is preserved (with a counter
+ * suffix on collisions) so the existing date-from-filename logic + the
+ * /transcripts/:id read endpoint keep working unchanged.
+ */
+app.post('/transcripts/upload', async (c) => {
+  const form = await c.req.formData().catch(() => null);
+  if (!form) return c.json({ error: 'multipart/form-data required' }, 400);
+
+  const file = form.get('file');
+  if (!(file instanceof File)) return c.json({ error: 'file field missing' }, 400);
+
+  const explicitType = (form.get('type') as string | null) || null;
+  const validTypes = TRANSCRIPT_DIRS.map((d) => d.type);
+  // Auto-detect type from filename when not explicitly set. Patterns
+  // align with how Anna's existing automation names files:
+  //   yt-*       → video
+  //   workshop*  → workshop
+  //   client*    → client
+  //   anything else → qa (most common case)
+  function detectType(name: string): string {
+    const lc = name.toLowerCase();
+    if (/^yt-|youtube/.test(lc)) return 'video';
+    if (/workshop|live/.test(lc)) return 'workshop';
+    if (/client|coaching|1on1|fab|angie|tharros/.test(lc)) return 'client';
+    return 'qa';
+  }
+  const type = explicitType && validTypes.includes(explicitType)
+    ? explicitType
+    : detectType(file.name);
+
+  const dirEntry = TRANSCRIPT_DIRS.find((d) => d.type === type);
+  if (!dirEntry) return c.json({ error: `invalid type: ${type}` }, 400);
+
+  // Sanitise filename (no path separators, preserve extension).
+  const rawName = file.name || `transcript-${Date.now()}.md`;
+  const safeName = rawName.replace(/[/\\]/g, '_').trim() || `transcript-${Date.now()}.md`;
+  const targetDir = abs(dirEntry.rel);
+  fs.mkdirSync(targetDir, { recursive: true });
+
+  // Avoid overwriting on duplicate names. If the target exists, append
+  // a -2, -3 suffix until we find a free slot.
+  let finalName = safeName;
+  let counter = 2;
+  while (fs.existsSync(path.join(targetDir, finalName))) {
+    const dot = safeName.lastIndexOf('.');
+    const base = dot > 0 ? safeName.slice(0, dot) : safeName;
+    const ext = dot > 0 ? safeName.slice(dot) : '';
+    finalName = `${base}-${counter}${ext}`;
+    counter++;
+    if (counter > 99) return c.json({ error: 'could not find unique filename' }, 500);
+  }
+
+  const fullPath = path.join(targetDir, finalName);
+  const buffer = Buffer.from(await file.arrayBuffer());
+  fs.writeFileSync(fullPath, buffer);
+
+  // Find the new entry in the scanned list to return its id (matches
+  // the id the rest of the dashboard uses).
+  const all = allTranscripts();
+  const created = all.find((t) => t.filename === finalName && t.type === type);
+  return c.json({
+    ok: true,
+    id: created?.id ?? null,
+    type,
+    filename: finalName,
+    rel_path: `${dirEntry.rel}/${finalName}`,
+    auto_detected_type: !explicitType,
+  });
+});
+
+app.get('/transcripts/:id', (c) => {
+  const id = c.req.param('id');
+  const info = allTranscripts().find((t) => t.id === id);
+  if (!info) return c.json({ error: 'not found' }, 404);
+
+  // Source 2: 04_Channel video file (transcript section)
+  if (info.source_rel) {
+    const full = abs(info.source_rel);
+    if (fs.existsSync(full)) {
+      const raw = fs.readFileSync(full, 'utf8');
+      const body = raw.replace(/^---\n[\s\S]*?\n---\n/, '');
+      const transcriptMatch = body.match(/##\s+Transcript\s*\n+([\s\S]*?)(?=\n##\s|$)/i);
+      const content = transcriptMatch ? transcriptMatch[1]!.trim() : body.trim();
+      return c.json({
+        id: info.id,
+        filename: info.filename,
+        title: info.title,
+        type: info.type,
+        date: info.date,
+        processed: info.processed,
+        summary: info.summary,
+        pov_count: info.pov_count,
+        youtube_url: info.youtube_url,
+        content,
+      });
+    }
+  }
+
+  // Source 1: 05_Assets/Transcripts/* folders
+  for (const { rel } of TRANSCRIPT_DIRS) {
+    const full = path.join(abs(rel), info.filename);
+    if (fs.existsSync(full)) {
+      // The "summary" file (with Community Post / strategy recap) lives in the
+      // parent folder. The RAW word-for-word transcript with speaker labels
+      // lives in the sibling `raw/` folder when present.
+      // For the panel UI we want BOTH: summary_content for the summary section,
+      // content (raw) for extraction and the full-transcript section.
+      const summaryContent = fs.readFileSync(full, 'utf8');
+      const rawCandidate = findRawTranscript(rel, info.filename);
+      const rawContent = rawCandidate ? fs.readFileSync(rawCandidate, 'utf8') : summaryContent;
+      return c.json({
+        id: info.id,
+        filename: rawCandidate ? path.basename(rawCandidate) : info.filename,
+        title: info.title,
+        type: info.type,
+        date: info.date,
+        processed: info.processed,
+        summary: info.summary,
+        summary_content: summaryContent,
+        pov_count: info.pov_count,
+        content: rawContent,
+        has_raw: rawCandidate != null,
+      });
+    }
+  }
+  return c.json({ error: 'file vanished' }, 404);
+});
+
+/**
+ * For a given summary filename (e.g. `qa_2026-06-03.md` in QA-Calls/),
+ * look for a matching raw transcript in the sibling `raw/` folder.
+ * Conventions:
+ *   QA-Calls/qa_2026-06-03.md         -> QA-Calls/raw/qa-raw_2026-06-03.md
+ *   Client-Calls/2026-06-04_tharros.md -> Client-Calls/raw/2026-06-04_tharros_raw.md
+ */
+function findRawTranscript(dirRel: string, summaryFilename: string): string | null {
+  const rawDir = path.join(abs(dirRel), 'raw');
+  if (!fs.existsSync(rawDir)) return null;
+  const stem = summaryFilename.replace(/\.(md|txt)$/, '');
+  const candidates = [
+    `${stem}_raw.md`,           // 2026-06-04_tharros_raw.md
+    `${stem.replace(/^qa_/, 'qa-raw_')}.md`, // qa-raw_2026-06-03.md
+    `${stem}-raw.md`,
+    `raw_${stem}.md`,
+  ];
+  for (const c of candidates) {
+    const full = path.join(rawDir, c);
+    if (fs.existsSync(full)) return full;
+  }
+  // Last resort: find any raw file containing the date string.
+  const dateMatch = stem.match(/\d{4}-\d{2}-\d{2}/);
+  if (dateMatch) {
+    const date = dateMatch[0];
+    try {
+      const entries = fs.readdirSync(rawDir);
+      const match = entries.find((e) => e.includes(date));
+      if (match) return path.join(rawDir, match);
+    } catch {}
+  }
+  return null;
+}
+
+// ─── Videos (archived view) ───────────────────────────────────────────────
+
+app.get('/videos', (c) => {
+  const items = loadCollection('04_Channel/04_Projects', { type: 'video' })
+    .filter((e) => {
+      const fm = e.frontmatter as any;
+      return fm?.status === 'published';
+    })
+    .map((e) => {
+      const fm = e.frontmatter as any;
+      let publishDate: number | null = null;
+      if (typeof fm.publish_date === 'number') publishDate = fm.publish_date;
+      else if (typeof fm.publish_date === 'string' && fm.publish_date) {
+        const t = Date.parse(fm.publish_date);
+        if (!Number.isNaN(t)) publishDate = Math.floor(t / 1000);
+      }
+      return {
+        id: fm.id ?? e.id,
+        title: fm.title ?? e.id,
+        publish_date: publishDate,
+        status: fm.status,
+        view_count: fm.view_count ?? null,
+        ctr_pct: fm.ctr_pct ?? null,
+        youtube_url: fm.youtube_url ?? null,
+      };
+    })
+    .sort((a, b) => (b.publish_date ?? 0) - (a.publish_date ?? 0));
+  return c.json({ items });
+});
+
+app.get('/videos/:id', (c) => {
+  const id = c.req.param('id');
+  const entry = loadCollection('04_Channel/04_Projects', { type: 'video' }).find(
+    (x) => (x.frontmatter as any).id === id || x.id === id
+  );
+  if (!entry) return c.json({ error: 'not found' }, 404);
+  const fm = entry.frontmatter as any;
+  // Extract transcript from body.
+  const transcriptMatch = entry.body.match(/##\s+Transcript\s*\n+([\s\S]*?)(?=\n##\s|$)/i);
+  const script = transcriptMatch ? transcriptMatch[1]!.trim() : entry.body.replace(/^#\s+[^\n]*\n?/, '').trim();
+  let publishDate: number | null = null;
+  if (typeof fm.publish_date === 'number') publishDate = fm.publish_date;
+  else if (typeof fm.publish_date === 'string' && fm.publish_date) {
+    const t = Date.parse(fm.publish_date);
+    if (!Number.isNaN(t)) publishDate = Math.floor(t / 1000);
+  }
+  return c.json({
+    id: fm.id ?? entry.id,
+    title: fm.title ?? entry.id,
+    script_content: script,
+    youtube_url: fm.youtube_url ?? null,
+    publish_date: publishDate,
+    view_count: fm.view_count ?? null,
+  });
+});
+
+// Reference fs/loadFile (intentionally available)
+void loadFile;
+
+export default app;

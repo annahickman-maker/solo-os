@@ -1,0 +1,44 @@
+[
+  {
+    "id": "seed-low",
+    "price_label": "",
+    "name": "",
+    "proof_required": null,
+    "promise": "",
+    "status": "idea",
+    "sort_order": 1,
+    "tier": "low",
+    "avatar_id": null,
+    "featured": false,
+    "created_at": 1780945721,
+    "updated_at": 1780945721
+  },
+  {
+    "id": "seed-mid",
+    "price_label": "",
+    "name": "",
+    "proof_required": null,
+    "promise": "",
+    "status": "idea",
+    "sort_order": 2,
+    "tier": "mid",
+    "avatar_id": null,
+    "featured": false,
+    "created_at": 1780945721,
+    "updated_at": 1780945721
+  },
+  {
+    "id": "seed-high",
+    "price_label": "",
+    "name": "",
+    "proof_required": null,
+    "promise": "",
+    "status": "idea",
+    "sort_order": 3,
+    "tier": "high",
+    "avatar_id": null,
+    "featured": false,
+    "created_at": 1780945721,
+    "updated_at": 1780945721
+  }
+]

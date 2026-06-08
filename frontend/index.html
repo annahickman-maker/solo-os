@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0A0A0A" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <title>Solo OS</title>
+
+    <!--
+      Critical bootstrap CSS. Most of the dashboard's styles live in
+      `<style>` blocks inside React components - they only inject AFTER
+      React mounts. When a backgrounded tab returns and the JS bundle is
+      cold-fetching, the user would see unstyled HTML for a few seconds.
+      This block paints the page with brand colors immediately so the
+      gap looks like an intentional loading screen, not a broken page.
+    -->
+    <style>
+      :root {
+        color-scheme: dark;
+        --bootstrap-bg: #0a0a0a;
+        --bootstrap-fg: #ededed;
+        --bootstrap-muted: #6b6b6b;
+        --bootstrap-accent: #4a90e2;
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: var(--bootstrap-bg);
+        color: var(--bootstrap-fg);
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        min-height: 100vh;
+        font-size: 14px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+      #root {
+        min-height: 100vh;
+        background: var(--bootstrap-bg);
+      }
+      /* Loading skeleton shown when #root is empty (React hasn't mounted
+         yet). The .loaded class is added by main.tsx on first render -
+         after that this rule never applies. */
+      #root:empty::before {
+        content: '';
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: var(--bootstrap-bg);
+      }
+      #root:empty::after {
+        content: 'loading solo os…';
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--bootstrap-muted);
+        font-weight: 500;
+        animation: bootstrap-pulse 1.6s ease-in-out infinite;
+      }
+      @keyframes bootstrap-pulse {
+        0%, 100% { opacity: 0.4; }
+        50% { opacity: 1; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

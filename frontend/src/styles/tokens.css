@@ -1,0 +1,121 @@
+:root {
+  --bg: #0E1116;
+  --surface: #161A21;
+  --surface-2: #1C2129;
+  --ink: #FFFFFF;
+  --muted: rgba(255, 255, 255, 0.55);
+  --muted-2: rgba(255, 255, 255, 0.38);
+  --hairline: rgba(255, 255, 255, 0.07);
+
+  /* Whoop semantic palette */
+  --accent: #16C97E;
+  --recovery: #16C97E;
+  --strain: #29A4FF;
+  --sleep: #9DB7D1;
+  --hrv: #E6A52F;
+  --success: #16C97E;
+  --warning: #FFB020;
+  --danger: #FF4D4D;
+  --info: #29A4FF;
+
+  --ring-track: rgba(255, 255, 255, 0.07);
+
+  --font-display: 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+
+  --eyebrow: 0.6875rem;
+  --body-sm: 0.875rem;
+  --body: 1rem;
+  --body-lg: 1.125rem;
+  --h3: 1.5rem;
+  --h2: clamp(1.75rem, 4vw, 2.5rem);
+  --h1: clamp(2.5rem, 6vw, 4rem);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-fast: 180ms;
+  --duration-base: 320ms;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--bg);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+::selection {
+  background: rgba(22, 224, 161, 0.28);
+  color: var(--ink);
+}

@@ -1,0 +1,13 @@
+{
+  "name": "anna-dashboard-claude-bridge",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "tsx server.ts",
+    "dev": "tsx watch server.ts"
+  },
+  "dependencies": {
+    "tsx": "^4.7.0"
+  }
+}
