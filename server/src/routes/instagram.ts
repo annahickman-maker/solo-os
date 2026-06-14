@@ -3,7 +3,7 @@
  * 00_System/instagram-queue.json.
  *
  * Each entry comes from the transcripts page (extracted quotes + stories that
- * Anna clicked "queue to instagram" on). Entries can be marked queued / filmed
+ * the creator clicked "queue to instagram" on). Entries can be marked queued / filmed
  * / posted / dismissed.
  */
 
@@ -16,7 +16,7 @@ import { loadPosts, syncInstagram } from '../lib/instagramSync.js';
 const IG_QUEUE = abs('00_System', 'instagram-queue.json');
 const STATE_FILE_REL = ['00_System', 'state.md'] as const;
 const VOICE_FILE_REL = ['01_Core', 'core_voice-style.md'] as const;
-const BRIDGE_URL = 'http://localhost:8789/run';
+const BRIDGE_URL = 'http://localhost:8788/run';
 
 // Defaults match server/src/routes/settings.ts DEFAULTS.focus_cta_*. Both
 // point at the creator's SS Skool. Kept here so this route can run independently of
@@ -37,22 +37,33 @@ type IgItem = {
   source_moments?: Array<{ text: string; timestamp: string }>;
   kind?: 'story' | 'quote';
   title?: string;
-  status: 'queued' | 'filmed' | 'posted' | 'dismissed';
+  status: 'queued' | 'editing' | 'ready_to_schedule' | 'scheduled' | 'filmed' | 'posted' | 'dismissed' | 'failed';
   queued_at: number;
+  editing_at?: number;
+  ready_at?: number;
+  scheduled_at?: number;
   filmed_at?: number;
   posted_at?: number;
   dismissed_at?: number;
+  failed_at?: number;
+  failed_reason?: string;
   posted_url?: string;
   // Manual metrics typed in after posting (or pulled from API in the future).
   view_count?: number;
   share_count?: number;
   comment_count?: number;
-  // Anna can drag-reorder; lower order = higher in the queue
+  // the creator can drag-reorder; lower order = higher in the queue
   queue_order?: number;
   // Generated Instagram caption (hook + arc + CTA), and 5 hashtags.
   caption?: string;
   caption_hashtags?: string[];
   caption_generated_at?: number;
+  // Auto-post pipeline fields.
+  video_path?: string;        // absolute path on disk to the .mp4 dropped by the creator
+  thumbnail_path?: string;    // absolute path to a .jpg frame for dashboard preview
+  hook_variants?: string[];   // 3 short on-screen text hooks (3-7 words each)
+  chosen_hook?: string;       // the one the creator picked - burned into video at post time
+  scheduled_for?: number;     // unix seconds - when the poster cron will publish
 };
 
 function readQueue(): IgItem[] {
@@ -157,11 +168,13 @@ app.patch('/queue/:id', async (c) => {
   if (typeof body.status === 'string') {
     const prev = it.status;
     it.status = body.status;
+    if (body.status === 'editing' && !it.editing_at) it.editing_at = now;
+    if (body.status === 'ready_to_schedule' && !it.ready_at) it.ready_at = now;
+    if (body.status === 'scheduled' && !it.scheduled_at) it.scheduled_at = now;
     if (body.status === 'filmed' && !it.filmed_at) it.filmed_at = now;
     if (body.status === 'posted' && !it.posted_at) it.posted_at = now;
     if (body.status === 'dismissed' && !it.dismissed_at) it.dismissed_at = now;
-    // Reverting away from posted: clear posted_at so the content output grid
-    // doesn't double-count and so the next "mark posted" uses a fresh date.
+    if (body.status === 'failed' && !it.failed_at) it.failed_at = now;
     if (prev === 'posted' && body.status !== 'posted') {
       delete it.posted_at;
     }
@@ -189,11 +202,14 @@ app.patch('/queue/:id', async (c) => {
       .filter((h: any) => typeof h === 'string')
       .slice(0, 5);
   }
+  if (typeof body.chosen_hook === 'string') {
+    it.chosen_hook = stripEmDashes(body.chosen_hook).trim();
+  }
   writeQueue(items);
   return c.json({ ok: true, item: it });
 });
 
-/** DELETE /api/instagram/queue/:id - hard remove (after Anna decides she really doesn't want it) */
+/** DELETE /api/instagram/queue/:id - hard remove (after the creator decides she really doesn't want it) */
 app.delete('/queue/:id', (c) => {
   const id = c.req.param('id');
   const items = readQueue();
@@ -208,7 +224,7 @@ app.delete('/queue/:id', (c) => {
  * grouped by month. Used to render the MonthGrid at the top of the IG page.
  *
  * Source of truth = the IG queue entries with status === 'posted' and a
- * posted_at timestamp. That field is set when Anna marks a reel posted via
+ * posted_at timestamp. That field is set when the creator marks a reel posted via
  * the panel.
  */
 app.get('/output', (c) => {
@@ -372,25 +388,27 @@ function getVoiceSummary(): string {
   }
 }
 
-const CAPTION_SYSTEM = `You write Instagram reel captions in the creator's voice for the channel.
+const CAPTION_SYSTEM = `You write ultra-minimal Instagram reel captions in the creator's voice for the channel. Think Tom Noske: one sharp sentence that lands, then the CTA. That's it.
 
 NON-NEGOTIABLES:
-- NEVER use the em dash character (—). Use a hyphen with spaces ( - ) instead. Zero exceptions.
+- NEVER use the em dash character. Use a hyphen with spaces ( - ) instead. Zero exceptions.
 - All lowercase prose. No title case sentences.
 - No emojis anywhere.
 - No guru language. No hype. No "let me tell you a secret." No "here's the truth nobody talks about."
-- Sound like Anna, not like an AI caption generator. Short to medium sentences. Fragments are fine when they land.
-- The caption MUST be 100% generated, never echo the reel's spoken script verbatim. Instagram captions are written copy, not transcript dumps.
+- Sound like the creator, not like an AI caption generator. Plain, direct, a little dry.
+- Do NOT echo the reel's spoken script verbatim. The caption is the small written kicker next to the reel, not a transcript.
 
-CAPTION STRUCTURE (in this order, no labels in the output):
-1) HOOK (1-2 short sentences). Concrete and specific. Either a number/result, a contrarian belief flip, or a small admission of struggle. Makes the reader want to expand "more".
-2) STORY ARC + VALUE (3-6 short sentences). The arc: what she used to believe / try / experience, what shifted, what she does now. Bake in one piece of usable value the reader can actually apply.
-3) CTA (1 sentence). Use the provided CTA text verbatim, exactly as given. Do not paraphrase.
-4) Blank line, then a single line with exactly 5 hashtags, lowercase, no spaces inside each tag, separated by single spaces. Target the creator's audience: creative freelancers, solopreneurs, web designers, online business owners, content creators. Use specific tags like #solopreneur #onepersonbusiness #creativefreelancer #onlinebusiness #contentstrategy. Pick the 5 that fit this specific reel best.
+CAPTION STRUCTURE (exactly two lines, no labels, no extra prose):
+1) ONE sentence. Max ~20 words. Either a contrarian belief flip, a sharp observation, a small honest admission, or the single insight the reel turns on. Concrete. Plain. Not a question unless the question is genuinely surprising.
+2) Blank line, then the CTA on its own line. Use the provided CTA text verbatim, exactly as given. Do not paraphrase.
 
-OUTPUT FORMAT — return a JSON object only, no commentary, no markdown fences:
+That's the whole caption body. Two lines of prose separated by a blank line. No story arc, no breakdown, no bullets.
+
+Then 5 hashtags, lowercase, no spaces inside each tag, separated by single spaces. Target the creator's audience: creative freelancers, solopreneurs, web designers, online business owners, content creators. Use specific tags like #solopreneur #onepersonbusiness #creativefreelancer #onlinebusiness #contentstrategy. Pick the 5 that fit this specific reel best.
+
+OUTPUT FORMAT - return a JSON object only, no commentary, no markdown fences:
 {
-  "caption": "the full caption body, including hook + story arc + CTA, joined with blank lines between sections",
+  "caption": "one sentence.\\n\\nthe cta sentence.",
   "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5"]
 }`;
 
@@ -483,6 +501,287 @@ app.post('/queue/:id/caption', async (c) => {
     console.error('caption generation failed:', err);
     return c.json({ error: err?.message ?? 'caption generation failed' }, 500);
   }
+});
+
+/**
+ * POST /api/instagram/queue/from-video
+ * Body: { video_path, thumbnail_path?, transcript?, title? }
+ *
+ * Called by the watcher when a new .mp4 lands with a filename that does NOT
+ * match an existing queue id. Creates a free-form queue item seeded with the
+ * (optional) whisper transcript so the caption + hooks generator has source
+ * material. Returns the new item's id.
+ */
+app.post('/queue/from-video', async (c) => {
+  const body = (await c.req.json().catch(() => null)) as {
+    video_path?: string;
+    thumbnail_path?: string;
+    transcript?: string;
+    title?: string;
+    tag?: string;
+  } | null;
+  if (!body?.video_path) return c.json({ error: 'video_path required' }, 400);
+
+  const items = readQueue();
+  const now = Math.floor(Date.now() / 1000);
+  const filename = body.video_path.split('/').pop() ?? 'reel.mp4';
+  const cleanTitle = body.title?.trim() || filename.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ');
+  const id = `ig-drop-${now}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const text = (body.transcript ?? '').trim() || cleanTitle;
+
+  const item: IgItem = {
+    id,
+    text,
+    title: cleanTitle,
+    tag: normalizeQuoteTag(body.tag ?? 'connection', text),
+    kind: 'story',
+    status: 'ready_to_schedule',
+    queued_at: now,
+    ready_at: now,
+    video_path: body.video_path,
+  };
+  if (body.thumbnail_path) item.thumbnail_path = body.thumbnail_path;
+
+  items.push(item);
+  writeQueue(items);
+  return c.json({ ok: true, item });
+});
+
+// ─── Auto-post pipeline ────────────────────────────────────────────────────
+
+/**
+ * POST /api/instagram/queue/:id/mark-editing
+ *
+ * the creator clicks "I'm editing this in Descript". Sets status=editing and returns
+ * the filename she should export the finished mp4 as. The watcher picks up
+ * any file matching `<id>.mp4` in the dropbox folder.
+ */
+app.post('/queue/:id/mark-editing', (c) => {
+  const id = c.req.param('id');
+  const items = readQueue();
+  const idx = items.findIndex((i) => i.id === id);
+  if (idx === -1) return c.json({ error: 'not found' }, 404);
+  const it = items[idx]!;
+  it.status = 'editing';
+  it.editing_at = Math.floor(Date.now() / 1000);
+  writeQueue(items);
+  return c.json({
+    ok: true,
+    expected_filename: `${id}.mp4`,
+    dropbox_path: '00_System/instagram-queue/dropbox',
+    item: it,
+  });
+});
+
+/**
+ * POST /api/instagram/queue/:id/attach-video
+ * Body: { video_path, thumbnail_path }
+ *
+ * Called by the watcher script after a new .mp4 is detected and a thumbnail
+ * has been extracted. Sets status=ready_to_schedule.
+ */
+app.post('/queue/:id/attach-video', async (c) => {
+  const id = c.req.param('id');
+  const body = (await c.req.json().catch(() => null)) as { video_path?: string; thumbnail_path?: string } | null;
+  if (!body?.video_path) return c.json({ error: 'video_path required' }, 400);
+  const items = readQueue();
+  const idx = items.findIndex((i) => i.id === id);
+  if (idx === -1) return c.json({ error: 'not found' }, 404);
+  const it = items[idx]!;
+  it.video_path = body.video_path;
+  if (body.thumbnail_path) it.thumbnail_path = body.thumbnail_path;
+  it.status = 'ready_to_schedule';
+  it.ready_at = Math.floor(Date.now() / 1000);
+  writeQueue(items);
+  return c.json({ ok: true, item: it });
+});
+
+// Stream a thumbnail or video file by queue id. Files live outside the
+// frontend public folder, so the dashboard needs a route to serve them.
+app.get('/queue/:id/thumbnail', (c) => {
+  const id = c.req.param('id');
+  const items = readQueue();
+  const it = items.find((i) => i.id === id);
+  if (!it?.thumbnail_path || !fs.existsSync(it.thumbnail_path)) {
+    return c.json({ error: 'no thumbnail' }, 404);
+  }
+  const buf = fs.readFileSync(it.thumbnail_path);
+  return new Response(buf, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=60' } });
+});
+
+app.get('/queue/:id/video', (c) => {
+  const id = c.req.param('id');
+  const items = readQueue();
+  const it = items.find((i) => i.id === id);
+  if (!it?.video_path || !fs.existsSync(it.video_path)) {
+    return c.json({ error: 'no video' }, 404);
+  }
+  const buf = fs.readFileSync(it.video_path);
+  return new Response(buf, { headers: { 'Content-Type': 'video/mp4', 'Cache-Control': 'private, max-age=60' } });
+});
+
+// ─── Hook generation (3 on-screen text variants) ──────────────────────────
+
+const HOOK_SYSTEM = `You write on-screen text hooks for Instagram reels in the creator's voice for the channel.
+
+A hook is the text that gets burned into the top of the reel - the first thing a scroller sees in 0.5 seconds. It has to stop the scroll.
+
+NON-NEGOTIABLES:
+- 3 to 7 words. No more. No fewer.
+- All lowercase. No title case. No exclamation points.
+- NEVER use the em dash character. Use a hyphen with spaces ( - ) instead.
+- No emojis. No hashtags. No quotes around the hook.
+- Sound like the creator - direct, contrarian, plain. Not guru. Not clickbait. Not "the truth about X".
+- Each variant must be a DIFFERENT angle on the same reel. Not three rewordings of the same line.
+
+3 ANGLES TO HIT (one per variant):
+1) Contrarian belief flip - "what most people get wrong about X"
+2) Surprising result or number - the outcome that makes them want to know how
+3) Quiet admission or small confession - something honest the audience nods at
+
+OUTPUT FORMAT - return a JSON object only, no commentary, no markdown fences:
+{
+  "hooks": ["hook one", "hook two", "hook three"]
+}`;
+
+function parseHookJson(raw: string): string[] {
+  let cleaned = raw.trim().replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+  cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+  let parsed: any;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('could not parse json from hook response');
+    parsed = JSON.parse(match[0]);
+  }
+  const hooks = Array.isArray(parsed.hooks)
+    ? parsed.hooks.filter((h: any) => typeof h === 'string' && h.trim()).map((h: string) => stripEmDashes(h.trim().toLowerCase()))
+    : [];
+  return hooks.slice(0, 3);
+}
+
+/** POST /api/instagram/queue/:id/hooks - generate 3 on-screen hook variants */
+app.post('/queue/:id/hooks', async (c) => {
+  const id = c.req.param('id');
+  const items = readQueue();
+  const idx = items.findIndex((i) => i.id === id);
+  if (idx === -1) return c.json({ error: 'not found' }, 404);
+  const it = items[idx]!;
+
+  const voice = getVoiceSummary();
+  const tagLabel =
+    it.tag === 'pov' ? 'POV'
+    : it.tag === 'value' ? 'Value (teaching framework)'
+    : it.tag === 'authority' ? 'Proof / authority'
+    : 'Connection (personal story)';
+
+  const userPrompt = [
+    `# Reel context`,
+    `Tag: ${tagLabel}`,
+    it.title ? `Working title: ${it.title}` : '',
+    it.context ? `\n# Why this moment\n${it.context}` : '',
+    `\n# What's said in the reel\n${it.text}`,
+    voice ? `\n# the creator's voice (calibrate to this)\n${voice}` : '',
+  ].filter(Boolean).join('\n');
+
+  try {
+    const raw = await callBridge(HOOK_SYSTEM, userPrompt, 500);
+    const hooks = parseHookJson(raw);
+    if (hooks.length === 0) return c.json({ error: 'no hooks returned' }, 502);
+    it.hook_variants = hooks;
+    writeQueue(items);
+    return c.json({ ok: true, hooks });
+  } catch (err: any) {
+    console.error('hook generation failed:', err);
+    return c.json({ error: err?.message ?? 'hook generation failed' }, 500);
+  }
+});
+
+// ─── Daily scheduling (one post per day) ──────────────────────────────────
+
+const DEFAULT_POST_HOUR_LOCAL = 10; // 10am the creator's local time (America/Toronto)
+const DEFAULT_POST_TZ = 'America/Toronto';
+
+/**
+ * Returns the next free post slot as a unix-second timestamp.
+ * Rule: one post per day at 10am local. If today's slot is in the future and
+ * unoccupied, that's the next slot. Otherwise walk forward day by day until a
+ * date has no scheduled / posted item on it.
+ */
+function nextFreeSlot(items: IgItem[]): number {
+  const occupied = new Set<string>();
+  for (const it of items) {
+    const ts = it.scheduled_for ?? it.posted_at;
+    if (!ts) continue;
+    if (!['scheduled', 'posted'].includes(it.status)) continue;
+    const d = new Date(ts * 1000);
+    occupied.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
+  }
+  const now = new Date();
+  for (let i = 0; i < 60; i++) {
+    const candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i, DEFAULT_POST_HOUR_LOCAL, 0, 0, 0);
+    const key = `${candidate.getFullYear()}-${candidate.getMonth()}-${candidate.getDate()}`;
+    if (occupied.has(key)) continue;
+    if (candidate.getTime() < now.getTime() + 10 * 60 * 1000) continue; // need at least 10 min buffer
+    return Math.floor(candidate.getTime() / 1000);
+  }
+  // Fallback: 60 days out
+  const fallback = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 60, DEFAULT_POST_HOUR_LOCAL, 0, 0, 0);
+  return Math.floor(fallback.getTime() / 1000);
+}
+
+/** GET /api/instagram/next-free-slot - returns next free 10am slot as unix seconds */
+app.get('/next-free-slot', (c) => {
+  const items = readQueue();
+  const ts = nextFreeSlot(items);
+  return c.json({ scheduled_for: ts, post_time_local: `${DEFAULT_POST_HOUR_LOCAL}:00`, tz: DEFAULT_POST_TZ });
+});
+
+/**
+ * POST /api/instagram/queue/:id/schedule
+ * Body: { chosen_hook, caption?, scheduled_for? }
+ *
+ * the creator's "Approve & schedule" button. Locks in the chosen hook and assigns
+ * scheduled_for (auto-picks next free slot if not provided). Sets status=scheduled.
+ */
+app.post('/queue/:id/schedule', async (c) => {
+  const id = c.req.param('id');
+  const body = (await c.req.json().catch(() => null)) as { chosen_hook?: string; caption?: string; scheduled_for?: number } | null;
+  if (!body?.chosen_hook?.trim()) return c.json({ error: 'chosen_hook required' }, 400);
+  const items = readQueue();
+  const idx = items.findIndex((i) => i.id === id);
+  if (idx === -1) return c.json({ error: 'not found' }, 404);
+  const it = items[idx]!;
+  if (!it.video_path) return c.json({ error: 'no video attached yet' }, 400);
+  if (!it.caption && !body.caption) return c.json({ error: 'no caption' }, 400);
+
+  it.chosen_hook = stripEmDashes(body.chosen_hook.trim().toLowerCase());
+  if (typeof body.caption === 'string') it.caption = stripEmDashes(body.caption);
+  it.scheduled_for = typeof body.scheduled_for === 'number' ? body.scheduled_for : nextFreeSlot(items);
+  it.status = 'scheduled';
+  it.scheduled_at = Math.floor(Date.now() / 1000);
+  writeQueue(items);
+  return c.json({ ok: true, item: it });
+});
+
+/**
+ * GET /api/instagram/due-now
+ *
+ * Called by the poster cron at 9:55am daily. Returns any 'scheduled' item
+ * whose scheduled_for is within the next 60 minutes. The poster then
+ * publishes it and PATCHes status=posted with posted_url.
+ */
+app.get('/due-now', (c) => {
+  const items = readQueue();
+  const now = Math.floor(Date.now() / 1000);
+  const due = items.filter((it) => {
+    if (it.status !== 'scheduled') return false;
+    if (!it.scheduled_for) return false;
+    return it.scheduled_for >= now - 5 * 60 && it.scheduled_for <= now + 60 * 60;
+  });
+  return c.json({ items: due });
 });
 
 export default app;

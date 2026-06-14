@@ -9,13 +9,12 @@
  * NOT mirrored here (skipped intentionally):
  *   - Tracking slug minting + link_manifest update. That requires a Cloudflare
  *     worker side-effect. We use focus_cta_url directly. Can layer that on
- *     later if Anna wants per-video click attribution from the dashboard.
+ *     later if the creator wants per-video click attribution from the dashboard.
  */
 
 import { abs, loadFile } from '../vault.js';
-import { personalize } from './creatorContext.js';
 
-const BRIDGE_URL = 'http://localhost:8789/run';
+const BRIDGE_URL = 'http://localhost:8788/run';
 const VOICE_FILE_REL = ['01_Core', 'core_voice-style.md'] as const;
 
 export type GenerateDescriptionInput = {
@@ -53,7 +52,7 @@ NON-NEGOTIABLES:
 - No emojis anywhere.
 - No hashtags. Never. YouTube descriptions don't use hashtags.
 - No guru language. No hype. No "here's the truth nobody talks about."
-- Sound natural, direct, like Anna wrote it herself. Short to medium sentences.
+- Sound natural, direct, like the creator wrote it herself. Short to medium sentences.
 - Use ONLY content from the transcript. Do not invent claims, results, or stories.
 
 STRUCTURE (in this exact order):
@@ -72,7 +71,7 @@ STRUCTURE (in this exact order):
 
 5) The literal line: "What we cover:"
 
-6) 4-6 CHAPTERS. Each on its own line. Format: "<timestamp> - <chapter title>" where timestamp is mm:ss (or h:mm:ss) extracted from the transcript. First chapter is ALWAYS "0:00 - Intro" (or whatever name matches what the intro is actually about). Chapter titles: AS FEW WORDS AS POSSIBLE. Curiosity over explanation. Clarity over cleverness. Match what Anna actually says, not marketing language. Example strong titles: "The 5-step framework", "What I'd skip if I started over". Example weak titles to avoid: "How to use the 5-step framework to write your first script", "Tips and tricks".
+6) 4-6 CHAPTERS. Each on its own line. Format: "<timestamp> - <chapter title>" where timestamp is mm:ss (or h:mm:ss) extracted from the transcript. First chapter is ALWAYS "0:00 - Intro" (or whatever name matches what the intro is actually about). Chapter titles: AS FEW WORDS AS POSSIBLE. Curiosity over explanation. Clarity over cleverness. Match what the creator actually says, not marketing language. Example strong titles: "The 5-step framework", "What I'd skip if I started over". Example weak titles to avoid: "How to use the 5-step framework to write your first script", "Tips and tricks".
 
 If timestamps are not present in the transcript, write chapter titles only (no timestamps) and at the very end append a single italics line: "_note: add timestamps manually before publishing._"
 
@@ -90,7 +89,7 @@ async function callBridge(system: string, user: string, maxTokens = 2500): Promi
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'videoDescription',
-        system: personalize(system),
+        system,
         user,
         maxTokens,
         expectJson: true,

@@ -3,11 +3,11 @@ id: task-example-explore-the-dashboard
 type: task
 status: pending
 category: other
-this_week: true
-section: This Week
+this_week: false
+section: ''
 project: null
 created: '2026-06-08'
-updated: '2026-06-08'
+updated: '2026-06-14'
 ---
 # Explore the dashboard
 

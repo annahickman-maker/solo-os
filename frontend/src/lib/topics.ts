@@ -1,5 +1,5 @@
 /**
- * The fixed list of topic tags Anna uses across content. Anything outside
+ * The fixed list of topic tags the creator uses across content. Anything outside
  * this list is either legacy (kept for backward compat in display only)
  * or technical YAML metadata that should be filtered from the UI.
  *
@@ -21,7 +21,7 @@ export type Topic = (typeof ALLOWED_TOPICS)[number];
 /**
  * Tags that should be hidden from the UI entirely. These are technical
  * YAML metadata baked into POV file frontmatter and bank-entry schemas.
- * They give no useful topic signal to Anna ("type/asset" doesn't tell her
+ * They give no useful topic signal to the creator ("type/asset" doesn't tell her
  * what the entry is *about*).
  *
  * Filter rule: any tag containing "/" is treated as namespaced metadata and

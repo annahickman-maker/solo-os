@@ -15,7 +15,6 @@
  */
 
 import fs from 'node:fs';
-import { personalize } from './creatorContext.js';
 import { abs } from '../vault.js';
 
 const POSTS_FILE = abs('00_System', 'instagram-posts.json');

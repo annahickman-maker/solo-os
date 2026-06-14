@@ -9,10 +9,9 @@
  */
 
 import fs from 'node:fs';
-import { personalize } from './creatorContext.js';
 import { abs, loadCollection, loadFile, saveFile } from '../vault.js';
 
-const BRIDGE_URL = 'http://localhost:8789/run';
+const BRIDGE_URL = 'http://localhost:8788/run';
 
 function readCore(filename: string): string {
   try {
@@ -27,7 +26,7 @@ async function callBridge(system: string, user: string): Promise<string> {
   const res = await fetch(BRIDGE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'extractFromCore', system: personalize(system), user, maxTokens: 3000, expectJson: true }),
+    body: JSON.stringify({ type: 'extractFromCore', system, user, maxTokens: 3000, expectJson: true }),
   });
   if (!res.ok) throw new Error(`bridge ${res.status}: ${await res.text()}`);
   const data = (await res.json()) as { text?: string; error?: string };
@@ -204,7 +203,7 @@ export async function extractMicroStories(): Promise<Array<{ text: string; sourc
 // ─── Verbatim micro-stories from video transcripts ─────────────────────────
 // The paraphrased version (extractMicroStories) is removed in favour of this.
 // Pulls exact quotes from published video transcripts so each micro-story is
-// something Anna actually said on camera, with attribution.
+// something the creator actually said on camera, with attribution.
 
 const VERBATIM_STORIES_PROMPT = `You are reading published YouTube video transcripts. Extract VERBATIM micro-stories - small, specific, vivid moments the creator tells in her own voice.
 

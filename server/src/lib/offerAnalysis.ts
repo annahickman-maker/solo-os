@@ -12,11 +12,10 @@
  */
 
 import fs from 'node:fs';
-import { personalize } from './creatorContext.js';
 import path from 'node:path';
 import { abs, loadFile } from '../vault.js';
 
-const BRIDGE_URL = 'http://localhost:8789/run';
+const BRIDGE_URL = 'http://localhost:8788/run';
 
 // The 25 questions, mirroring the frontend OFFER_QUIZ. Kept here as the
 // source-of-truth for the Claude prompt; if you edit the questions on the
@@ -107,7 +106,7 @@ function loadPinnedProof(): string {
     const pinnedIds: string[] = Array.isArray(rawIds)
       ? (rawIds as unknown[]).filter((x): x is string => typeof x === 'string')
       : [];
-    if (pinnedIds.length === 0) return '(no proof pinned yet — encourage Anna to pin proof items on the Proof tab)';
+    if (pinnedIds.length === 0) return '(no proof pinned yet — encourage the creator to pin proof items on the Proof tab)';
     const lines: string[] = [];
     // Wins
     try {
@@ -137,7 +136,7 @@ async function fetchSalesPageText(url: string): Promise<string> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AnnaDashboard/1.0)' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SoloOsDashboard/1.0)' },
       signal: controller.signal,
     });
     clearTimeout(timeout);
@@ -235,7 +234,7 @@ async function callBridge(system: string, user: string): Promise<string> {
     const res = await fetch(BRIDGE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'offerAnalysis', system: personalize(system), user, maxTokens: 4000, expectJson: true }),
+      body: JSON.stringify({ type: 'offerAnalysis', system, user, maxTokens: 4000, expectJson: true }),
       signal: controller.signal,
     });
     if (!res.ok) throw new Error(`claude-bridge ${res.status}: ${await res.text()}`);

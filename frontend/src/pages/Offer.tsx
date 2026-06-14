@@ -185,12 +185,12 @@ function OfferCardsList({
       }),
     onSuccess: (created) => {
       qc.invalidateQueries({ queryKey: ['offers'] });
-      // Auto-expand the new card so Anna lands on the editor.
+      // Auto-expand the new card so the creator lands on the editor.
       if (created?.id) setOpenId(created.id);
     },
   });
   // Default the open card to the focus (featured) offer if there is one, so
-  // Anna lands on her current focus expanded. Tracks whether we've already
+  // the creator lands on her current focus expanded. Tracks whether we've already
   // applied the default - any user toggle after that sticks.
   const featured = rungs.find((r) => r.featured) ?? null;
   const [openId, setOpenId] = useState<string | null>(featured?.id ?? null);
@@ -287,7 +287,7 @@ function OfferCardsList({
       )}
 
       {/* + add offer button at the bottom of the list. Creates an empty
-          rung; the new card auto-expands so Anna lands on the editor. */}
+          rung; the new card auto-expands so the creator lands on the editor. */}
       <button
         type="button"
         onClick={() => add.mutate()}
@@ -453,7 +453,7 @@ function OfferCard({
       }}
     >
       {/* Unfocus star - sits in the top-right of the featured card so
-          Anna can unfocus without opening the card. Uses pointer-events
+          the creator can unfocus without opening the card. Uses pointer-events
           + stopPropagation so clicking it doesn't toggle the card open.
           Only renders on the featured card. */}
       {isFeatured && (
@@ -1100,7 +1100,7 @@ function OfferSubCard({
 // (0 = unrated). Per-section score = average × 20. Overall offer score is a
 // stage-weighted average across the five sections (see STAGE_WEIGHTS).
 //
-// `hint` is what Anna sees under the question - what data Claude will look
+// `hint` is what the creator sees under the question - what data Claude will look
 // at when she clicks "analyze with Claude" in a future iteration. Marked as
 // `xref` when the question requires cross-referencing two sources (e.g.
 // AVATAR + SALES PAGE).
@@ -1628,7 +1628,7 @@ function PerOfferScorePanel({
                 {(() => {
                   // Has this section ever been analyzed? Any non-empty
                   // reasoning string counts. Shifts the button label to
-                  // "re-analyze" so Anna knows the previous notes will
+                  // "re-analyze" so the creator knows the previous notes will
                   // be overwritten (and that they're still visible below).
                   const hasReasoning = reasoning[sec].some((s) => s.trim().length > 0);
                   return (
@@ -1886,7 +1886,7 @@ function PerOfferAvatarPanel({
   const attachedId = rung.avatar_id;
   const attached = avatars.find((a) => a.id === attachedId) ?? null;
   // When attached, default-open its editor underneath. Otherwise leave
-  // the panel as just the grid until Anna picks one.
+  // the panel as just the grid until the creator picks one.
   const [openId, setOpenId] = useState<string | null>(attachedId);
   useEffect(() => { setOpenId(attachedId); }, [attachedId]);
 
@@ -2061,7 +2061,7 @@ function parsePriceLabel(label: string | null | undefined): number | null {
 
 // Target customers / month is now derived from
 //   target_revenue_per_month_usd  /  parsed(goal_price_label || price_label)
-// Anna sets the revenue she wants and the price she's aiming for; this
+// the creator sets the revenue she wants and the price she's aiming for; this
 // reads back the implied customer count and writes it to the rung so
 // downstream code (score panels, completion checks) still sees a value
 // in target_customers_per_month. Re-saves whenever the inputs change.
@@ -2591,7 +2591,7 @@ function EmailsBlock({ rungId }: { rungId: string }) {
 
   const items = data?.items ?? [];
   // Aggregate = simple mean of the per-email conversion rates that have
-  // a value. Skips emails Anna hasn't filled in yet.
+  // a value. Skips emails the creator hasn't filled in yet.
   const ratesWithValues = items.map((e) => e.conversion_rate_pct).filter((v): v is number => typeof v === 'number');
   const avgPct = ratesWithValues.length > 0
     ? ratesWithValues.reduce((s, v) => s + v, 0) / ratesWithValues.length
@@ -2697,7 +2697,7 @@ function EmailsBlock({ rungId }: { rungId: string }) {
 
 // One row per email. Just subject + kind pill + one manual conversion
 // rate input. Email platforms already surface conversion rates so we
-// just let Anna type it in - no /go/ link minting, no sends/clicks
+// just let the creator type it in - no /go/ link minting, no sends/clicks
 // math, no auto-pull. Smallest viable shape.
 function EmailRow({ email, rungId }: { email: OfferEmail; rungId: string }) {
   const qc = useQueryClient();
@@ -2732,7 +2732,7 @@ function EmailRow({ email, rungId }: { email: OfferEmail; rungId: string }) {
       </div>
 
       {/* Manual conversion rate input. Whatever the email platform
-          reports - Anna types it here. */}
+          reports - the creator types it here. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
         <span style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--muted-2)' }}>
           conversion
@@ -2758,7 +2758,7 @@ function EmailRow({ email, rungId }: { email: OfferEmail; rungId: string }) {
 }
 
 // ─── ShortFormBlock ───────────────────────────────────────────────────────
-// One tracking link per platform Anna posts on. Add more platforms as
+// One tracking link per platform the creator posts on. Add more platforms as
 // needed. Conversion = clicks ÷ impressions per month.
 function ShortFormBlock({ rungId, salesPageUrlSet }: { rungId: string; salesPageUrlSet: boolean }) {
   const qc = useQueryClient();
@@ -3026,7 +3026,7 @@ function ShortFormRow({ link, salesPageUrlSet, rungId }: { link: OfferShortFormL
 
 // Setup-prompt block. Shown in place of the "Generate tracking link"
 // button when the Cloudflare-worker link manifest isn't set up yet.
-// Anna copies the prompt and pastes it into a Claude chat to set it
+// the creator copies the prompt and pastes it into a Claude chat to set it
 // up - then comes back and the button works.
 // Prominent copyable display for a /go/<slug> tracking link. Used by
 // both EmailRow and ShortFormRow under the title. Click to copy, button
@@ -3432,7 +3432,7 @@ function sectionSummary(section: OfferSection): string | null {
     const list = section.avatars ?? [];
     if (list.length === 0) return null;
     const first = list[0];
-    // Don't surface demographics in the headline preview - Anna doesn't
+    // Don't surface demographics in the headline preview - the creator doesn't
     // want avatars framed by demo, she wants them framed by who-they-are
     // + before/after.
     const oneLiner = first.one_line || first.before_state || first.after_state;
@@ -4378,7 +4378,7 @@ function PricingResultsList({
   const placeholder =
     kind === 'own'
       ? "Headline result (e.g. '$50K month after 5-video series')"
-      : "Client headline (e.g. 'Adriana - $10K cap broken in 90 days')";
+      : "Client headline (e.g. 'the avatar - $10K cap broken in 90 days')";
 
   return (
     <div className="off-stack">
@@ -4608,7 +4608,7 @@ function PricingLadder({
   const [openId, setOpenId] = useState<string | null>(null);
   const featured = rungs.find((r) => r.featured) ?? null;
 
-  // Group rungs by tier so Anna sees a "Low ticket / Mid ticket / High ticket"
+  // Group rungs by tier so the creator sees a "Low ticket / Mid ticket / High ticket"
   // frame even when she hasn't added all three yet. The featured marker
   // shows as a ★ chip on the row but the rung still appears in its tier.
   const byTier: Record<OfferPricingRung['tier'], OfferPricingRung[]> = {
@@ -5063,7 +5063,7 @@ function AvatarBank({ avatars, color }: { avatars: OfferAvatar[]; color: string 
           <div className="av-card av-card--adding">
             <input
               className="off-text-input"
-              placeholder="avatar name (e.g. 'adriana')"
+              placeholder="avatar name (e.g. 'the-avatar')"
               value={draft}
               autoFocus
               onChange={(e) => setDraft(e.target.value)}
@@ -5218,8 +5218,8 @@ export const AV_BANK_CSS = `
 // ─── Editable expansion for a single avatar ───────────────────────────────
 // Every field is an always-visible large textarea controlled directly off
 // the prop. Edits debounce-save via PATCH (450ms after last keystroke) so
-// Anna sees what she has and can edit it in place without a click-to-edit
-// dance. Demographics is intentionally NOT rendered - Anna doesn't want
+// the creator sees what she has and can edit it in place without a click-to-edit
+// dance. Demographics is intentionally NOT rendered - the creator doesn't want
 // avatars driven by demo. Profile image sits at the top with a generate
 // button that calls Gemini (nano banana) and saves the PNG.
 function AvatarEditor({
@@ -5264,7 +5264,7 @@ function AvatarEditor({
 
   // Debounced save helper. Every editable field stores its draft locally
   // and pushes the patch ~450ms after the last keystroke. Prevents a
-  // PATCH per character without losing in-flight edits when Anna pauses.
+  // PATCH per character without losing in-flight edits when the creator pauses.
   function useDebouncedField(initial: string, key: keyof OfferAvatar) {
     const [draft, setDraft] = useState(initial);
     useEffect(() => { setDraft(initial); }, [initial]);
@@ -5305,7 +5305,7 @@ function AvatarEditor({
             type="text"
             className="av-name"
             value={name}
-            placeholder="adriana"
+            placeholder="the-avatar"
             onChange={(e) => setName(e.target.value)}
             aria-label="avatar name"
           />
@@ -5690,7 +5690,7 @@ function AvatarAudienceQuotes({ avatarId }: { avatarId: string }) {
   );
 }
 
-// struggles and outcomes - replaces the old chip-array UI which Anna
+// struggles and outcomes - replaces the old chip-array UI which the creator
 // felt looked too tag-like.
 function AvBragList({
   label,
@@ -5827,7 +5827,7 @@ function BragRow({
 }
 
 // AvTags (chip array for struggles/outcomes) was replaced by AvBragList
-// above - Anna preferred the brag-bank row treatment over the tag chips.
+// above - the creator preferred the brag-bank row treatment over the tag chips.
 
 const AV_EDITOR_CSS = `
 .off-row__fill-hint {
@@ -6111,7 +6111,7 @@ function ProofPromiseBlock({ color }: { color: string }) {
   const pinnedWins = wins.filter((w) => pinnedSet.has(w.id));
   const pinnedBank = bank.filter((b) => pinnedSet.has(b.id));
   // Hide pinned items from the source lists below - they live at the top now.
-  // Anna unpins from there to move them back into the pickable lists.
+  // the creator unpins from there to move them back into the pickable lists.
   const ownWins = wins.filter((w) => w.kind === 'own' && w.status === 'confirmed' && !pinnedSet.has(w.id));
   const customerWins = wins.filter((w) => (w.kind === 'student' || w.kind === 'client') && w.status === 'confirmed' && !pinnedSet.has(w.id));
   const unpinnedBank = bank.filter((e) => !pinnedSet.has(e.id));

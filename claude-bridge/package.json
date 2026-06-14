@@ -1,5 +1,5 @@
 {
-  "name": "anna-dashboard-claude-bridge",
+  "name": "solo-os-dashboard-claude-bridge",
   "private": true,
   "version": "0.1.0",
   "type": "module",

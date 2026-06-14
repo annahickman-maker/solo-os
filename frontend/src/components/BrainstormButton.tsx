@@ -1,6 +1,6 @@
 /**
  * Compact pill button next to the avatar. Opens the brainstorm modal where
- * Anna fills out prompts and saves them straight into the bank.
+ * the creator fills out prompts and saves them straight into the bank.
  */
 
 import { useEffect, useState } from 'react';

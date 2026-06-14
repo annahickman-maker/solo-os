@@ -309,7 +309,7 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
   }, [title, goal, script, videoId, data?.id]);
 
   // ─── Flush on unmount ───────────────────────────────────────────────────
-  // If Anna closes the modal mid-debounce, fire a final save synchronously
+  // If the creator closes the modal mid-debounce, fire a final save synchronously
   // (fetch goes out even after unmount; we just don't act on the response).
   const titleRef = useRef(title); titleRef.current = title;
   const goalRef = useRef(goal); goalRef.current = goal;
@@ -471,7 +471,7 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
             />
 
             {/* Goal of the video - shown as the subhead on each video card.
-                Keep it short, one line. Anna sets it here. */}
+                Keep it short, one line. the creator sets it here. */}
             <div className="stack" style={{ gap: 'var(--space-2)' }}>
               <span className="eyebrow">goal of this video</span>
               <input
@@ -880,7 +880,7 @@ function TitleRow({ title, tag, liked, onToggle }: { title: string; tag?: string
 function DescriptionSection({ video }: { video: Video }) {
   const qc = useQueryClient();
   // The generate mutation now optionally accepts an inline transcript. When
-  // Anna drops a transcript file onto the section, the file text is passed
+  // the creator drops a transcript file onto the section, the file text is passed
   // through and the description is drafted off that text (one-shot - it
   // doesn't overwrite the video's full script).
   const generate = useMutation({

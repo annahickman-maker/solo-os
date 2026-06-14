@@ -5,6 +5,7 @@
 
 import { Hono } from 'hono';
 import { loadCollection } from '../vault.js';
+import { resetStaleWeeklyTasks } from '../lib/weeklyReset.js';
 
 const app = new Hono();
 
@@ -18,6 +19,7 @@ function categoryHeadings(section: string): string | null {
 }
 
 app.get('/', (c) => {
+  resetStaleWeeklyTasks();
   const entries = loadCollection('00_System/tasks', { type: 'task' });
   const pinned: any[] = [];
   const buckets: Record<string, any[]> = {};

@@ -11,7 +11,7 @@ import type { FocusTargets } from '../api';
 //   - end date -> goal.target_date (ISO YYYY-MM-DD)
 //   - long-form content (per week) -> state.md.long_form_per_week
 //   - short-form content (per week) -> state.md.short_form_per_week
-// Designed to work for any solopreneur, not just Anna - the cadence is
+// Designed to work for any solopreneur, not just the creator - the cadence is
 // fully dynamic, no hard-coded "1 per week" assumption.
 export function FocusTargetEditor({
   targets,

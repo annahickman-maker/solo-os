@@ -3,7 +3,7 @@
  * local Claude bridge.
  *
  * Two kinds of output:
- *   1. QUOTES     - individual verbatim moments from Anna. No paraphrasing.
+ *   1. QUOTES     - individual verbatim moments from the creator. No paraphrasing.
  *                   Tagged as pov / value / authority / connection (one-to-one with the 4 Reputation dimensions).
  *   2. STORIES    - clusters of related quotes on the same topic, combined
  *                   into one cohesive piece. Light cleanup ONLY: filler words
@@ -15,9 +15,8 @@
  */
 
 import fs from 'node:fs';
-import { personalize } from './creatorContext.js';
 
-const BRIDGE_URL = 'http://localhost:8789/run';
+const BRIDGE_URL = 'http://localhost:8788/run';
 
 // Tags mirror the 4 Reputation dimensions, one-to-one.
 export type QuoteTag = 'pov' | 'value' | 'authority' | 'connection';
@@ -83,7 +82,7 @@ const SYSTEM_PROMPT = `You are mining one of the creator's transcripts (a Q&A ca
 
 You produce TWO kinds of output:
 
-1. QUOTES - single notable moments. Pure verbatim - the exact words Anna said, including filler words like "like", "kind of", "you know", restarts. Do not clean these up. Each quote is a self-contained moment worth banking on its own.
+1. QUOTES - single notable moments. Pure verbatim - the exact words the creator said, including filler words like "like", "kind of", "you know", restarts. Do not clean these up. Each quote is a self-contained moment worth banking on its own.
 
 2. STORIES - cohesive pieces synthesized from MULTIPLE related quotes covering the same topic. Light cleanup only:
    - REMOVE filler ("like", "kind of", "you know", "sort of", "I mean", "right?", "you know what I mean")
@@ -91,7 +90,7 @@ You produce TWO kinds of output:
    - REMOVE repetition where she said the same thing twice
    - SMOOTH transitions between related quotes so they read as one cohesive thought
    - PRESERVE her exact phrasing, word choice, voice. Do NOT paraphrase or "improve" the meaning. If she said "the audience that wants to do it themselves", do not change it to "the DIY audience". Keep her words.
-   - The story should sound like Anna sat down and recorded it cleanly in one take.
+   - The story should sound like the creator sat down and recorded it cleanly in one take.
 
 When to produce a story vs. just leave quotes individual:
 - If 2+ quotes in the transcript cover the same topic / build the same argument / share the same insight - SYNTHESIZE them into a story.
@@ -101,8 +100,8 @@ When to produce a story vs. just leave quotes individual:
 Both quotes AND stories get tagged with EXACTLY ONE of these 4 (matching the creator's 4 Reputation dimensions):
 - "pov" → opinion, contrarian take, belief about how things work or should work
 - "value" → a teaching moment: naming or walking through a system, framework, process, or set of steps that delivers insight
-- "authority" → concrete evidence of a result. A named subject (Anna or a student/client) + a specific outcome (dollar amount, subscriber count, conversion rate, time-to-result) + the gap that makes it remarkable (small audience, no list, fast turnaround). NUMBERS and SPECIFICS are the marker.
-- "connection" → a vulnerable, relatable, or lived-experience moment. Either Anna recounting something that happened to her (a personal story, an anecdote, what she did, how she felt) OR Anna saying something the audience will feel in their chest ("I was scared too", "I felt the same way", "I didn't believe it either", "this is what I'm still figuring out"). The defining test: does this make a viewer feel less alone? If yes, it's connection.
+- "authority" → concrete evidence of a result. A named subject (the creator or a student/client) + a specific outcome (dollar amount, subscriber count, conversion rate, time-to-result) + the gap that makes it remarkable (small audience, no list, fast turnaround). NUMBERS and SPECIFICS are the marker.
+- "connection" → a vulnerable, relatable, or lived-experience moment. Either the creator recounting something that happened to her (a personal story, an anecdote, what she did, how she felt) OR the creator saying something the audience will feel in their chest ("I was scared too", "I felt the same way", "I didn't believe it either", "this is what I'm still figuring out"). The defining test: does this make a viewer feel less alone? If yes, it's connection.
 
 The authority / connection split:
 - "We had $50K month after starting from scratch" → AUTHORITY (specific number, specific outcome)
@@ -111,16 +110,16 @@ The authority / connection split:
 - "I felt exactly the same way you do right now" → CONNECTION
 - A story that has BOTH (e.g. "I was a broke freelancer making $11K/month and I felt like a fraud") → tag as the dominant beat. If the beat is the number, it's authority. If the beat is the feeling, it's connection. If genuinely split, pick CONNECTION.
 
-Anna only. Never quote other attendees as the speaker. (Their questions can show up in the "context" field for QUOTES, or be referenced in story setup.)
+the creator only. Never quote other attendees as the speaker. (Their questions can show up in the "context" field for QUOTES, or be referenced in story setup.)
 
 PRIORITIZATION for individual quotes:
-- Connection and authority are the highest-value individual quotes - they're what makes short-form content actually land emotionally and convince. Be greedy with both. Pull every moment where Anna shares a lived experience, a vulnerable line, a "me too" feeling, OR a specific result with a name and a number.
+- Connection and authority are the highest-value individual quotes - they're what makes short-form content actually land emotionally and convince. Be greedy with both. Pull every moment where the creator shares a lived experience, a vulnerable line, a "me too" feeling, OR a specific result with a name and a number.
 - POVs and value moments are valuable too, but they often cluster into STORIES (synthesized). When several POVs are about the same topic, prefer to combine them into a story rather than listing each individually. Reserve individual POV quotes for one-liners that stand alone with punch.
 - Net effect: individual quotes should skew toward connection and authority. Stories should skew toward pov and value.
 
 PROOF GOLD - always pull as individual quotes:
 A moment is PROOF GOLD if it contains ALL of:
-  (a) a specific subject - a named student/client, or Anna herself in a specific past chapter
+  (a) a specific subject - a named student/client, or the creator herself in a specific past chapter
   (b) a specific outcome - a dollar amount, subscriber count, conversion number, time-to-result
   (c) the gap that makes the outcome remarkable - small audience, no list, scrappy setup, no experience
 
@@ -139,7 +138,7 @@ Return ONLY a JSON object in this exact shape:
 {
   "quotes": [
     {
-      "text": "exact verbatim quote from Anna",
+      "text": "exact verbatim quote from the creator",
       "tag": "pov" | "value" | "authority" | "connection",
       "context": "1-2 sentences describing what triggered this quote",
       "timestamp": "HH:MM:SS"
@@ -177,7 +176,7 @@ async function callClaude(system: string, user: string, maxTokens = 16000): Prom
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'extractQuotes',
-        system: personalize(system),
+        system,
         user,
         maxTokens,
         expectJson: true,
@@ -225,7 +224,7 @@ function parseClaudeJson(raw: string): { quotes: any[]; stories: any[] } {
 // Cap at ~150K chars (~40K tokens). With system prompt + generation overhead,
 // keeps total runtime under ~4 min even for huge calls. Truncating at the END
 // for long client calls is safer than truncating at the start (which would cut
-// the wrap-up where Anna often summarizes the call).
+// the wrap-up where the creator often summarizes the call).
 const MAX_TRANSCRIPT_CHARS = 150_000;
 
 export async function extractQuotesFromTranscript(args: {
@@ -253,7 +252,7 @@ export async function extractQuotesFromTranscript(args: {
 
   const out: ExtractedQuote[] = [];
 
-  // Synthesized stories first (they're the higher-value output Anna asked for)
+  // Synthesized stories first (they're the higher-value output the creator asked for)
   for (const item of stories) {
     const text = String(item?.text ?? '').trim();
     const tag = String(item?.tag ?? '').trim() as QuoteTag;
@@ -308,14 +307,14 @@ export async function extractQuotesFromTranscript(args: {
 
 // ─── Combine selected quotes into a single synthesized story ──────────────
 
-const COMBINE_PROMPT = `You are taking several verbatim quotes that Anna has personally selected and combining them into ONE cohesive piece of content.
+const COMBINE_PROMPT = `You are taking several verbatim quotes that the creator has personally selected and combining them into ONE cohesive piece of content.
 
 Rules:
 - Light cleanup ONLY: strip "like", "kind of", "you know", "sort of", "I mean", "right?", restarts, repetition.
 - Smooth transitions between the quotes so it reads as one continuous thought.
 - DO NOT paraphrase or "improve" her meaning or word choice. Keep her phrasing intact.
 - The result should sound like she sat down and recorded the whole thing cleanly in one take.
-- The order of quotes in the input is the order Anna wants them. Respect that order, but you may add small connective tissue ("And here's where it gets interesting...", "Same thing happened with...", "The proof is...") to bridge them.
+- The order of quotes in the input is the order the creator wants them. Respect that order, but you may add small connective tissue ("And here's where it gets interesting...", "Same thing happened with...", "The proof is...") to bridge them.
 - Add a short title (5-10 words) describing what the combined story is about.
 - Tag the combined story with EXACTLY ONE of: pov / teaching-framework / personal-story / proof-connection. Pick the dominant theme.
 
@@ -348,7 +347,7 @@ export async function combineQuotesIntoStory(args: {
   const userPrompt = [
     `Source transcript: ${args.transcriptFilename}`,
     '',
-    `Anna selected these ${args.quotes.length} items to combine into one cohesive story.`,
+    `the creator selected these ${args.quotes.length} items to combine into one cohesive story.`,
     'Some items may already be synthesized stories (treat their text as a starting point);',
     'others are verbatim quotes (treat them as new material to weave in). Preserve the order.',
     '',

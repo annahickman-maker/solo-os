@@ -32,7 +32,7 @@ type VideoFrontmatter = {
   status?: VideoStatus;
   cta?: string;
   // Short, one-line description of what this video is for. Shown as a
-  // subhead on each video card so Anna can scan the queue and know what
+  // subhead on each video card so the creator can scan the queue and know what
   // each video's job is at a glance.
   goal?: string;
   queue_order?: number;
@@ -326,7 +326,7 @@ app.post('/:id/description', async (c) => {
   const fm = entry.frontmatter as any;
   const title: string = fm.title ?? entry.id;
 
-  // Anna can EITHER drop a transcript file on the description section
+  // the creator can EITHER drop a transcript file on the description section
   // (sent in the body as `transcript`), OR rely on whatever is already
   // stored in the video file as the script content. Dropped transcripts
   // are one-shot - we don't persist them as the video's script_content
@@ -377,7 +377,7 @@ app.post('/:id/description', async (c) => {
 });
 
 // PATCH /:id/description - persist user edits to the description without
-// regenerating. Frontend calls this when Anna tweaks the textarea and blurs.
+// regenerating. Frontend calls this when the creator tweaks the textarea and blurs.
 app.patch('/:id/description', async (c) => {
   const id = c.req.param('id');
   const entry = findVideoEntry(id);
@@ -503,7 +503,7 @@ app.post('/:id/script/suggest-by-section', async (c) => {
           label: string;
           kind: SectionKind;
           brief?: string;
-          // IDs Anna has already picked for this section. Treated as locked
+          // IDs the creator has already picked for this section. Treated as locked
           // in the prompt - Claude only suggests ADDITIONS that complement
           // them, never replaces or duplicates them.
           locked_anchor_ids?: string[];
@@ -610,7 +610,7 @@ app.post('/:id/script/draft-sectioned', async (c) => {
 });
 
 // PATCH /:id/script/sections - persist the section structure (briefs + anchors)
-// even before drafting, so Anna can come back and edit.
+// even before drafting, so the creator can come back and edit.
 app.patch('/:id/script/sections', async (c) => {
   const id = c.req.param('id');
   const entry = findVideoEntry(id);

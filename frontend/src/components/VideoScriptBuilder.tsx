@@ -2,12 +2,12 @@
  * Build a YouTube script from approved bank items, organized into sections.
  *
  * Sections (default): Intro -> Reframe -> Value 1..N -> Outro / CTA
- * Each section has a brief (what Anna wants in this section) and a list of
+ * Each section has a brief (what the creator wants in this section) and a list of
  * anchor bank items. Drag/drop anchors between sections, edit briefs, click
  * suggest to have Claude assign anchors per section, click draft to synthesize
  * each section independently using only its anchors + brief.
  *
- * Persists to the video file's frontmatter as `script_sections` so Anna can
+ * Persists to the video file's frontmatter as `script_sections` so the creator can
  * close the modal and come back later without losing her work.
  */
 
@@ -104,7 +104,7 @@ export const VideoScriptBuilder = forwardRef<VideoScriptBuilderHandle, {
         text: (w.body && w.body.trim() ? w.body.trim() : w.title) || '',
         title: w.title || null,
         // Surface the win type (own / student / client) in the context so
-        // Anna can scan the picker and immediately see what kind of brag
+        // the creator can scan the picker and immediately see what kind of brag
         // each row is. Date too if available.
         context: [
           w.kind === 'own' ? 'own win'
@@ -252,7 +252,7 @@ export const VideoScriptBuilder = forwardRef<VideoScriptBuilderHandle, {
     mutationFn: () =>
       // We send the current anchor_ids per section as `locked` so Claude
       // treats them as already-chosen and only suggests COMPLEMENTS that
-      // round out each section without conflicting with what Anna already
+      // round out each section without conflicting with what the creator already
       // picked. The merge below preserves her picks at the top of each
       // section and appends any new suggestions after.
       api.suggestAnchorsBySection(videoId, {
@@ -266,7 +266,7 @@ export const VideoScriptBuilder = forwardRef<VideoScriptBuilderHandle, {
         })),
       }),
     onSuccess: (data) => {
-      // Additive merge: keep every existing pick in place (Anna may have
+      // Additive merge: keep every existing pick in place (the creator may have
       // dragged them, ordered them, or hand-picked them), then append the
       // new suggestions after, deduplicating across the whole video.
       setSections((prev) => {
@@ -428,7 +428,7 @@ export const VideoScriptBuilder = forwardRef<VideoScriptBuilderHandle, {
 });
 
 // ─── Intro brief editor ───────────────────────────────────────────────────
-// The intro section is special: instead of one freeform brief, Anna writes
+// The intro section is special: instead of one freeform brief, the creator writes
 // one sentence per element of her intro framework (clarity / belief /
 // contrarian / proof / outcome). The five inputs are concatenated into the
 // section's `brief` string using a labelled format Claude can read directly,
@@ -495,6 +495,11 @@ function parseIntroBrief(brief: string): Record<IntroPartKey, string> {
       // make the textarea feel broken.
       let v = buffer.join('\n');
       v = v.replace(/^\*{2}\s*/, '').replace(/\s*\*{2}$/, '');
+      // Strip trailing NEWLINES only (the blank line that separates sections
+      // in the serialised form gets absorbed into the previous section's
+      // buffer otherwise, so every keystroke would accrue a `\n` and make
+      // space/backspace feel like Enter). Trailing spaces stay intact.
+      v = v.replace(/\n+$/, '');
       // Only the EMPTY check uses trim; the stored value is raw.
       if (v.trim()) out[currentKey] = v;
     }
@@ -566,7 +571,7 @@ function IntroBriefEditor({
     const bi = proofItems.find((i) => i.id === id);
     if (!bi) return;
     // Use the bank item's title if it has one (synthesised stories do),
-    // otherwise fall back to the first ~140 chars of the text so Anna gets
+    // otherwise fall back to the first ~140 chars of the text so the creator gets
     // a usable summary in the Proof box. She can edit after. Strip markdown
     // bold (**...**) so the seed reads cleanly inside the textarea - the
     // brief's serialisation already adds bold around the label, double-bold

@@ -99,8 +99,8 @@ function listClients(): ClientResponse[] {
       continue;
     }
     // No _client.md. Two possibilities:
-    //   1. Brand new folder (Anna created it in Obsidian) -> auto-discover
-    //      so it just shows up on the dashboard. This was the Tharros fix.
+    //   1. Brand new folder (the creator created it in Obsidian) -> auto-discover
+    //      so it just shows up on the dashboard. This was the Client B fix.
     //   2. Soft-deleted (an archived _client.md exists in _archive/) ->
     //      respect the delete, don't resurrect.
     if (wasEverTracked(folderPath)) continue;

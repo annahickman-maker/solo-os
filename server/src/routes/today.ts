@@ -11,7 +11,7 @@
 import { Hono } from 'hono';
 import fs from 'node:fs';
 import { abs, loadCollection, loadFile } from '../vault.js';
-import { loadCreatorContext } from '../lib/creatorContext.js';
+import { resetStaleWeeklyTasks } from '../lib/weeklyReset.js';
 
 const app = new Hono();
 
@@ -33,9 +33,8 @@ type GoalFrontmatter = {
   parent_id?: string | null;
 };
 
-function buildGreeting(): string {
-  const ctx = loadCreatorContext();
-  return ctx.name ? `hello, ${ctx.name.toLowerCase()}` : 'hello';
+function greetingFromHour(_h?: number): string {
+  return 'hello';
 }
 
 // Local wall-clock YYYY-MM-DD. We use local time everywhere so "today"
@@ -119,29 +118,41 @@ function computeStrain(
 }
 
 app.get('/', async (c) => {
+  // Throttled (1/min): flip stale this_week tasks back to master-todo
+  // when the ISO week has rolled over.
+  resetStaleWeeklyTasks();
   const requestedDate = c.req.query('date');
   const dayStartParam = c.req.query('day_start');
-  // Top tasks: prefer anything scheduled FOR TODAY (from the Focus
-  // page's WeekPlanner) over generic this_week tasks. Today-scheduled
+  // Top tasks: prefer anything pinned to TODAY's weekday in the Focus
+  // page's WeekPlanner over generic this_week tasks. Weekday-pinned
   // tasks come first; remaining slots fill from this_week.
   //
-  // LOCAL date parts (matching the planner) - toISOString returns UTC,
-  // which after ~5pm Pacific compares as "tomorrow" and silently hides
-  // today's scheduled tasks.
+  // The WeekPlanner stores a day-of-week string ("mon"..."sun"), not a
+  // date, so a task pinned to "wed" surfaces here every Wednesday.
   const _now = new Date();
-  const todayISO =
-    `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
+  const todayWeekday = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][_now.getDay()]!;
   const allTasks = loadCollection<TaskFrontmatter>('00_System/tasks', { type: 'task' });
+  function taskWeekday(fm: any): string | null {
+    const wd = fm?.scheduled_weekday;
+    if (typeof wd === 'string') return wd;
+    const legacy = fm?.scheduled_day;
+    if (typeof legacy === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(legacy)) {
+      const [y, m, d] = legacy.split('-').map(Number) as [number, number, number];
+      const idx = new Date(y, m - 1, d).getDay();
+      return ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][idx]!;
+    }
+    return null;
+  }
   const scheduledToday = allTasks.filter((e) => {
     const fm = e.frontmatter;
     return (
-      (fm as any)?.scheduled_day === todayISO &&
+      taskWeekday(fm) === todayWeekday &&
       (fm.status === 'pending' || fm.status === 'in_progress')
     );
   });
   const thisWeekUnscheduled = allTasks.filter((e) => {
     const fm = e.frontmatter;
-    if ((fm as any)?.scheduled_day === todayISO) return false; // already counted
+    if (taskWeekday(fm) === todayWeekday) return false; // already counted
     return fm?.this_week === true && (fm.status === 'pending' || fm.status === 'in_progress');
   });
   const top = [...scheduledToday, ...thisWeekUnscheduled]
@@ -245,7 +256,7 @@ app.get('/', async (c) => {
   const strainScore = computeStrain(completedTasksForStrain, dayBlocks);
 
   return c.json({
-    greeting: buildGreeting(),
+    greeting: greetingFromHour(),
     date: requestedDate ?? localYmd(new Date()),
     focus_goal,
     top_tasks: top,

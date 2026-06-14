@@ -3,7 +3,7 @@
  * lib/topics.ts) — you don't type freeform, you pick from the dropdown.
  *
  * Slash-namespaced YAML metadata tags (e.g. type/asset, domain/povs) are
- * filtered out at display time so they never show up to Anna.
+ * filtered out at display time so they never show up to the creator.
  *
  * Existing freeform tags that DON'T match the allowed list still render so
  * old data isn't silently lost; she can remove them with × if she wants.

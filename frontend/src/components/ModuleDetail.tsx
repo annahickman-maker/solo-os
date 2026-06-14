@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../api';
-import type { SSModule, Task, TaskCategory, TaskEnergy } from '../api';
+import { api, deckEditorUrl } from '../api';
+import type { SSModule, Task, TaskCategory, TaskEnergy, DeckEntry } from '../api';
 import { TaskRow } from './TaskRow';
 
 interface ModuleDetailProps {
@@ -30,6 +30,10 @@ export function ModuleDetail({ moduleId, onClose }: ModuleDetailProps) {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskCategory, setNewTaskCategory] = useState<TaskCategory>('other');
   const [dirty, setDirty] = useState(false);
+  // Tab inside the client panel: existing tasks view vs the new content
+  // (decks/funnels/links) view. Only meaningful when kind === 'client';
+  // projects always show tasks.
+  const [panelTab, setPanelTab] = useState<'tasks' | 'content'>('tasks');
 
   useEffect(() => {
     if (data) {
@@ -255,50 +259,65 @@ export function ModuleDetail({ moduleId, onClose }: ModuleDetailProps) {
               gap: 'var(--space-6)',
             }}
           >
-            <input
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                setDirty(true);
-              }}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                outline: 'none',
-                fontFamily: 'var(--font-display)',
-                fontSize: '2rem',
-                fontWeight: 700,
-                letterSpacing: '-0.02em',
-                color: 'var(--ink)',
-                lineHeight: 1.1,
-                padding: 0,
-                width: '100%',
-              }}
-            />
-
-            <div className="stack" style={{ gap: 'var(--space-3)' }}>
-              <span className="eyebrow">status</span>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {STAGES.map((s, i) => {
-                  const filled = i <= currentStageIdx;
-                  const active = i === currentStageIdx;
+            {/* Name + inline status pill row. Status is a compact segmented
+                control sitting on the same baseline as the title. */}
+            <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
+              <input
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setDirty(true);
+                }}
+                style={{
+                  flex: 1,
+                  minWidth: 200,
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  fontFamily: 'var(--font-display)',
+                  fontSize: '2rem',
+                  fontWeight: 700,
+                  letterSpacing: '-0.02em',
+                  color: 'var(--ink)',
+                  lineHeight: 1.1,
+                  padding: 0,
+                }}
+              />
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 2,
+                  padding: 2,
+                  background: 'var(--surface)',
+                  border: '1px solid var(--hairline)',
+                  borderRadius: 'var(--radius-sm)',
+                  flexShrink: 0,
+                }}
+                title={
+                  linkedTasks.length === 0
+                    ? 'add tasks below to track progress'
+                    : `${completedCount} of ${linkedTasks.length} done (${progressPct}%)`
+                }
+              >
+                {STAGES.map((s) => {
+                  const active = s.status === data?.status;
                   return (
                     <button
                       key={s.status}
                       type="button"
                       onClick={() => setStatus.mutate(s.status)}
                       style={{
-                        flex: 1,
-                        padding: '10px 4px',
-                        borderRadius: 'var(--radius-md)',
+                        padding: '4px 10px',
+                        borderRadius: 'var(--radius-sm)',
                         border: 'none',
-                        background: filled ? 'var(--accent)' : 'rgba(255,255,255,0.06)',
-                        color: filled ? '#0E1116' : 'var(--muted)',
-                        fontSize: 11,
+                        background: active ? 'var(--accent)' : 'transparent',
+                        color: active ? '#0E1116' : 'var(--muted)',
+                        fontSize: 10,
                         fontWeight: active ? 700 : 600,
                         letterSpacing: '0.08em',
                         textTransform: 'uppercase',
                         cursor: 'pointer',
+                        whiteSpace: 'nowrap',
                       }}
                     >
                       {s.label}
@@ -306,39 +325,64 @@ export function ModuleDetail({ moduleId, onClose }: ModuleDetailProps) {
                   );
                 })}
               </div>
-              <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-                {linkedTasks.length === 0
-                  ? 'add tasks below to track progress'
-                  : `${completedCount} of ${linkedTasks.length} done (${progressPct}%)`}
-              </span>
             </div>
 
-            <div className="stack" style={{ gap: 'var(--space-3)' }}>
-              <span className="eyebrow">description</span>
-              <textarea
-                value={description}
-                onChange={(e) => {
-                  setDescription(e.target.value);
-                  setDirty(true);
-                }}
-                placeholder="what is this"
-                style={{
-                  width: '100%',
-                  minHeight: 80,
-                  background: 'var(--surface)',
-                  border: '1px solid var(--hairline)',
-                  borderRadius: 'var(--radius-md)',
-                  color: 'var(--ink)',
-                  padding: 'var(--space-4)',
-                  fontFamily: 'var(--font-body)',
-                  fontSize: 'var(--body)',
-                  lineHeight: 1.55,
-                  resize: 'vertical',
-                  outline: 'none',
-                }}
-              />
-            </div>
+            <textarea
+              value={description}
+              onChange={(e) => {
+                setDescription(e.target.value);
+                setDirty(true);
+              }}
+              placeholder="what is this"
+              style={{
+                width: '100%',
+                minHeight: 60,
+                background: 'var(--surface)',
+                border: '1px solid var(--hairline)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--ink)',
+                padding: 'var(--space-4)',
+                fontFamily: 'var(--font-body)',
+                fontSize: 'var(--body)',
+                lineHeight: 1.55,
+                resize: 'vertical',
+                outline: 'none',
+              }}
+            />
 
+            {data?.kind === 'client' && (
+              <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--surface)', borderRadius: 'var(--radius-md)', alignSelf: 'flex-start' }}>
+                {(['tasks', 'content'] as const).map((t) => {
+                  const active = panelTab === t;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setPanelTab(t)}
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: 'var(--radius-sm)',
+                        border: 'none',
+                        background: active ? 'var(--bg)' : 'transparent',
+                        color: active ? 'var(--ink)' : 'var(--muted)',
+                        fontSize: 'var(--body-sm)',
+                        fontWeight: active ? 600 : 500,
+                        cursor: 'pointer',
+                        letterSpacing: '0.02em',
+                      }}
+                    >
+                      {t}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {data?.kind === 'client' && panelTab === 'content' && (
+              <ClientContentPanel clientFolder={data.name} />
+            )}
+
+            {(data?.kind !== 'client' || panelTab === 'tasks') && (<>
             <div className="stack" style={{ gap: 'var(--space-3)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <span className="eyebrow">priority tasks</span>
@@ -536,6 +580,7 @@ export function ModuleDetail({ moduleId, onClose }: ModuleDetailProps) {
                 </button>
               </form>
             </div>
+            </>)}
 
             <div
               style={{
@@ -652,4 +697,266 @@ function TaskRowWithDelete({
       </button>
     </div>
   );
+}
+
+// ─── Client content panel ────────────────────────────────────────────────
+// Lists every deck (and later: funnel diagrams, other docs) attached to one
+// client. Each row has an open-editor link, the live URL with copy, and a
+// publish button. Filtered by client folder name.
+
+const TEMPLATE_OPTIONS: Array<{ id: string; label: string; description: string; disabled?: boolean }> = [
+  { id: 'strategy-deck', label: 'Strategy Deck', description: 'A multi-slide strategy presentation with editable text, video breakdowns, roadmap tasks.' },
+  { id: 'content-world', label: 'Content world', description: 'Visual content map - drag cards (Instagram, YouTube, lead magnet, etc.) and connect them with lines.' },
+];
+
+function ClientContentPanel({ clientFolder }: { clientFolder: string }) {
+  const qc = useQueryClient();
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['decks'],
+    queryFn: api.decks,
+  });
+  const allDecks: DeckEntry[] = data?.decks ?? [];
+  const decks = allDecks.filter((d) => d.client === clientFolder);
+
+  const [busyPath, setBusyPath] = useState<string | null>(null);
+  const [flash, setFlash] = useState<{ key: string; kind: 'ok' | 'err'; text: string } | null>(null);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [newDocName, setNewDocName] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  const publish = useMutation({
+    mutationFn: (path: string) => api.publishDeck(path),
+    onSuccess: async (res, path) => {
+      try { await navigator.clipboard.writeText(res.url); } catch { /* clipboard can fail without gesture */ }
+      setFlash({ key: path, kind: 'ok', text: 'Published. URL copied.' });
+      qc.invalidateQueries({ queryKey: ['decks'] });
+    },
+    onError: (err: unknown, path) => {
+      setFlash({ key: path, kind: 'err', text: err instanceof Error ? err.message : 'publish failed' });
+    },
+    onSettled: () => setBusyPath(null),
+  });
+
+  function onPublish(d: DeckEntry) {
+    setFlash(null);
+    setBusyPath(d.path);
+    publish.mutate(d.path);
+  }
+
+  function copyUrl(url: string, key: string) {
+    navigator.clipboard.writeText(url).then(
+      () => setFlash({ key, kind: 'ok', text: 'URL copied.' }),
+      () => setFlash({ key, kind: 'err', text: 'Could not copy.' }),
+    );
+  }
+
+  async function createFromTemplate(templateId: string) {
+    const name = newDocName.trim();
+    if (!name) {
+      setFlash({ key: 'new', kind: 'err', text: 'Give it a name first.' });
+      return;
+    }
+    setCreating(true);
+    setFlash(null);
+    try {
+      const res = await api.createDeckFromTemplate({
+        template: templateId,
+        client_folder: clientFolder,
+        name,
+      });
+      setFlash({ key: 'new', kind: 'ok', text: `Created ${res.path}` });
+      setTemplatePickerOpen(false);
+      setNewDocName('');
+      qc.invalidateQueries({ queryKey: ['decks'] });
+    } catch (err) {
+      setFlash({ key: 'new', kind: 'err', text: err instanceof Error ? err.message : 'create failed' });
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <div className="stack" style={{ gap: 'var(--space-4)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span className="eyebrow">documents + links</span>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => setTemplatePickerOpen((v) => !v)}
+          style={{ fontSize: 'var(--body-sm)' }}
+        >
+          {templatePickerOpen ? 'cancel' : '+ create from template'}
+        </button>
+      </div>
+
+      {templatePickerOpen && (
+        <div
+          className="stack"
+          style={{
+            gap: 'var(--space-3)',
+            padding: 'var(--space-4)',
+            border: '1px solid var(--hairline)',
+            borderRadius: 'var(--radius-md)',
+            background: 'var(--surface)',
+          }}
+        >
+          <label className="stack" style={{ gap: 4 }}>
+            <span className="eyebrow">step 1 - name it</span>
+            <input
+              autoFocus
+              value={newDocName}
+              onChange={(e) => setNewDocName(e.target.value)}
+              placeholder="e.g. strategy-deck, q2-funnel"
+              style={{
+                background: 'var(--bg)',
+                border: '1px solid var(--hairline)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--ink)',
+                padding: '10px 14px',
+                fontSize: 'var(--body)',
+                outline: 'none',
+              }}
+            />
+          </label>
+          <div className="stack" style={{ gap: 'var(--space-2)' }}>
+            <span className="eyebrow">step 2 - pick a template</span>
+            {TEMPLATE_OPTIONS.map((t) => {
+              const isReady = !t.disabled && !creating && !!newDocName.trim();
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  disabled={t.disabled || creating}
+                  onClick={() => createFromTemplate(t.id)}
+                  style={{
+                    textAlign: 'left',
+                    padding: 'var(--space-3) var(--space-4)',
+                    background: 'var(--bg)',
+                    border: '1px solid var(--hairline)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--ink)',
+                    cursor: t.disabled ? 'not-allowed' : 'pointer',
+                    opacity: t.disabled ? 0.5 : isReady ? 1 : 0.75,
+                  }}
+                >
+                  <div style={{ fontWeight: 600, fontSize: 'var(--body)' }}>{t.label}</div>
+                  <div className="muted" style={{ fontSize: 'var(--body-sm)', marginTop: 2 }}>{t.description}</div>
+                </button>
+              );
+            })}
+          </div>
+          {flash && flash.key === 'new' && (
+            <div style={{ fontSize: 'var(--body-sm)', color: flash.kind === 'ok' ? 'var(--recovery)' : 'var(--strain)' }}>
+              {flash.text}
+            </div>
+          )}
+        </div>
+      )}
+
+      {isLoading && <div className="empty">loading…</div>}
+      {error && <div className="empty">couldn't load: {(error as Error).message}</div>}
+
+      {!isLoading && !error && decks.length === 0 && (
+        <div className="empty">
+          no documents yet. click + create from template to make a strategy deck.
+        </div>
+      )}
+
+      {decks.map((d) => {
+        const editUrl = deckEditorUrl(d.path);
+        const isBusy = busyPath === d.path;
+        const f = flash && flash.key === d.path ? flash : null;
+        return (
+          <article
+            key={d.path}
+            style={{
+              padding: 'var(--space-4)',
+              border: '1px solid var(--hairline)',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--surface)',
+              display: 'grid',
+              gap: 'var(--space-3)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 'var(--space-3)' }}>
+              <div className="stack" style={{ gap: 2 }}>
+                <span className="eyebrow">{d.type === 'content-world' ? 'content world' : 'strategy deck'}</span>
+                <h4 className="h4" style={{ margin: 0, fontWeight: 600 }}>{d.filename.replace(/\.html$/, '')}</h4>
+                <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>edited {formatRel(d.mtime)}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <a className="btn btn--primary" href={editUrl} target="_blank" rel="noopener">open editor →</a>
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => onPublish(d)}
+                  disabled={isBusy}
+                >
+                  {isBusy ? 'publishing…' : 'publish'}
+                </button>
+              </div>
+            </div>
+
+            {d.published_url ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--space-3)',
+                  padding: 'var(--space-3)',
+                  background: 'var(--bg)',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--hairline)',
+                  fontSize: 'var(--body-sm)',
+                }}
+              >
+                <span className="muted" style={{ minWidth: 84 }}>live URL</span>
+                <a
+                  href={d.published_url}
+                  target="_blank"
+                  rel="noopener"
+                  style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--ink)' }}
+                >
+                  {d.published_url}
+                </a>
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => copyUrl(d.published_url!, d.path)}
+                  style={{ padding: '4px 10px', fontSize: 'var(--body-sm)' }}
+                >
+                  copy
+                </button>
+                <span className="muted" style={{ fontSize: 'var(--body-xs)' }}>
+                  pub {formatRel(d.last_published_at ?? 0)}
+                </span>
+              </div>
+            ) : (
+              <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
+                not published yet. click publish to push the first version to Cloudflare.
+              </span>
+            )}
+
+            {f && (
+              <div style={{ fontSize: 'var(--body-sm)', color: f.kind === 'ok' ? 'var(--recovery)' : 'var(--strain)' }}>
+                {f.text}
+              </div>
+            )}
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function formatRel(unixSec: number): string {
+  if (!unixSec) return 'never';
+  const now = Math.floor(Date.now() / 1000);
+  const diff = now - unixSec;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  if (diff < 86400 * 7) return Math.floor(diff / 86400) + 'd ago';
+  const d = new Date(unixSec * 1000);
+  return d.toLocaleDateString();
 }

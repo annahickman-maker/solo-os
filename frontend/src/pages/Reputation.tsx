@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import type {
@@ -631,7 +632,7 @@ function WinsList({ wins, kind }: { wins: ReputationWin[]; kind: 'own' | 'studen
             placeholder={
               kind === 'own'
                 ? "Headline (e.g. '$50K month from 5-video series', '41K YouTube subs')"
-                : "Client headline (e.g. 'Angie - 0 to 2K subs in 90 days')"
+                : "Client headline (e.g. 'Client A - 0 to 2K subs in 90 days')"
             }
             value={draft.title}
             onChange={(e) => setDraft({ ...draft, title: e.target.value })}
@@ -1082,6 +1083,30 @@ function ConnectionPanel({
 
   return (
     <>
+      <Section
+        title="journey timeline"
+        subtitle="the visual version of your story. drop wins, failures, teaching moments and 'versions of me' along a horizontal arc - from where you started to now."
+      >
+        <Link
+          to="/profile/reputation/journey"
+          className="rep-card rep-card--inline"
+          style={{
+            display: 'block',
+            borderColor: hexA(dim.color, 0.35),
+            textDecoration: 'none',
+            color: 'inherit',
+            cursor: 'pointer',
+          }}
+        >
+          <strong style={{ color: dim.color, display: 'block', marginBottom: 4 }}>
+            open the journey timeline →
+          </strong>
+          <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+            a scrollable horizontal arc you can pin moments to.
+          </span>
+        </Link>
+      </Section>
+
       <Section
         title="your story"
         subtitle="the long version. where you started, the turning point, what you do now and who it's for. claude pulls from this when writing in your voice."

@@ -4,9 +4,24 @@
  */
 
 import { Hono } from 'hono';
-import { abs, loadCollection, loadFile, saveFile } from '../vault.js';
+import { abs, loadCollection, loadFile } from '../vault.js';
+import { resetStaleWeeklyTasks } from '../lib/weeklyReset.js';
 
 const app = new Hono();
+
+const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+function deriveWeekday(fm: Record<string, unknown> | undefined | null): string | null {
+  if (!fm) return null;
+  const wd = (fm as any).scheduled_weekday;
+  if (typeof wd === 'string' && (WEEKDAYS as readonly string[]).includes(wd)) return wd;
+  const legacy = (fm as any).scheduled_day;
+  if (typeof legacy === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(legacy)) {
+    const [y, m, d] = legacy.split('-').map(Number) as [number, number, number];
+    const idx = new Date(y, m - 1, d).getDay();
+    return ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][idx]!;
+  }
+  return null;
+}
 
 type TaskFrontmatter = {
   id?: string;
@@ -20,9 +35,10 @@ type TaskFrontmatter = {
   completed_at?: string;
   created?: string;
   updated?: string;
-  // ISO date string (YYYY-MM-DD) - which day this task is planned for
-  // in the Focus page's WeekPlanner. Bubbled up by /api/focus so the
-  // planner cache stays in sync after a drop.
+  // Day-of-week pin ("mon"..."sun") for the Focus WeekPlanner.
+  // Persistent across weeks.
+  scheduled_weekday?: string | null;
+  // DEPRECATED legacy date pin - read-only migration fallback.
   scheduled_day?: string | null;
   // When true, this task is in a project's backlog and should be
   // hidden from the Focus page. Only the project / client detail
@@ -42,47 +58,18 @@ type GoalFrontmatter = {
 };
 
 app.get('/', (c) => {
+  // Throttled (1/min): flip stale this_week tasks back to master-todo
+  // when the ISO week has rolled over.
+  resetStaleWeeklyTasks();
   // Backlog tasks are scoped to their project / client detail panel
   // only - the Focus page (master todo + WeekPlanner) hides them so
-  // your priority view stays focused. Filter at the source so the
-  // sweep + downstream map only see priority tasks.
-  let allTasks = loadCollection<TaskFrontmatter>('00_System/tasks', { type: 'task' })
+  // your priority view stays focused. Filter at the source.
+  const allTasks = loadCollection<TaskFrontmatter>('00_System/tasks', { type: 'task' })
     .filter((e) => (e.frontmatter as any)?.backlog !== true);
 
-  // ─── Stale scheduled-day rescue ────────────────────────────────────────
-  // If a task was scheduled for a past day but never marked complete,
-  // clear its scheduled_day so it falls back into the master todo list
-  // (visible + droppable into a new day). The user's mental model:
-  // "the day passed and I didn't do it - put it back in front of me".
-  //
-  // Use LOCAL date parts here. toISOString() returns UTC, which after
-  // ~5pm Pacific is already "tomorrow" and silently sweeps today's
-  // scheduled tasks because their YYYY-MM-DD compares less-than UTC's.
-  // The WeekPlanner generates day ISOs from local parts for the same
-  // reason, so this matches up.
-  const _now = new Date();
-  const todayISO =
-    `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
-  let sweptAny = false;
-  for (const e of allTasks) {
-    const fm = e.frontmatter;
-    const day = (fm as any)?.scheduled_day;
-    if (
-      typeof day === 'string' &&
-      day < todayISO &&
-      fm?.status !== 'completed'
-    ) {
-      // Strip scheduled_day from the frontmatter and persist.
-      const next = { ...fm };
-      delete (next as any).scheduled_day;
-      saveFile(abs(e.relPath), next as Record<string, unknown>, e.body);
-      sweptAny = true;
-    }
-  }
-  // Reload after a sweep so the downstream map sees the cleared state.
-  if (sweptAny) {
-    allTasks = loadCollection<TaskFrontmatter>('00_System/tasks', { type: 'task' });
-  }
+  // Weekday-pinned tasks persist forever - the WeekPlanner is now keyed
+  // by day-of-week, not by date, so there's no "stale" condition to
+  // sweep. Tasks stay in their column until completed or moved.
 
   const tasks = allTasks.map((e) => {
     const fm = e.frontmatter;
@@ -102,11 +89,10 @@ app.get('/', (c) => {
       updated_at: fm.updated ?? null,
       completed_at: fm.completed_at ?? null,
       source_file: e.relPath,
-      // Day this task is scheduled for in the Focus page's WeekPlanner.
-      // Without this here, the refetch after onMutate would drop the
-      // freshly-scheduled task back to undefined and the day column
-      // would visually empty out (the "task disappears on drop" bug).
-      scheduled_day: (fm as any).scheduled_day ?? null,
+      // Weekday this task is pinned to in the WeekPlanner. Read the
+      // new field; fall back to deriving from the legacy scheduled_day
+      // ISO date so pre-rollout planning carries forward seamlessly.
+      scheduled_weekday: deriveWeekday(fm),
     };
   });
 

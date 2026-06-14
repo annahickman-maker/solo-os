@@ -1,10 +1,6 @@
 /**
- * Phase 2 dashboard server. Reads/writes vault files directly.
- *
- * Listens on :8790 during the transition. Old Wrangler backend keeps running
- * on :8787 for routes that haven't been migrated yet. When all routes are
- * here, frontend flips to :8790 and the old backend (plus D1, plus the sync
- * folder, plus PRESERVE_ON_UPSERT, plus tombstones) gets deleted.
+ * Solo OS dashboard server. Hono on :8791. Every route reads/writes vault
+ * files under VAULT_ROOT directly - there is no database.
  */
 
 import { serve } from '@hono/node-server';
@@ -39,15 +35,16 @@ import seed from './routes/seed.js';
 import extracts from './routes/extracts.js';
 import audienceQuotes from './routes/audienceQuotes.js';
 import instagram from './routes/instagram.js';
-import { proxyToOldBackend } from './proxyOld.js';
+import journey from './routes/journey.js';
+import decks, { serveDeckFile, serveDeckAsset } from './routes/decks.js';
 
-const PORT = Number(process.env.PORT ?? 8790);
+const PORT = Number(process.env.PORT ?? 8791);
 
 const app = new Hono();
 
 app.use('*', cors({ origin: '*' }));
 
-app.get('/', (c) => c.json({ ok: true, service: 'anna-dashboard-server (Phase 2)' }));
+app.get('/', (c) => c.json({ ok: true, service: 'solo-os-dashboard-server' }));
 app.get('/health', (c) => c.json({ ok: true }));
 
 // Vault asset serving has to live ABOVE the auth middleware because
@@ -91,6 +88,38 @@ app.get('/api/vault-asset/*', async (c) => {
   });
 });
 
+// Journey image serving - public (above auth) since <img> tags can't send
+// the X-Dashboard-Password header. Strict name validation is the security
+// boundary - only basename-safe characters allowed.
+app.get('/api/journey/images/:name', async (c) => {
+  const name = c.req.param('name');
+  if (!/^[a-zA-Z0-9._-]+$/.test(name)) return c.json({ error: 'bad name' }, 400);
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { abs } = await import('./vault.js');
+  const full = abs('00_System', 'journey-images', name);
+  if (!fs.existsSync(full)) return c.json({ error: 'not found' }, 404);
+  const ext = path.extname(full).toLowerCase();
+  const mime =
+    ext === '.png' ? 'image/png'
+    : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
+    : ext === '.webp' ? 'image/webp'
+    : ext === '.gif' ? 'image/gif'
+    : ext === '.svg' ? 'image/svg+xml'
+    : 'application/octet-stream';
+  const buf = fs.readFileSync(full);
+  return new Response(buf, {
+    headers: { 'Content-Type': mime, 'Cache-Control': 'public, max-age=3600' },
+  });
+});
+
+// Client deck HTML - public route (above auth) because a new tab can't send
+// the X-Dashboard-Password header. Has its own ?pw= check inside.
+app.get('/api/decks/file', (c) => serveDeckFile(c.req.url));
+// Sibling assets (images etc) referenced by relative paths inside a deck.
+// Public so <img> tags resolve. Path-locked to deck folders.
+app.get('/api/decks/asset/*', (c) => serveDeckAsset(c.req.url));
+
 // Auth middleware on /api/* (same X-Dashboard-Password header as before).
 app.use('/api/*', auth);
 
@@ -125,13 +154,10 @@ app.route('/api/seed', seed);
 app.route('/api/extracts', extracts);
 app.route('/api/audience-quotes', audienceQuotes);
 app.route('/api/instagram', instagram);
-
-// Catch-all - anything not natively handled falls through to the old Wrangler
-// backend on :8787. As routes get migrated they take precedence here.
-app.all('/api/*', proxyToOldBackend);
+app.route('/api/journey', journey);
+app.route('/api/decks', decks);
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
-  console.log(`anna-dashboard-server listening on http://localhost:${info.port}`);
-  console.log(`  reads/writes vault files directly`);
-  console.log(`  no D1, no sync, no pullback`);
+  console.log(`solo-os-dashboard-server listening on http://localhost:${info.port}`);
+  console.log(`  reads/writes vault files directly from VAULT_ROOT`);
 });

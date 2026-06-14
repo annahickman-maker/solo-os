@@ -181,7 +181,7 @@ app.patch('/pricing-rungs/featured', async (c) => {
 });
 
 // Custom POST for pricing-rungs: do NOT require price_label on create.
-// Anna wants to add a blank offer card and fill it in inline, so an empty
+// the creator wants to add a blank offer card and fill it in inline, so an empty
 // price at creation time is valid.
 app.post('/pricing-rungs', async (c) => {
   const body = (await c.req.json().catch(() => null)) as Record<string, any> | null;
@@ -257,7 +257,7 @@ app.get('/link-stats', async (c) => {
 // ─── Tracking-link generator ───────────────────────────────────────────────
 // Generates a `/go/<slug>` short link in the Cloudflare worker's link
 // manifest, then patches the rung to store the slug. After this runs,
-// Anna runs `cd 03_Projects/agents/worker && npm run deploy` to push the
+// the creator runs `cd 03_Projects/agents/worker && npm run deploy` to push the
 // new slug live. If the manifest file is missing the response tells her
 // exactly how to set it up.
 
@@ -290,7 +290,7 @@ app.get('/tracking-setup-status', async (c) => {
     manifest_path: 'scripts/link_manifest.json',
     worker_path: WORKER_DIR_REL,
     deploy_command: `cd ${WORKER_DIR_REL} && npm run deploy`,
-    // If not set up, this is the exact prompt Anna pastes into Claude.
+    // If not set up, this is the exact prompt the creator pastes into Claude.
     setup_prompt: ok ? null : [
       'Set up the Cloudflare Worker tracking-link system for the dashboard.',
       '',
@@ -313,7 +313,7 @@ app.get('/tracking-setup-status', async (c) => {
  * Reads the URL the user typed for that page (vsl_url / sales_page_url),
  * derives a short slug from the offer name + kind, writes the entry to
  * scripts/link_manifest.json, patches the rung's tracking-slug field,
- * and returns the deploy command Anna runs in her terminal to activate.
+ * and returns the deploy command the creator runs in her terminal to activate.
  */
 app.post('/pricing-rungs/:id/generate-tracking-link', async (c) => {
   const id = c.req.param('id');
@@ -466,7 +466,7 @@ app.delete('/emails/:id', (c) => {
 // per email needed.)
 
 // ─── Short-form content links (per-offer per-platform) ─────────────────────
-// One row per platform Anna posts on (Instagram, LinkedIn, TikTok, etc.).
+// One row per platform the creator posts on (Instagram, LinkedIn, TikTok, etc.).
 // Tracking slug points at the rung's sales_page_url. Each row tracks
 // monthly clicks (auto from worker later) + monthly impressions (manual
 // or per-platform API later) + conversion = clicks / impressions.
@@ -586,7 +586,7 @@ app.delete('/testimonials/:id', testimonials.del);
 // JSON-backed metadata in offer-results.json. The PATCH route below upserts -
 // if the id is a file-derived synthetic ("avatar-<slug>") and no matching
 // bank row exists yet, we create one with that slug as the name. That way
-// Anna can edit a file-only avatar like Adriana for the first time without
+// the creator can edit a file-only avatar like the avatar for the first time without
 // hitting 404.
 const avatars = makeBankCRUD('results', 'name');
 app.post('/avatars', async (c) => {
@@ -759,7 +759,7 @@ app.post('/avatars/:id/generate-card-summary', async (c) => {
 
   let bridgeRes: Response;
   try {
-    bridgeRes = await fetch('http://localhost:8789/run', {
+    bridgeRes = await fetch('http://localhost:8788/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -900,7 +900,7 @@ app.post('/avatars/:id/generate-image', async (c) => {
   // Build the prompt. Aim for a documentary-portrait look so the image
   // feels like a real person, not a stock avatar. The avatar's one_line
   // shapes vibe; falls back to a generic creative-freelancer brief if
-  // Anna hasn't filled it in yet.
+  // the creator hasn't filled it in yet.
   const subject = oneLine.trim() ||
     `${name}, an experienced creative freelancer in her mid-30s, mid-stage of building a teaching business off the back of her client work`;
   const promptText = [
@@ -944,7 +944,7 @@ app.post('/avatars/:id/generate-image', async (c) => {
 
   // Save to 05_Assets/Avatars/images/<slug>-<ts>.<ext>. Timestamp the
   // filename so re-generating doesn't silently overwrite the previous one
-  // (Anna can keep history and pick the best).
+  // (the creator can keep history and pick the best).
   const ts = Math.floor(Date.now() / 1000);
   const imagesDir = abs('05_Assets', 'Avatars', 'images');
   fs.mkdirSync(imagesDir, { recursive: true });

@@ -35,8 +35,12 @@ const STAGES: { status: IgItemStatus; label: string }[] = [
 ];
 
 function stageIndex(s: IgItemStatus): number {
-  if (s === 'dismissed') return -1;
-  return STAGES.findIndex((x) => x.status === s);
+  if (s === 'dismissed' || s === 'failed') return -1;
+  // Map the auto-pipeline statuses onto the 3-dot queued / filmed / posted track:
+  // queued = 0, editing/ready_to_schedule/scheduled/filmed = 1, posted = 2.
+  if (s === 'queued') return 0;
+  if (s === 'posted') return 2;
+  return 1;
 }
 
 export function Instagram() {
@@ -107,11 +111,14 @@ export function Instagram() {
   }, [openId, pickerOpen]);
 
   const items = data?.items ?? [];
-  // All non-posted reels live in one bucket. The card's stage tracker bar
-  // shows whether a reel has been filmed (filled middle dot) regardless of
-  // which "lane" - there's no separate filmed lane anymore.
-  const queued = items.filter((i) => i.status === 'queued' || i.status === 'filmed');
+  // Queued lane shows everything that hasn't reached "video dropped" yet:
+  // queued, filmed (legacy), and editing (clicked "I'm editing in Descript").
+  // ready_to_schedule and scheduled get their own dedicated surfaces below.
+  const queued = items.filter((i) => i.status === 'queued' || i.status === 'filmed' || i.status === 'editing');
+  const readyToSchedule = items.filter((i) => i.status === 'ready_to_schedule');
+  const scheduled = items.filter((i) => i.status === 'scheduled');
   const posted = items.filter((i) => i.status === 'posted');
+  const failed = items.filter((i) => i.status === 'failed');
   const counts = data?.counts ?? { queued: 0, filmed: 0, posted: 0, dismissed: 0 };
   const openItem = items.find((i) => i.id === openId) ?? null;
 
@@ -309,11 +316,30 @@ INSTAGRAM_BUSINESS_ACCOUNT_ID=<your-ig-business-id>`}
       </div>
 
       {isLoading ? (
-        <div className="empty">loading…</div>
+        <div className="empty">loading...</div>
       ) : items.length === 0 ? (
         <EmptyState />
       ) : (
         <>
+          {/* Action surface: reels the creator dropped from Descript that need her to
+              pick a hook and approve. Highest-attention slot - lives above the
+              queued lane so it's the first thing she sees on this page. */}
+          {readyToSchedule.length > 0 && (
+            <Lane
+              label="ready to schedule"
+              color="var(--strain)"
+              items={readyToSchedule}
+              onOpen={setOpenId}
+              targetStatus="ready_to_schedule"
+            />
+          )}
+
+          {/* Scheduled: reels approved and waiting for their post slot. */}
+          {scheduled.length > 0 && <ScheduledStrip items={scheduled} />}
+
+          {/* Failed: any post that errored - retry button + error reason. */}
+          {failed.length > 0 && <FailedStrip items={failed} />}
+
           <Lane
             label="queued · ready to film"
             color="var(--ink)"
@@ -500,7 +526,24 @@ function ReelCard({ item, onClick }: { item: IgQueueItem; onClick: () => void })
   const [pickerOpen, setPickerOpen] = useState(false);
   const tagMutation = useMutation({
     mutationFn: (t: QuoteTag) => api.updateIgItem(item.id, { tag: t }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['ig-queue'] }),
+    onMutate: async (t: QuoteTag) => {
+      // Optimistic patch so the card border + chip color flip immediately.
+      // Without this, the user clicks a tag and nothing visible happens until
+      // the next refetch lands - which feels like a broken click.
+      await qc.cancelQueries({ queryKey: ['ig-queue'] });
+      const prev = qc.getQueryData<{ items: IgQueueItem[]; counts: any }>(['ig-queue']);
+      if (prev) {
+        qc.setQueryData(['ig-queue'], {
+          ...prev,
+          items: prev.items.map((x) => (x.id === item.id ? { ...x, tag: t } : x)),
+        });
+      }
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['ig-queue'], ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['ig-queue'] }),
   });
   const markPosted = useMutation({
     mutationFn: (d: Date) => {
@@ -653,7 +696,7 @@ function PostedTable({ items, onOpen }: { items: IgQueueItem[]; onOpen: (id: str
     },
   });
   const sorted = [...items].sort((a, b) => (b.posted_at ?? 0) - (a.posted_at ?? 0));
-  // Heading color = white (per Anna). Border still uses an accent to keep
+  // Heading color = white (per the creator). Border still uses an accent to keep
   // the drop-target hint visible.
   const PINK = 'var(--ink)';
   const ACCENT = '#E6A52F';
@@ -956,7 +999,7 @@ function ReelPanel({ item, onClose }: { item: IgQueueItem; onClose: () => void }
 
   function appendFromBank(bi: BankItem) {
     // Insert a personal story / bank entry into the script. Adds a divider
-    // for readability, prefixes with the bank entry's title (if any) so Anna
+    // for readability, prefixes with the bank entry's title (if any) so the creator
     // can see what she added at a glance.
     const sep = item.text.trim().length > 0 ? '\n\n---\n\n' : '';
     const titlePart = bi.title ? `**${bi.title}**\n\n` : '';
@@ -1191,6 +1234,11 @@ function ReelPanel({ item, onClose }: { item: IgQueueItem; onClose: () => void }
           </section>
         )}
 
+        {/* Reel production - shown only for items that have a video dropped
+            into the dropbox. Renders the video preview with live hook overlay,
+            3 editable hook variants, and the copy/mark buttons. */}
+        {item.video_path && <ReelProductionSection item={item} />}
+
         {/* Instagram caption */}
         <CaptionSection item={item} />
 
@@ -1284,7 +1332,7 @@ function CaptionSection({ item }: { item: IgQueueItem }) {
       <header className="rep-section__head">
         <h3 className="rep-section__title">instagram caption</h3>
         <p className="rep-section__sub">
-          hook + story arc + your CTA + 5 hashtags. paste straight into instagram.
+          one sharp sentence + your CTA + hashtags. paste straight into instagram.
         </p>
       </header>
 
@@ -1372,6 +1420,17 @@ function TitleEditor({
 }) {
   const [draft, setDraft] = useState(value);
   useEffect(() => { setDraft(value); }, [value]);
+
+  // Debounced auto-save - 600ms after last keystroke. Catches the case where
+  // the user closes the panel before blur fires (clicking outside / X button).
+  useEffect(() => {
+    const next = draft.trim();
+    if (next === value.trim()) return;
+    const t = setTimeout(() => onSave(next), 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, value]);
+
   function commit(latest: string) {
     const next = latest.trim();
     if (next === value.trim()) return;
@@ -1537,6 +1596,245 @@ export function BankPicker({
           })}
         </div>
       </aside>
+    </div>
+  );
+}
+
+// ─── Reel production (lives inside ReelPanel for items with video_path) ────
+// Renders the video preview with a draggable hook overlay, 3 editable hook
+// variants (click to pick, double-click to edit), and the copy + mark buttons.
+// Shown only when the item has been dropped through the dropbox.
+function ReelProductionSection({ item }: { item: IgQueueItem }) {
+  const qc = useQueryClient();
+
+  const saveHook = useMutation({
+    mutationFn: (v: string) => api.updateIgItem(item.id, { chosen_hook: v }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ig-queue'] }),
+  });
+
+  // "The hook" - the one that ends up on the reel. the creator's free to write
+  // whatever she wants here. The 3 generated ideas below are inspiration only.
+  const [hookDraft, setHookDraft] = useState<string>(item.chosen_hook ?? '');
+  useEffect(() => {
+    setHookDraft(item.chosen_hook ?? '');
+  }, [item.chosen_hook]);
+
+  // Debounced auto-save - 600ms after last keystroke. Catches the close-before-blur
+  // case where clicking X / backdrop unmounts before the blur handler fires.
+  useEffect(() => {
+    const next = hookDraft.trim();
+    const current = (item.chosen_hook ?? '').trim();
+    if (next === current) return;
+    const t = setTimeout(() => {
+      saveHook.mutate(next);
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hookDraft, item.chosen_hook]);
+
+  // Hook overlay position on the video preview (% of frame, center coords).
+  // Just for visualizing where the hook would sit - she recreates the text
+  // overlay in her actual editing tool.
+  const [hookPos, setHookPos] = useState<{ x: number; y: number }>({ x: 50, y: 50 });
+
+  const [copyMsg, setCopyMsg] = useState<string>('');
+
+  async function copyHook() {
+    if (!hookDraft) return;
+    try {
+      await navigator.clipboard.writeText(hookDraft);
+      setCopyMsg('copied');
+      setTimeout(() => setCopyMsg(''), 1500);
+    } catch {
+      setCopyMsg('copy failed');
+    }
+  }
+
+  function startDrag(e: React.MouseEvent<HTMLDivElement>) {
+    e.preventDefault();
+    const wrap = (e.currentTarget.parentElement as HTMLDivElement | null);
+    if (!wrap) return;
+    const rect = wrap.getBoundingClientRect();
+    const onMove = (ev: MouseEvent) => {
+      const x = Math.max(5, Math.min(95, ((ev.clientX - rect.left) / rect.width) * 100));
+      const y = Math.max(5, Math.min(95, ((ev.clientY - rect.top) / rect.height) * 100));
+      setHookPos({ x, y });
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
+  const regenHooks = useMutation({
+    mutationFn: () => api.generateIgHooks(item.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ig-queue'] }),
+  });
+
+  function commitHook() {
+    const v = hookDraft.trim();
+    if (v === (item.chosen_hook ?? '').trim()) return;
+    saveHook.mutate(v);
+  }
+
+  function useIdea(text: string) {
+    setHookDraft(text);
+    saveHook.mutate(text);
+  }
+
+  const videoUrl = `/api/instagram/queue/${item.id}/video`;
+  const ideas = item.hook_variants ?? [];
+
+  return (
+    <section className="rep-section">
+      <header className="rep-section__head">
+        <h3 className="rep-section__title">reel production</h3>
+        <p className="rep-section__sub">
+          generate hook ideas, pick the best bits, write the final hook. preview shows where it'll land on the frame.
+        </p>
+      </header>
+
+      <div className="ig-prod">
+        {/* Left: video preview with draggable hook overlay */}
+        <div className="ig-prod__preview">
+          <div className="ig-prod__video-wrap">
+            <video src={videoUrl} controls playsInline muted className="ig-prod__video" />
+            {hookDraft && (
+              <div
+                className="ig-prod__hook"
+                style={{ left: `${hookPos.x}%`, top: `${hookPos.y}%` }}
+                onMouseDown={startDrag}
+                title="drag to reposition"
+              >
+                <span className="ig-prod__hook-text">{hookDraft}</span>
+              </div>
+            )}
+          </div>
+          <p className="muted ig-prod__hint">drag the hook to reposition. preview only - recreate in your editing tool.</p>
+        </div>
+
+        {/* Right: hook generator + the hook */}
+        <div className="ig-prod__controls">
+          <div className="ig-prod__block">
+            <div className="ig-prod__block-head">
+              <span className="eyebrow">hook ideas (read-only)</span>
+              <button
+                type="button"
+                className="rep-btn rep-btn--ghost"
+                onClick={() => regenHooks.mutate()}
+                disabled={regenHooks.isPending}
+              >
+                {regenHooks.isPending ? 'generating...' : ideas.length === 0 ? 'generate hook ideas' : 'regenerate ideas'}
+              </button>
+            </div>
+            {ideas.length === 0 ? (
+              <p className="muted" style={{ fontSize: 'var(--body-sm)', margin: 0 }}>
+                click generate to get 3 angles to draw from.
+              </p>
+            ) : (
+              <div className="ig-prod__ideas">
+                {ideas.map((h, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className="ig-prod__idea"
+                    onClick={() => useIdea(h)}
+                    title="click to use this as the hook"
+                  >
+                    <span className="ig-prod__idea-num">{i + 1}</span>
+                    <span className="ig-prod__idea-text">{h}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="ig-prod__block">
+            <div className="ig-prod__block-head">
+              <span className="eyebrow">the hook (what'll be on the reel)</span>
+              <button
+                type="button"
+                className="rep-btn rep-btn--ghost"
+                onClick={copyHook}
+                disabled={!hookDraft}
+              >
+                {copyMsg || 'copy hook'}
+              </button>
+            </div>
+            <textarea
+              className="rep-text-input ig-prod__hook-final"
+              value={hookDraft}
+              onChange={(e) => setHookDraft(e.target.value)}
+              onBlur={commitHook}
+              placeholder="write the final hook here. click an idea above to start with it, then tweak."
+              rows={2}
+            />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ScheduledStrip({ items }: { items: IgQueueItem[] }) {
+  const sorted = [...items].sort((a, b) => (a.scheduled_for ?? 0) - (b.scheduled_for ?? 0));
+  return (
+    <div className="ig-strip" style={{ marginBottom: 'var(--space-5)' }}>
+      <div className="ig-strip__head">
+        <span className="eyebrow" style={{ color: 'var(--recovery)' }}>queued to auto-post</span>
+        <h3 className="ig-strip__title">scheduled ({sorted.length})</h3>
+      </div>
+      <div className="ig-strip__list">
+        {sorted.map((it) => {
+          const d = it.scheduled_for ? new Date(it.scheduled_for * 1000) : null;
+          const dateLabel = d
+            ? d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toLowerCase()
+            : 'no date';
+          return (
+            <div key={it.id} className="ig-strip__row">
+              <span className="ig-strip__date">{dateLabel}</span>
+              <span className="ig-strip__hook">{it.chosen_hook ?? it.title ?? '(no hook)'}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function FailedStrip({ items }: { items: IgQueueItem[] }) {
+  const qc = useQueryClient();
+  const retry = useMutation({
+    mutationFn: (id: string) => api.updateIgItem(id, { status: 'scheduled' as any }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ig-queue'] }),
+  });
+  return (
+    <div className="ig-strip ig-strip--danger" style={{ marginBottom: 'var(--space-5)' }}>
+      <div className="ig-strip__head">
+        <span className="eyebrow" style={{ color: 'var(--danger)' }}>posts that failed</span>
+        <h3 className="ig-strip__title">needs attention ({items.length})</h3>
+      </div>
+      <div className="ig-strip__list">
+        {items.map((it) => (
+          <div key={it.id} className="ig-strip__row">
+            <span className="ig-strip__date" style={{ color: 'var(--danger)' }}>failed</span>
+            <span className="ig-strip__hook">{it.chosen_hook ?? it.title ?? '(no hook)'}</span>
+            {it.failed_reason && (
+              <span className="muted" style={{ fontSize: 11 }}>{it.failed_reason}</span>
+            )}
+            <button
+              type="button"
+              className="rep-btn rep-btn--ghost"
+              onClick={() => retry.mutate(it.id)}
+              style={{ marginLeft: 'auto', fontSize: 11, padding: '2px 8px' }}
+            >
+              retry
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -2086,4 +2384,142 @@ input.rep-panel__title--edit::placeholder { color: var(--muted-2); }
   .ig-stat-strip { width: 100%; justify-content: space-between; }
   .rep-panel { padding: var(--space-4); }
 }
+
+/* Reel production - inside ReelPanel for items with a dropped video */
+.ig-prod {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: var(--space-5);
+}
+.ig-prod__preview { display: flex; flex-direction: column; gap: 4px; }
+.ig-prod__video-wrap {
+  position: relative;
+  aspect-ratio: 9 / 16;
+  background: #000;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  user-select: none;
+}
+.ig-prod__video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+/* Draggable container - positioned by x/y center coords (percent of frame).
+   The white block sits ONLY behind the actual text via box-decoration-break,
+   so multi-line hooks get a tight box around each line, IG / CapCut style. */
+.ig-prod__hook {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  max-width: 82%;
+  text-align: center;
+  cursor: grab;
+  pointer-events: auto;
+  font-weight: 800;
+  font-size: 14px;
+  line-height: 1.55;
+  letter-spacing: -0.01em;
+  color: black;
+}
+.ig-prod__hook:active { cursor: grabbing; }
+.ig-prod__hook-text {
+  background: white;
+  padding: 3px 8px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  display: inline;
+}
+.ig-prod__hint {
+  font-size: 11px;
+  margin: 0;
+  text-align: center;
+}
+
+.ig-prod__controls { display: flex; flex-direction: column; gap: var(--space-4); }
+.ig-prod__block { display: flex; flex-direction: column; gap: var(--space-2); }
+.ig-prod__block-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+}
+.ig-prod__ideas { display: flex; flex-direction: column; gap: 6px; }
+.ig-prod__idea {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--body-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.12s;
+  line-height: 1.4;
+}
+.ig-prod__idea:hover {
+  background: color-mix(in srgb, var(--strain) 8%, rgba(255,255,255,0.04));
+  border-color: color-mix(in srgb, var(--strain) 40%, var(--hairline));
+}
+.ig-prod__idea-num {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--strain);
+  color: var(--bg);
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+.ig-prod__idea-text { flex: 1; }
+
+.ig-prod__hook-final {
+  width: 100%;
+  font-size: var(--body);
+  font-weight: 600;
+  resize: vertical;
+  min-height: 56px;
+  line-height: 1.4;
+}
+
+@media (max-width: 720px) {
+  .ig-prod { grid-template-columns: 1fr; }
+  .ig-prod__video-wrap { max-width: 280px; margin: 0 auto; }
+}
+
+/* Compact horizontal strip used by Scheduled + Failed lanes */
+.ig-strip {
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  border: 1px solid var(--hairline);
+}
+.ig-strip--danger { border-color: rgba(255, 99, 99, 0.3); }
+.ig-strip__head { margin-bottom: var(--space-3); }
+.ig-strip__title { margin: 4px 0 0; font-size: var(--body); font-weight: 600; }
+.ig-strip__list { display: flex; flex-direction: column; gap: 6px; }
+.ig-strip__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: var(--body-sm);
+}
+.ig-strip__date {
+  font-family: var(--font-mono, monospace);
+  color: var(--muted);
+  min-width: 100px;
+}
+.ig-strip__hook { color: var(--ink); }
+
 `;

@@ -150,8 +150,8 @@ function parseAvatarMd(body: string): {
   return out;
 }
 
-// Slug helper: bank entries are keyed by display name ("adriana"), files
-// are keyed by full filename ("avatar-adriana"). We normalise both to a
+// Slug helper: bank entries are keyed by display name ("the-avatar"), files
+// are keyed by full filename ("avatar-the-avatar"). We normalise both to a
 // comparable slug for merging.
 function avatarSlug(s: string): string {
   return s.toLowerCase().replace(/^avatar-/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -160,12 +160,12 @@ function avatarSlug(s: string): string {
 function loadAvatars() {
   // Three sources, merged:
   //   1. Markdown files in 05_Assets/Avatars/ - the canonical source of
-  //      truth Anna writes by hand. Parsed for default field values.
+  //      truth the creator writes by hand. Parsed for default field values.
   //   2. JSON bank entries in 00_System/offer-results.json - where dashboard
   //      edits land. Bank fields override parsed defaults when populated.
   //   3. Either-or: an avatar can exist in just one source. File-only
   //      avatars show as fully populated from the parse. Bank-only avatars
-  //      show with whatever Anna typed in the dashboard.
+  //      show with whatever the creator typed in the dashboard.
   type Out = {
     id: string;
     name: string | null;
@@ -213,7 +213,7 @@ function loadAvatars() {
   // Merge keyed by ID, not by name. The avatar's id is stable across
   // renames (file-based id is `avatar-<slug>` derived from the filename;
   // bank entries that upsert through PATCH preserve that same id). Using
-  // id as the join key means renaming "adriana" → "alyssa" updates the
+  // id as the join key means renaming "the-avatar" → "alyssa" updates the
   // existing card instead of orphaning the file row and creating a
   // duplicate under the new slug. Bank fields override parsed defaults.
   const byId = new Map<string, Out>();
@@ -301,7 +301,7 @@ function buildLever(id: 'clarity' | 'likelihood' | 'time_delay' | 'effort_sacrif
 
 // Per-slot display metadata. When a slot key appears here its `label` is
 // used as the foundation row's heading (a real question) and `prompt` is
-// shown as a one-line nudge under the heading the first time Anna opens
+// shown as a one-line nudge under the heading the first time the creator opens
 // the row. Slots not listed here fall back to the auto-label (key with
 // underscores replaced by spaces) and no prompt.
 const FIELD_DEFS: Record<string, { label: string; prompt?: string }> = {};
@@ -584,7 +584,7 @@ type PricingRung = {
   goal_price_label: string;
   target_revenue_per_month_usd: number | null;
   target_customers_per_month: number | null;
-  pricing_plan: string; // free text: how Anna plans to raise the price over time
+  pricing_plan: string; // free text: how the creator plans to raise the price over time
 
   // ─── Conversions (per-offer funnel) ────────────────────────────────────
   // Sales Page is the destination - the page where checkout happens. No
@@ -692,7 +692,7 @@ function loadPricingRungs(): PricingRung[] {
     raw = [];
   }
 
-  // Seed defaults the first time the file is empty so Anna sees the
+  // Seed defaults the first time the file is empty so the creator sees the
   // low / mid / high frame immediately. Once she edits any rung the seed is
   // a real persisted entry like any other.
   if (raw.length === 0) {

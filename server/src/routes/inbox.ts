@@ -8,7 +8,7 @@
  *
  * State:
  *   - 00_System/inbox/_archive/<id>.md = marker file. Empty content. Just
- *     existing means "Anna dismissed this." Marker file persists across
+ *     existing means "the creator dismissed this." Marker file persists across
  *     re-scans, so dismissed items never resurface.
  *
  * UX:

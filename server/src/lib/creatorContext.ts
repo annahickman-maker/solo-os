@@ -21,7 +21,7 @@ import { loadFile, abs } from '../vault.js';
 export type CreatorContext = {
   /** Display name - first name preferred. Empty string if unknown. */
   name: string;
-  /** Possessive form: "Tharros's" or "Anna's". "the creator's" if blank. */
+  /** Possessive form: e.g. "Jane's" or "the studio's". "the creator's" if blank. */
   possessive: string;
   /** How to refer to them in third-person prose. "the creator" if blank. */
   thirdPerson: string;
@@ -49,7 +49,7 @@ export type CreatorContext = {
   voiceStyleGuide: string;
   /** Story chapters (from core_my-story.md body). */
   storyDoc: string;
-  /** Channel handle, e.g. "@theannahickman". Blank if unset. */
+  /** Channel handle, e.g. "@yourchannel". Blank if unset. */
   channelHandle: string;
 };
 

@@ -39,7 +39,7 @@ export function Archive() {
 // categorises by filename pattern (yt-* / workshop* / client* / fallback
 // QA), saves to the correct vault folder, then we kick off extraction
 // immediately so the new transcript shows up as "processed" without
-// Anna needing to open the panel and click Extract.
+// the creator needing to open the panel and click Extract.
 function TranscriptDropZone() {
   const qc = useQueryClient();
   const [dragging, setDragging] = useState(false);
@@ -52,7 +52,7 @@ function TranscriptDropZone() {
 
   async function handleFiles(files: FileList | File[]) {
     const arr = Array.from(files);
-    // Seed queue rows so Anna sees each file's progress in real time.
+    // Seed queue rows so the creator sees each file's progress in real time.
     setQueue((prev) => [...prev, ...arr.map((f) => ({ name: f.name, status: 'uploading' as const }))]);
 
     for (const file of arr) {
@@ -65,7 +65,7 @@ function TranscriptDropZone() {
         qc.invalidateQueries({ queryKey: ['archive-transcripts'] });
         // Kick off extraction (POVs, audience quotes, etc). Best-effort:
         // if the bridge isn't up or extraction fails, the row still
-        // appears - Anna can re-run from the panel.
+        // appears - the creator can re-run from the panel.
         if (res.id) {
           try {
             await api.runExtraction(res.id);
@@ -414,7 +414,7 @@ function TranscriptPanel({ id, onClose }: { id: string; onClose: () => void }) {
             <div className="stack" style={{ gap: 4 }}>
               <h3 className="rep-section__title">extracted quotes</h3>
               <p className="rep-section__sub">
-                claude pulls verbatim quotes from anna only and tags each one. edit, change the tag, then approve to bank or queue to instagram.
+                claude pulls verbatim quotes from the creator only and tags each one. edit, change the tag, then approve to bank or queue to instagram.
               </p>
             </div>
             <button
@@ -448,7 +448,7 @@ function TranscriptPanel({ id, onClose }: { id: string; onClose: () => void }) {
                     synthesized stories <span className="tx-meta">{stories.length}</span>
                   </h4>
                   <p className="rep-section__sub" style={{ marginTop: -4 }}>
-                    related quotes from this transcript woven into cohesive pieces, fillers stripped, anna's words preserved. select a story + extra quotes to merge them.
+                    related quotes from this transcript woven into cohesive pieces, fillers stripped, the creator's words preserved. select a story + extra quotes to merge them.
                   </p>
                   <div className="rep-list">
                     {stories.map((s) => (
@@ -567,7 +567,7 @@ function AudienceQuotesSection({ transcriptId }: { transcriptId: string }) {
         <div className="stack" style={{ gap: 4 }}>
           <h3 className="rep-section__title">extract quotes from audience</h3>
           <p className="rep-section__sub">
-            claude pulls verbatim quotes spoken by students / callers / clients in this transcript - NOT anna. attach each quote to an avatar, sort into struggle / want, and push the gold ones to your proof bank.
+            claude pulls verbatim quotes spoken by students / callers / clients in this transcript - NOT the creator. attach each quote to an avatar, sort into struggle / want, and push the gold ones to your proof bank.
           </p>
         </div>
         <button
@@ -593,7 +593,7 @@ function AudienceQuotesSection({ transcriptId }: { transcriptId: string }) {
         <p className="rep-section__sub">loading…</p>
       ) : quotes.length === 0 ? (
         <p className="rep-section__sub">
-          no audience quotes yet. click extract to scan the transcript for non-anna speech.
+          no audience quotes yet. click extract to scan the transcript for non-the creator speech.
         </p>
       ) : (
         <div className="stack" style={{ gap: 'var(--space-5)' }}>

@@ -33,6 +33,34 @@ export function Focus() {
     queryKey: ['focus'],
     queryFn: api.focus,
   });
+  // Inline edit state for the SS members number on the hero ring. Click the
+  // count -> small input. Enter or blur saves; Esc cancels.
+  const [editingMembers, setEditingMembers] = useState(false);
+  const [membersDraft, setMembersDraft] = useState('');
+  const updateMembersMutation = useMutation({
+    mutationFn: (newCount: number) =>
+      api.updateSettings({
+        ss_members: newCount,
+        // Auto-calc MRR at the default $47/mo price point. If the creator later wants
+        // separate control she can split this out, but for now keeping them in
+        // sync is the desired behaviour she asked for.
+        ss_mrr_usd: newCount * 47,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['focus'] });
+      qc.invalidateQueries({ queryKey: ['metrics'] });
+      qc.invalidateQueries({ queryKey: ['today'] });
+      setEditingMembers(false);
+    },
+  });
+  const saveMembers = () => {
+    const parsed = parseInt(membersDraft, 10);
+    if (Number.isNaN(parsed) || parsed < 0) {
+      setEditingMembers(false);
+      return;
+    }
+    updateMembersMutation.mutate(parsed);
+  };
   // Secondary fetches: pipeline for the YouTube publish grid, metrics for
   // the SS MRR figure. Both already power other pages so the responses are
   // cached and cheap here.
@@ -103,12 +131,12 @@ export function Focus() {
     onSettled: () => qc.invalidateQueries({ queryKey: ['focus'] }),
   });
 
-  // Assign / unassign a task to a specific weekday. Powers the
-  // WeekPlanner section. Optimistically patches the focus cache so the
-  // task hops into the new column without waiting for the network.
+  // Pin / unpin a task to a weekday column in the WeekPlanner.
+  // Optimistically patches the focus cache so the task hops into the
+  // new column without waiting for the network.
   const setSchedule = useMutation({
-    mutationFn: (vars: { id: string; scheduled_day: string | null }) =>
-      api.setTaskScheduledDay(vars.id, vars.scheduled_day),
+    mutationFn: (vars: { id: string; scheduled_weekday: string | null }) =>
+      api.setTaskScheduledWeekday(vars.id, vars.scheduled_weekday),
     onMutate: async (vars) => {
       await qc.cancelQueries({ queryKey: ['focus'] });
       const prev = qc.getQueryData<FocusResponse>(['focus']);
@@ -116,7 +144,7 @@ export function Focus() {
         const next: FocusResponse = {
           ...prev,
           tasks: prev.tasks.map((t) =>
-            t.id === vars.id ? { ...t, scheduled_day: vars.scheduled_day ?? undefined } : t
+            t.id === vars.id ? { ...t, scheduled_weekday: vars.scheduled_weekday ?? undefined } : t
           ),
         };
         qc.setQueryData(['focus'], next);
@@ -205,11 +233,10 @@ export function Focus() {
     const tasks = (data?.tasks ?? []).filter((t) => {
       if (!showCompleted && t.status === 'completed') return false;
       if (filter !== 'all' && t.category !== filter) return false;
-      // Tasks already scheduled to a day live in the WeekPlanner on the
-      // left, not the master list. Stale scheduled_days (past + still
-      // open) are auto-cleared server-side, so anything still set here
-      // is genuinely on-deck for a future day.
-      if (t.scheduled_day) return false;
+      // Tasks pinned to a weekday live in the WeekPlanner on the left,
+      // not the master list. Weekday pins persist across weeks - once
+      // a task lands in a column it stays there until completed or moved.
+      if (t.scheduled_weekday) return false;
       return true;
     });
     const map = new Map<string, Task[]>();
@@ -314,13 +341,72 @@ export function Focus() {
               </span>
             )}
           </div>
-          <Ring
-            value={mrrProgress}
-            label={`${current} out of ${target || '?'} members`}
-            bigNumber={`${Math.round(mrrProgress * 100)}`}
-            unit="%"
-            size="hero"
-          />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <Ring
+              value={mrrProgress}
+              label={`out of ${target || '?'} members`}
+              bigNumber={`${Math.round(mrrProgress * 100)}`}
+              unit="%"
+              size="hero"
+            />
+            {/* Inline member editor: click the number to edit, Enter / blur saves, Esc cancels. */}
+            {editingMembers ? (
+              <input
+                autoFocus
+                type="number"
+                min={0}
+                value={membersDraft}
+                onChange={(e) => setMembersDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveMembers();
+                  if (e.key === 'Escape') setEditingMembers(false);
+                }}
+                onBlur={saveMembers}
+                style={{
+                  width: 80,
+                  textAlign: 'center',
+                  fontFamily: 'var(--font-display)',
+                  fontWeight: 600,
+                  fontSize: '1.25rem',
+                  border: '1px solid var(--accent)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '4px 8px',
+                  background: 'var(--bg)',
+                  color: 'var(--ink)',
+                  outline: 'none',
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setMembersDraft(String(current));
+                  setEditingMembers(true);
+                }}
+                title="click to update current member count"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: 'var(--body-sm)',
+                  color: 'var(--muted)',
+                  padding: '4px 8px',
+                  borderRadius: 'var(--radius-md)',
+                  transition: 'background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out)',
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.background = 'var(--surface-2, rgba(0,0,0,0.04))';
+                  (e.currentTarget as HTMLElement).style.color = 'var(--ink)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.background = 'transparent';
+                  (e.currentTarget as HTMLElement).style.color = 'var(--muted)';
+                }}
+              >
+                {current} members {updateMembersMutation.isPending ? '· saving…' : '· edit'}
+              </button>
+            )}
+          </div>
         </div>
       </Card>
 
@@ -352,7 +438,7 @@ export function Focus() {
       >
       <WeekPlanner
         tasks={data?.tasks ?? []}
-        onSchedule={(id, day) => setSchedule.mutate({ id, scheduled_day: day })}
+        onSchedule={(id, weekday) => setSchedule.mutate({ id, scheduled_weekday: weekday })}
       />
 
       <section className="section" style={{ minWidth: 0 }}>
@@ -558,59 +644,43 @@ function TargetIcon() {
 }
 
 // ─── WeekPlanner ──────────────────────────────────────────────────────────
-// 5-column visual: Mon / Tue / Wed / Thu / Fri for THIS week. Tasks
-// with scheduled_day === a column's ISO date appear in that column.
-// HTML5 native drag and drop: each task card carries its id; columns
-// accept drops and call onSchedule(id, dayISO). The "unscheduled" tray
-// at the bottom collects open tasks with no day + accepts drops back
-// in to clear an assignment. Completed tasks are hidden - this is
-// about what's coming up.
+// 7-column visual: Mon → Sun, keyed by day-of-week (NOT by date). Tasks
+// pinned to "mon"/"tue"/.../"sun" via scheduled_weekday appear in that
+// column and STAY there across weeks until completed or moved. Today's
+// column is highlighted. HTML5 native drag-and-drop: each card carries
+// its id; columns accept drops and call onSchedule(id, weekday).
+// Completed tasks are hidden.
+const WEEKDAY_COLUMNS: { label: string; key: string }[] = [
+  { label: 'mon', key: 'mon' },
+  { label: 'tue', key: 'tue' },
+  { label: 'wed', key: 'wed' },
+  { label: 'thu', key: 'thu' },
+  { label: 'fri', key: 'fri' },
+  { label: 'sat', key: 'sat' },
+  { label: 'sun', key: 'sun' },
+];
+
 function WeekPlanner({
   tasks,
   onSchedule,
 }: {
   tasks: Task[];
-  onSchedule: (id: string, scheduled_day: string | null) => void;
+  onSchedule: (id: string, scheduled_weekday: string | null) => void;
 }) {
-  // Mon → Fri for the upcoming work week. Sat / Sun roll forward to
-  // NEXT Monday so the planner is always something Anna can actually
-  // schedule into - previously the weekend resolved to "this week's
-  // Mon-Fri" which was all in the past, and any drop got immediately
-  // rescued by the stale-day sweep. Local date parts throughout to
-  // dodge the UTC roll-over edge case after 5pm Pacific.
-  const weekDays = useMemo(() => {
-    const now = new Date();
-    const day = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-    const offsetToMonday =
-      day === 0 ? 1            // Sun → next Mon
-      : day === 6 ? 2          // Sat → next Mon
-      : 1 - day;               // Mon-Fri → this week's Mon
-    const monday = new Date(now);
-    monday.setDate(now.getDate() + offsetToMonday);
-    monday.setHours(0, 0, 0, 0);
-    const labels = ['mon', 'tue', 'wed', 'thu', 'fri'];
-    return labels.map((label, i) => {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      return { label, iso, dayNum: d.getDate() };
-    });
+  const todayWeekday = useMemo(() => {
+    const idx = new Date().getDay(); // 0=Sun, 6=Sat
+    return ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][idx]!;
   }, []);
-  const todayISO = useMemo(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }, []);
-  const weekISOSet = useMemo(() => new Set(weekDays.map((d) => d.iso)), [weekDays]);
 
   const open = tasks.filter((t) => t.status !== 'completed');
   const byDay = new Map<string, Task[]>();
-  for (const d of weekDays) byDay.set(d.iso, []);
+  for (const d of WEEKDAY_COLUMNS) byDay.set(d.key, []);
   const unscheduled: Task[] = [];
   for (const t of open) {
-    if (t.scheduled_day && weekISOSet.has(t.scheduled_day)) {
-      byDay.get(t.scheduled_day)!.push(t);
-    } else if (!t.scheduled_day) {
-      // Tasks scheduled for OTHER weeks stay out of this view.
+    const wd = (t as any).scheduled_weekday as string | null | undefined;
+    if (wd && byDay.has(wd)) {
+      byDay.get(wd)!.push(t);
+    } else if (!wd) {
       unscheduled.push(t);
     }
   }
@@ -657,15 +727,15 @@ function WeekPlanner({
           <h3 className="h3" style={{ margin: 0 }}>plan your week</h3>
         </div>
       </header>
-      {weekDays.map((d) => {
-        const items = byDay.get(d.iso) ?? [];
-        const isToday = d.iso === todayISO;
-        const isAddOpen = addOpenDay === d.iso;
+      {WEEKDAY_COLUMNS.map((d) => {
+        const items = byDay.get(d.key) ?? [];
+        const isToday = d.key === todayWeekday;
+        const isAddOpen = addOpenDay === d.key;
         return (
           <div
-            key={d.iso}
+            key={d.key}
             onDragOver={(e) => e.preventDefault()}
-            onDrop={makeDropHandler(d.iso)}
+            onDrop={makeDropHandler(d.key)}
             style={{
               background: isToday
                 ? 'color-mix(in srgb, var(--recovery) 6%, var(--surface))'
@@ -692,9 +762,6 @@ function WeekPlanner({
                 >
                   {d.label}{isToday ? ' · today' : ''}
                 </span>
-                <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 600, color: 'var(--muted)' }}>
-                  {d.dayNum}
-                </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontSize: 11, color: 'var(--muted-2)', fontVariantNumeric: 'tabular-nums' }}>
@@ -702,7 +769,7 @@ function WeekPlanner({
                 </span>
                 <button
                   type="button"
-                  onClick={() => setAddOpenDay(isAddOpen ? null : d.iso)}
+                  onClick={() => setAddOpenDay(isAddOpen ? null : d.key)}
                   style={{
                     background: 'transparent',
                     border: '1px solid var(--hairline)',
@@ -766,7 +833,7 @@ function WeekPlanner({
                     <button
                       key={t.id}
                       type="button"
-                      onClick={() => { onSchedule(t.id, d.iso); setAddOpenDay(null); }}
+                      onClick={() => { onSchedule(t.id, d.key); setAddOpenDay(null); }}
                       style={{
                         background: 'transparent',
                         border: 'none',

@@ -292,7 +292,7 @@ export function extractYouTubeVideoId(url: string): string | null {
 // Looks up a single YouTube video by URL (or bare 11-char ID) and
 // returns lifetime stats from YouTube Data API v3. Used by the offer
 // page's Conversions panel to auto-fill VSL and per-video view counts.
-// Lifetime, not rolling - matches what Anna asked for.
+// Lifetime, not rolling - matches what the creator asked for.
 app.get('/video-stats', async (c) => {
   const apiKey = process.env.YOUTUBE_API_KEY;
   if (!apiKey) {

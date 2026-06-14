@@ -23,6 +23,7 @@ import {
   slugify,
   VAULT_ROOT,
 } from '../vault.js';
+import { resetStaleWeeklyTasks, stampThisWeek } from '../lib/weeklyReset.js';
 
 const TASKS_DIR_REL = path.join('00_System', 'tasks');
 
@@ -48,9 +49,14 @@ type TaskFrontmatter = {
   created?: string;
   updated?: string;
   completed_at?: string;
-  // ISO date string (YYYY-MM-DD) marking the day this task is scheduled
-  // to be worked on. Powers the Focus page's WeekPlanner + the Today
-  // page's per-day task surface. Null when not scheduled.
+  // Day-of-week pin for the Focus page's WeekPlanner. One of
+  // "mon"|"tue"|"wed"|"thu"|"fri"|"sat"|"sun" or null when unscheduled.
+  // Persistent: does NOT clear at week-end. The Today page surfaces
+  // tasks whose weekday matches today.
+  scheduled_weekday?: string | null;
+  // DEPRECATED: legacy ISO-date pin. Still read for one-time migration
+  // (focus.ts derives a weekday from it if scheduled_weekday is empty).
+  // Do not write.
   scheduled_day?: string | null;
   // When true, this task is in the project's BACKLOG. It's visible in
   // the project / client detail panel only - hidden from the Focus
@@ -74,7 +80,7 @@ type TaskResponse = {
   updated_at: number;
   created_at?: string;
   completed_at?: string;
-  scheduled_day: string | null;
+  scheduled_weekday: string | null;
   backlog: boolean;
 };
 
@@ -108,13 +114,39 @@ function entryToTask(entry: ReturnType<typeof loadFile<TaskFrontmatter>>): TaskR
     updated_at: entry.mtimeSec,
     created_at: fm.created,
     completed_at: fm.completed_at,
-    scheduled_day: (fm as any).scheduled_day ?? null,
+    scheduled_weekday: deriveScheduledWeekday(fm),
     backlog: (fm as any).backlog === true,
   };
 }
 
 function stripFirstHeading(body: string): string {
   return body.replace(/^#\s+.+?\n/, '');
+}
+
+// Valid weekday short names. The WeekPlanner pins tasks to one of these.
+const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+type Weekday = typeof WEEKDAYS[number];
+function isWeekday(v: unknown): v is Weekday {
+  return typeof v === 'string' && (WEEKDAYS as readonly string[]).includes(v);
+}
+// Convert a YYYY-MM-DD ISO date to its weekday short name in local time.
+function weekdayFromIsoDate(iso: string): Weekday | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  const [y, m, d] = iso.split('-').map(Number) as [number, number, number];
+  const date = new Date(y, m - 1, d);
+  const idx = date.getDay(); // 0=Sun ... 6=Sat
+  return ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][idx] as Weekday;
+}
+// Read the persisted weekday, falling back to deriving it from the legacy
+// scheduled_day ISO date. Lets pre-existing planning carry forward on
+// first read after the rollout.
+function deriveScheduledWeekday(fm: Record<string, unknown> | undefined | null): Weekday | null {
+  if (!fm) return null;
+  const wd = (fm as any).scheduled_weekday;
+  if (isWeekday(wd)) return wd;
+  const legacy = (fm as any).scheduled_day;
+  if (typeof legacy === 'string') return weekdayFromIsoDate(legacy);
+  return null;
 }
 
 function listTasks(): TaskResponse[] {
@@ -127,6 +159,9 @@ const app = new Hono();
 
 // GET /api/tasks - list all (with optional filters)
 app.get('/', (c) => {
+  // Throttled (1/min): flips this_week tasks back to master-todo if their
+  // stamped ISO week has rolled over. No-op most calls.
+  resetStaleWeeklyTasks();
   const status = c.req.query('status');
   const thisWeek = c.req.query('this_week');
   // Accept either `project` or `project_id` for the same field - the frontend
@@ -212,7 +247,13 @@ app.patch('/:id', async (c) => {
     else patch.completed_at = undefined;
   }
   if (body.category !== undefined) patch.category = body.category;
-  if (body.this_week !== undefined) patch.this_week = body.this_week;
+  if (body.this_week !== undefined) {
+    patch.this_week = body.this_week;
+    // Stamp the ISO week so weeklyReset can later auto-flip this task
+    // back to master-todo if it's still pending after the week rolls
+    // over. Clear the stamp when this_week is set to false.
+    (patch as any).this_week_iso_week = body.this_week ? stampThisWeek() : undefined;
+  }
   // Accept either project or project_id - same field, frontend sends project_id.
   const patchProject = body.project !== undefined
     ? body.project
@@ -221,21 +262,24 @@ app.patch('/:id', async (c) => {
   if (body.energy !== undefined) patch.energy = body.energy;
   if (body.due_date !== undefined) patch.due_date = body.due_date;
   if (body.section !== undefined) patch.section = body.section;
-  // scheduled_day: ISO date string (YYYY-MM-DD) when this task is
-  // planned to be worked on. Used by the Focus page's WeekPlanner
-  // and bubbled up to the Today page (where the day's scheduled
-  // tasks render at the top). Null clears the assignment.
-  if ((body as any).scheduled_day !== undefined) {
-    (patch as any).scheduled_day = (body as any).scheduled_day || null;
+  // scheduled_weekday: pins the task to a day-of-week column in the
+  // WeekPlanner. Persistent across weeks. Null clears the pin. Also
+  // clear the legacy scheduled_day so it doesn't shadow the new value.
+  if ((body as any).scheduled_weekday !== undefined) {
+    const raw = (body as any).scheduled_weekday;
+    (patch as any).scheduled_weekday = isWeekday(raw) ? raw : null;
+    (patch as any).scheduled_day = undefined;
   }
   // backlog: when true the task is hidden from the Focus page +
   // WeekPlanner. Only visible inside its project / client detail.
-  // When a task moves to backlog we also clear any scheduled_day so
-  // it doesn't quietly stay on a calendar day it can't surface from.
+  // Moving to backlog also clears any weekday pin.
   if ((body as any).backlog !== undefined) {
     const isBacklog = (body as any).backlog === true;
     (patch as any).backlog = isBacklog;
-    if (isBacklog) (patch as any).scheduled_day = null;
+    if (isBacklog) {
+      (patch as any).scheduled_weekday = null;
+      (patch as any).scheduled_day = undefined;
+    }
   }
 
   // Optionally rewrite the title (first heading) and/or notes.

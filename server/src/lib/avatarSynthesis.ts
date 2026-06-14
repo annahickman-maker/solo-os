@@ -1,6 +1,6 @@
 /**
  * Claude synthesises an avatar's profile fields from the audience quotes
- * Anna has attached to them. Produces concise, in-voice bullets for the
+ * the creator has attached to them. Produces concise, in-voice bullets for the
  * before/struggles/after/outcomes fields - not generic corporate-speak.
  *
  * Input:
@@ -11,9 +11,8 @@
  */
 
 import type { AudienceQuote } from './audienceQuotes.js';
-import { personalize } from './creatorContext.js';
 
-const BRIDGE_URL = 'http://localhost:8789/run';
+const BRIDGE_URL = 'http://localhost:8788/run';
 
 export type SynthesisResult = {
   before_state: string;
@@ -37,7 +36,7 @@ async function callBridge(system: string, user: string): Promise<string> {
     const res = await fetch(BRIDGE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'avatarSynthesis', system: personalize(system), user, maxTokens: 4000, expectJson: true }),
+      body: JSON.stringify({ type: 'avatarSynthesis', system, user, maxTokens: 4000, expectJson: true }),
       signal: controller.signal,
     });
     if (!res.ok) throw new Error(`claude-bridge ${res.status}: ${await res.text()}`);
@@ -53,7 +52,7 @@ async function callBridge(system: string, user: string): Promise<string> {
   }
 }
 
-const SYSTEM_PROMPT = `You synthesise an avatar profile from real quotes spoken by this avatar in transcripts. The avatar is the creator's ideal customer - a real human Anna serves.
+const SYSTEM_PROMPT = `You synthesise an avatar profile from real quotes spoken by this avatar in transcripts. The avatar is the creator's ideal customer - a real human the creator serves.
 
 You will receive:
 - The avatar's current profile (name, before/after state, existing bullets).

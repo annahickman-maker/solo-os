@@ -16,7 +16,9 @@ import { Voice } from './pages/Voice';
 import { Skills } from './pages/Skills';
 import { Archive } from './pages/Archive';
 import { Profile } from './pages/Profile';
+import { Journey } from './pages/Journey';
 import { Settings } from './pages/Settings';
+import { Decks } from './pages/Decks';
 
 function handleAuthError(err: unknown) {
   if (err instanceof UnauthorizedError) {
@@ -56,10 +58,12 @@ function Shell() {
             <Route path="/voice" element={<Voice />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/profile/reputation" element={<Profile />} />
+            <Route path="/profile/reputation/journey" element={<Journey />} />
             <Route path="/profile/offer" element={<Profile />} />
             <Route path="/brand" element={<Profile />} />
             <Route path="/offers" element={<Profile />} />
             <Route path="/skills" element={<Skills />} />
+            <Route path="/decks" element={<Decks />} />
             <Route path="/vault" element={<Archive />} />
             <Route path="/archive" element={<Archive />} />
             <Route path="/settings" element={<Settings />} />

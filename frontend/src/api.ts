@@ -74,7 +74,15 @@ export interface BankItem {
   topics?: string[];
 }
 
-export type IgItemStatus = 'queued' | 'filmed' | 'posted' | 'dismissed';
+export type IgItemStatus =
+  | 'queued'
+  | 'editing'
+  | 'ready_to_schedule'
+  | 'scheduled'
+  | 'filmed'
+  | 'posted'
+  | 'dismissed'
+  | 'failed';
 export interface IgQueueItem {
   id: string;
   quote_id?: string;
@@ -89,9 +97,14 @@ export interface IgQueueItem {
   title?: string;
   status: IgItemStatus;
   queued_at: number;
+  editing_at?: number;
+  ready_at?: number;
+  scheduled_at?: number;
   filmed_at?: number;
   posted_at?: number;
   dismissed_at?: number;
+  failed_at?: number;
+  failed_reason?: string;
   posted_url?: string;
   view_count?: number;
   share_count?: number;
@@ -100,6 +113,11 @@ export interface IgQueueItem {
   caption?: string;
   caption_hashtags?: string[];
   caption_generated_at?: number;
+  video_path?: string;
+  thumbnail_path?: string;
+  hook_variants?: string[];
+  chosen_hook?: string;
+  scheduled_for?: number;
 }
 
 export type TaskStatus = 'pending' | 'in_progress' | 'completed';
@@ -127,9 +145,15 @@ export interface Task {
   source_file?: string;
   created_at: number;
   updated_at: number;
-  // ISO date string (YYYY-MM-DD) marking the day this task is scheduled
-  // to be worked on. Set via the Focus page's WeekPlanner. The Today
-  // page surfaces tasks where scheduled_day === today's date.
+  // Day-of-week this task is pinned to in the Focus page's WeekPlanner.
+  // One of "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun", or null
+  // when unscheduled. Persistent (does NOT clear at week-end) - tasks stay
+  // in their column until completed or moved. The Today page surfaces
+  // tasks whose weekday matches today.
+  scheduled_weekday?: string | null;
+  // DEPRECATED: legacy ISO date field. Read-only fallback for migration
+  // (focus.ts derives a weekday from it if scheduled_weekday is missing).
+  // Do not write.
   scheduled_day?: string | null;
   // When true, this task lives in its project's backlog. Hidden from
   // the Focus master todo + WeekPlanner; only visible in the project /
@@ -482,13 +506,13 @@ export const api = {
 
   updateTask: (id: string, body: Partial<Pick<Task, 'status' | 'title' | 'category' | 'due_date' | 'energy'>>) =>
     request<Task>(`/api/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-  // Assign / unassign a task to a specific day. value is a YYYY-MM-DD
-  // ISO date string ("2026-06-15") or null to clear. Powers the Focus
-  // page's WeekPlanner drag-and-drop.
-  setTaskScheduledDay: (id: string, scheduled_day: string | null) =>
+  // Pin / unpin a task to a weekday column. value is "mon"|"tue"|"wed"|
+  // "thu"|"fri"|"sat"|"sun" or null to clear. Persistent across weeks -
+  // tasks stay in the column until completed or moved.
+  setTaskScheduledWeekday: (id: string, scheduled_weekday: string | null) =>
     request<Task>(`/api/tasks/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ scheduled_day }),
+      body: JSON.stringify({ scheduled_weekday }),
     }),
   // Move a task between PRIORITY and BACKLOG within its project.
   // When backlog=true the task disappears from the Focus master todo
@@ -702,7 +726,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  updateIgItem: (id: string, body: Partial<Pick<IgQueueItem, 'status' | 'text' | 'title' | 'posted_url' | 'queue_order' | 'tag' | 'caption' | 'caption_hashtags' | 'posted_at' | 'view_count' | 'share_count' | 'comment_count'>>) =>
+  updateIgItem: (id: string, body: Partial<Pick<IgQueueItem, 'status' | 'text' | 'title' | 'posted_url' | 'queue_order' | 'tag' | 'caption' | 'caption_hashtags' | 'posted_at' | 'view_count' | 'share_count' | 'comment_count' | 'chosen_hook'>>) =>
     request<{ ok: true; item: IgQueueItem }>(`/api/instagram/queue/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
@@ -711,6 +735,20 @@ export const api = {
     request<{ ok: true }>(`/api/instagram/queue/${id}`, { method: 'DELETE' }),
   generateIgCaption: (id: string) =>
     request<{ ok: true; item: IgQueueItem }>(`/api/instagram/queue/${id}/caption`, { method: 'POST' }),
+  generateIgHooks: (id: string) =>
+    request<{ ok: true; hooks: string[] }>(`/api/instagram/queue/${id}/hooks`, { method: 'POST' }),
+  markIgEditing: (id: string) =>
+    request<{ ok: true; expected_filename: string; dropbox_path: string; item: IgQueueItem }>(
+      `/api/instagram/queue/${id}/mark-editing`,
+      { method: 'POST' }
+    ),
+  igNextFreeSlot: () =>
+    request<{ scheduled_for: number; post_time_local: string; tz: string }>('/api/instagram/next-free-slot'),
+  scheduleIgPost: (id: string, body: { chosen_hook: string; caption?: string; scheduled_for?: number }) =>
+    request<{ ok: true; item: IgQueueItem }>(`/api/instagram/queue/${id}/schedule`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   reorderIgQueue: (order: string[]) =>
     request<{ ok: true }>(`/api/instagram/queue/reorder`, {
       method: 'POST',
@@ -840,6 +878,9 @@ export const api = {
     instagram_cta_url: string;
     youtube_cta_text: string;
     youtube_cta_url: string;
+    // Live SS metrics - settable inline from the Focus page big number.
+    ss_members: number;
+    ss_mrr_usd: number;
     // Still accepted for backward compat - writes through to Instagram pair.
     focus_cta_text: string;
     focus_cta_url: string;
@@ -1138,7 +1179,7 @@ export const api = {
   // sales_page_url (the VSL drives viewers to the sales page). Both
   // urls must be set first. Server adds the entry to link_manifest.json
   // and patches the rung's vsl_tracking_slug. Returns the deploy
-  // command Anna runs in her terminal to push the new slug live.
+  // command the creator runs in her terminal to push the new slug live.
   // Pull lifetime stats from YouTube Data API v3 for any video URL.
   // Used by the offer Conversions panel to auto-fill VSL view counts.
   // Returns ok+views or error (no key, bad URL, video not found, etc).
@@ -1219,7 +1260,117 @@ export const api = {
     request<{ ok: true }>(`/api/offers/testimonials/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteOfferTestimonial: (id: string) =>
     request<{ ok: true }>(`/api/offers/testimonials/${id}`, { method: 'DELETE' }),
+
+  // ─── Journey timeline ────────────────────────────────────────────────
+  journey: () => request<JourneyTimeline>('/api/journey'),
+  setJourneyStart: (start_date: string) =>
+    request<JourneyTimeline>('/api/journey', {
+      method: 'PATCH',
+      body: JSON.stringify({ start_date }),
+    }),
+  addJourneyEntry: (body: {
+    date: string;
+    type: JourneyEntryType;
+    title: string;
+    body?: string;
+    tags?: string[];
+    image_url?: string;
+  }) =>
+    request<{ ok: true; entry: JourneyEntry }>('/api/journey/entries', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateJourneyEntry: (
+    id: string,
+    body: Partial<{
+      date: string;
+      type: JourneyEntryType;
+      title: string;
+      body: string | null;
+      tags: string[];
+      side: 'top' | 'bottom';
+      lane: number;
+      vertical_offset: number | null;
+      image_url: string | null;
+    }>,
+  ) =>
+    request<{ ok: true; entry: JourneyEntry }>(`/api/journey/entries/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteJourneyEntry: (id: string) =>
+    request<{ ok: true }>(`/api/journey/entries/${id}`, { method: 'DELETE' }),
+  uploadJourneyImage: (filename: string, data_b64: string) =>
+    request<{ ok: true; url: string }>('/api/journey/upload-image', {
+      method: 'POST',
+      body: JSON.stringify({ filename, data_b64 }),
+    }),
+
+  // ─── Client decks ─────────────────────────────────────────────────────
+  decks: () => request<{ decks: DeckEntry[] }>('/api/decks'),
+  publishDeck: (deckPath: string) =>
+    request<{
+      ok: true;
+      url: string;
+      deployment_url: string | null;
+      published_at: number;
+      deck_count: number;
+    }>('/api/decks/publish', {
+      method: 'POST',
+      body: JSON.stringify({ path: deckPath }),
+    }),
+  createDeckFromTemplate: (body: { template: string; client_folder: string; name: string }) =>
+    request<{ ok: true; path: string }>('/api/decks/from-template', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };
+
+export type DeckType = 'strategy-deck' | 'content-world';
+
+export interface DeckEntry {
+  path: string;
+  client: string;
+  client_slug: string;
+  filename: string;
+  type: DeckType;
+  mtime: number;
+  published_url: string | null;
+  last_published_at: number | null;
+}
+
+// Build the URL that opens a deck in a new tab via the dashboard server. The
+// pw is in the URL because <a target="_blank"> can't send a custom header.
+// In dev API_URL is '' (Vite proxies /api/*). new URL needs an absolute base,
+// so we anchor against window.location.origin.
+export function deckEditorUrl(deckPath: string): string {
+  const pw = getStoredPassword() ?? '';
+  const base = API_URL || window.location.origin;
+  const u = new URL('/api/decks/file', base);
+  u.searchParams.set('path', deckPath);
+  u.searchParams.set('pw', pw);
+  return u.toString();
+}
+
+export type JourneyEntryType = 'win' | 'failure' | 'lesson' | 'avatar';
+export interface JourneyEntry {
+  id: string;
+  date: string;
+  type: JourneyEntryType;
+  title: string;
+  body?: string;
+  tags?: string[];
+  side?: 'top' | 'bottom';
+  lane?: number;
+  vertical_offset?: number;
+  image_url?: string;
+  created_at: number;
+  updated_at: number;
+}
+export interface JourneyTimeline {
+  start_date: string;
+  entries: JourneyEntry[];
+}
 
 export interface OfferProfile {
   name: string | null;
@@ -1266,7 +1417,7 @@ export interface OfferAvatar {
   // from one_line (which can be a long paragraph from the parsed .md).
   card_summary?: string | null;
   // Read-only source-of-truth markdown file path (e.g. 05_Assets/Avatars/
-  // avatar-adriana.md). Server fills this when the avatar matches a file.
+  // avatar-the-avatar.md). Server fills this when the avatar matches a file.
   source_file?: string | null;
 }
 
@@ -1293,7 +1444,7 @@ export interface OfferFieldStatus {
 
 export interface OfferPricingRung {
   id: string;
-  // Anna-facing label for the offer's price (e.g. "$47/mo", "$10K+").
+  // the creator-facing label for the offer's price (e.g. "$47/mo", "$10K+").
   price_label: string;
   // Short name for the offer (e.g. "the offer", "OS Builds").
   // Sits next to the price in the row head.
@@ -1382,7 +1533,7 @@ export interface OfferPricingRung {
 
 // Per-offer email - one row per email that drives traffic to this
 // offer's sales page. Most email platforms surface click + conversion
-// rates already, so we just let Anna type the conversion rate in
+// rates already, so we just let the creator type the conversion rate in
 // manually rather than minting tracking links per email.
 export type OfferEmailKind = 'one_time' | 'launch' | 'automated';
 export interface OfferEmail {
@@ -1397,7 +1548,7 @@ export interface OfferEmail {
   updated_at: number;
 }
 
-// Per-offer per-platform short-form link - one row per platform Anna
+// Per-offer per-platform short-form link - one row per platform the creator
 // posts on (Instagram, LinkedIn, TikTok, etc.). tracking_slug is
 // server-set via generateShortFormTrackingLink.
 //
@@ -1455,7 +1606,7 @@ export interface OfferConversionDiagnostic {
 export interface OfferValidationCheck {
   id: string;
   label: string;
-  // One-line nudge under the check telling Anna what counts.
+  // One-line nudge under the check telling the creator what counts.
   hint?: string | null;
   done: boolean;
 }

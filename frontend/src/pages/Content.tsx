@@ -44,7 +44,7 @@ export function Content() {
     mutationFn: (bi: BankItem) => {
       // A bank item is a quote/story snippet, not a video idea. We seed a
       // new video using the item's title (for synthesised stories) or the
-      // first ~80 chars of its text (for raw quotes). Anna edits after.
+      // first ~80 chars of its text (for raw quotes). the creator edits after.
       const seed = (bi.title ?? bi.text ?? '').trim();
       const title = seed.length > 80 ? seed.slice(0, 80) + '…' : seed;
       return api.createVideo({ title, status: 'idea' });
@@ -775,7 +775,7 @@ function VideoCard({
 
       {/* Thin clickable progress bars at the bottom of the card. Mirrors the
           .ig-stage row on the Instagram cards visually, but each bar is
-          still a button so Anna can advance the video's status with one
+          still a button so the creator can advance the video's status with one
           click. No text labels - the bar fill is the indicator. */}
       <div className="yt-card__stages">
         {STAGES.map((s, i) => {

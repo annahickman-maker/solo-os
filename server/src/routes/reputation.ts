@@ -23,7 +23,6 @@ import {
   currentSampleSize,
 } from '../lib/contentAnalysis.js';
 import { buildReputationResponse } from '../lib/reputationPage.js';
-import { proxyToOldBackend } from '../proxyOld.js';
 
 const app = new Hono();
 
@@ -579,9 +578,6 @@ app.post('/banks/move', async (c) => {
   return c.json({ ok: true, new_id: target.id, new_path: target.path });
 });
 
-// Reputation is fully native now. proxyToOldBackend is kept imported for the
-// rare case we want to reintroduce a fallback later, but no longer used.
-void proxyToOldBackend;
 void getStateFm;
 
 export default app;
