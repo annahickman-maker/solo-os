@@ -16,7 +16,7 @@
 
 import fs from 'node:fs';
 
-const BRIDGE_URL = 'http://localhost:8788/run';
+import { BRIDGE_URL } from './bridge.js';
 
 // Tags mirror the 4 Reputation dimensions, one-to-one.
 export type QuoteTag = 'pov' | 'value' | 'authority' | 'connection';

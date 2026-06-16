@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { abs, loadFile } from '../vault.js';
 
-const BRIDGE_URL = 'http://localhost:8788/run';
+import { BRIDGE_URL } from './bridge.js';
 
 // The 25 questions, mirroring the frontend OFFER_QUIZ. Kept here as the
 // source-of-truth for the Claude prompt; if you edit the questions on the

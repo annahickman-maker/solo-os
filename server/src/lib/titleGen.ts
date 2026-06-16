@@ -10,7 +10,7 @@
 
 import { loadCreatorContext, buildPositioningBlock, buildVoiceStyleBlock } from './creatorContext.js';
 
-const BRIDGE_URL = 'http://localhost:8789/run';
+import { BRIDGE_URL } from './bridge.js';
 
 const TITLE_FORMULAS = `
 6 PROVEN TITLE FORMULAS (cover at least 4 across the 10 titles):

@@ -108,6 +108,7 @@ spawn_supervised server 8791 "$LOG_DIR/solo-os-server.log" \
     PORT=8791 \
     VAULT_ROOT="$VAULT_ROOT" \
     DASHBOARD_PASSWORD=dev \
+    CLAUDE_BRIDGE_URL=http://localhost:8789/run \
     YOUTUBE_API_KEY="$YT_KEY" \
     YOUTUBE_CHANNEL_HANDLE="$YT_HANDLE" \
     STRIPE_API_KEY="$STRIPE_KEY" \

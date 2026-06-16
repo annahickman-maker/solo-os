@@ -14,7 +14,7 @@
 
 import { abs, loadFile } from '../vault.js';
 
-const BRIDGE_URL = 'http://localhost:8788/run';
+import { BRIDGE_URL } from './bridge.js';
 const VOICE_FILE_REL = ['01_Core', 'core_voice-style.md'] as const;
 
 export type GenerateDescriptionInput = {

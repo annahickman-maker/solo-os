@@ -13,7 +13,7 @@ import path from 'node:path';
 import { abs, loadCollection, loadFile } from '../vault.js';
 
 const CACHE_FILE_REL = ['00_System', 'reputation-analysis.json'] as const;
-const BRIDGE_URL = 'http://localhost:8788/run';
+import { BRIDGE_URL } from './bridge.js';
 
 export type DimensionAnalysis = {
   id: 'value' | 'authority' | 'point_of_view' | 'connection';

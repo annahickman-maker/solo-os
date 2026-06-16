@@ -7,7 +7,21 @@
 
 import { Hono } from 'hono';
 import fs from 'node:fs';
-import { abs } from '../vault.js';
+import { abs, loadFile } from '../vault.js';
+import {
+  extractBrandSlots,
+  writeBrandSlotsToState,
+  extractAvatarsFromCore,
+  writeAvatarFiles,
+  extractPovsFromCore,
+  writePovFiles,
+  extractOfferRungsFromCore,
+  writeOfferRungs,
+  extractJourneyFromCore,
+  writeJourneyEntries,
+  extractWins,
+  appendToBank,
+} from '../lib/extractFromCore.js';
 
 const SECTIONS = [
   { id: 'positioning', filename: 'core_positioning.md', title: 'Positioning', phase: 'Phase 1', sort_order: 1 },
@@ -51,6 +65,78 @@ function completion(content: string): number {
   return Math.round(((len - 200) / 1800) * 100);
 }
 
+// ─── Auto-extraction on first access ─────────────────────────────────────
+//
+// When the dashboard server boots against a vault that already has core
+// files but no Layer 2 data (state.md slots, avatars, POVs, offer rungs,
+// journey entries), fire extraction in the background. Idempotent in the
+// sense that existing entries are preserved.
+//
+// State lives in this module so the trigger fires at most once per server
+// lifetime. The dashboard polls /api/profile and sees extraction_status go
+// from 'running' to 'completed'.
+
+type ExtractionStatus = 'idle' | 'running' | 'completed' | 'error';
+let extractionStatus: ExtractionStatus = 'idle';
+let extractionResult: Record<string, unknown> | null = null;
+let extractionError: string | null = null;
+
+function hasAnyPopulatedSlots(): boolean {
+  try {
+    const state = loadFile(abs('00_System', 'state.md'));
+    const fm = (state?.frontmatter ?? {}) as Record<string, unknown>;
+    for (const key of Object.keys(fm)) {
+      if (!key.startsWith('slot_')) continue;
+      const v = fm[key];
+      if (typeof v === 'string' && v.trim().length > 0) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+async function runFullExtraction(): Promise<void> {
+  const result: Record<string, unknown> = {};
+  try {
+    const slots = await extractBrandSlots();
+    result.slots = writeBrandSlotsToState(slots);
+    const avatars = await extractAvatarsFromCore();
+    result.avatars = writeAvatarFiles(avatars);
+    const povs = await extractPovsFromCore();
+    result.povs = writePovFiles(povs);
+    const rungs = await extractOfferRungsFromCore();
+    result.offer_rungs = writeOfferRungs(rungs);
+    const journey = await extractJourneyFromCore();
+    result.journey = writeJourneyEntries(journey);
+    const wins = await extractWins();
+    result.wins = appendToBank('wins', wins);
+    extractionResult = result;
+    extractionStatus = 'completed';
+    console.log('[profile] auto-extraction completed:', JSON.stringify(result));
+  } catch (err: any) {
+    extractionError = err?.message ?? 'unknown error';
+    extractionStatus = 'error';
+    extractionResult = result;
+    console.error('[profile] auto-extraction failed:', err);
+  }
+}
+
+function maybeKickOffExtraction(items: Array<{ completion: number }>): void {
+  if (extractionStatus !== 'idle') return;
+  // At least 3 of the 6 core files have meaningful content.
+  const filledCount = items.filter((i) => i.completion >= 30).length;
+  if (filledCount < 3) return;
+  if (hasAnyPopulatedSlots()) {
+    // The user (or a previous run) has already populated some slots - skip.
+    extractionStatus = 'completed';
+    return;
+  }
+  extractionStatus = 'running';
+  // Fire and forget.
+  runFullExtraction().catch(() => {});
+}
+
 const app = new Hono();
 
 function loadSection(s: typeof SECTIONS[number]) {
@@ -89,7 +175,16 @@ app.get('/', (c) => {
     };
   });
   const overall = items.length ? Math.round(items.reduce((a, b) => a + b.completion, 0) / items.length) : 0;
-  return c.json({ items, overall_completion: overall });
+
+  maybeKickOffExtraction(items);
+
+  return c.json({
+    items,
+    overall_completion: overall,
+    extraction_status: extractionStatus,
+    extraction_result: extractionResult,
+    extraction_error: extractionError,
+  });
 });
 
 app.get('/:id', (c) => {

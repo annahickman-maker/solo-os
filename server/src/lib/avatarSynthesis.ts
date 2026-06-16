@@ -12,7 +12,7 @@
 
 import type { AudienceQuote } from './audienceQuotes.js';
 
-const BRIDGE_URL = 'http://localhost:8788/run';
+import { BRIDGE_URL } from './bridge.js';
 
 export type SynthesisResult = {
   before_state: string;

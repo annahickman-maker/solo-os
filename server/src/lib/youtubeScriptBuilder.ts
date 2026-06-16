@@ -21,7 +21,7 @@ import {
   type CreatorContext,
 } from './creatorContext.js';
 
-const BRIDGE_URL = 'http://localhost:8789/run';
+import { BRIDGE_URL } from './bridge.js';
 
 function voicePrefix(ctx: CreatorContext): string {
   const block = buildVoiceStyleBlock(ctx);

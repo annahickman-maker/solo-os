@@ -14,6 +14,14 @@ import {
   extractWins,
   writeBrandSlotsToState,
   appendToBank,
+  extractAvatarsFromCore,
+  writeAvatarFiles,
+  extractPovsFromCore,
+  writePovFiles,
+  extractOfferRungsFromCore,
+  writeOfferRungs,
+  extractJourneyFromCore,
+  writeJourneyEntries,
 } from '../lib/extractFromCore.js';
 
 const app = new Hono();
@@ -37,6 +45,26 @@ app.post('/from-core', async (c) => {
       const stories = await extractMicroStories();
       const out = appendToBank('micro-stories', stories);
       result.micro_stories = { extracted: stories.length, ...out };
+    }
+    if (target === 'all' || target === 'avatars') {
+      const avatars = await extractAvatarsFromCore();
+      const out = writeAvatarFiles(avatars);
+      result.avatars = { extracted: avatars.length, ...out };
+    }
+    if (target === 'all' || target === 'povs') {
+      const povs = await extractPovsFromCore();
+      const out = writePovFiles(povs);
+      result.povs = { extracted: povs.length, ...out };
+    }
+    if (target === 'all' || target === 'rungs') {
+      const rungs = await extractOfferRungsFromCore();
+      const out = writeOfferRungs(rungs);
+      result.offer_rungs = { extracted: rungs.length, ...out };
+    }
+    if (target === 'all' || target === 'journey') {
+      const entries = await extractJourneyFromCore();
+      const out = writeJourneyEntries(entries);
+      result.journey = { extracted: entries.length, ...out };
     }
     if (target === 'verbatim-stories' || target === 'all-verbatim') {
       const stories = await extractVerbatimMicroStories();

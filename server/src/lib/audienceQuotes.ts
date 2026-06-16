@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { abs } from '../vault.js';
 
-const BRIDGE_URL = 'http://localhost:8788/run';
+import { BRIDGE_URL } from './bridge.js';
 const AUDIENCE_BANK = abs('00_System', 'audience-quotes.json');
 const MAX_TRANSCRIPT_CHARS = 100_000;
 

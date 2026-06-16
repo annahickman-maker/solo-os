@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { abs, loadFile, saveFile } from '../vault.js';
+import { BRIDGE_URL } from '../lib/bridge.js';
 import { buildOffersResponse, setFeaturedRung, clearFeaturedRung } from '../lib/offersPage.js';
 import { analyzeSection, type SectionKey as AnalysisSection } from '../lib/offerAnalysis.js';
 
@@ -759,7 +760,7 @@ app.post('/avatars/:id/generate-card-summary', async (c) => {
 
   let bridgeRes: Response;
   try {
-    bridgeRes = await fetch('http://localhost:8788/run', {
+    bridgeRes = await fetch(BRIDGE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
