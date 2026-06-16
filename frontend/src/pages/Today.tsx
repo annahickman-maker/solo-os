@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
-import type { Task } from '../api';
 import { Ring } from '../components/Ring';
 import { Card } from '../components/Card';
 import { ActivityTracker } from '../components/ActivityTracker';
@@ -183,7 +182,7 @@ export function Today() {
 
       <ActivityTracker date={viewedDateStr} dayStart={viewedDayStart} isToday={isToday} tasks={tasks} />
 
-      <LongGame topTasks={data?.top_tasks ?? []} />
+      <LongGame />
     </div>
   );
 }
@@ -523,8 +522,7 @@ function focusRungScore(rung: any): number {
   return Math.round(v * 100);
 }
 
-function LongGame({ topTasks }: { topTasks: Task[] }) {
-  const qc = useQueryClient();
+function LongGame() {
   const { data: reputation } = useQuery({ queryKey: ['reputation'], queryFn: api.reputation });
   const { data: offer } = useQuery({ queryKey: ['offers'], queryFn: api.offers });
 
@@ -538,200 +536,55 @@ function LongGame({ topTasks }: { topTasks: Task[] }) {
     ? `focus offer · ${focusRung.name || 'unnamed'}`
     : 'no focus offer set';
 
-  const toggleTask = useMutation({
-    mutationFn: (vars: { id: string; status: Task['status'] }) =>
-      api.updateTask(vars.id, { status: vars.status }),
-    onMutate: async (vars) => {
-      await qc.cancelQueries({ queryKey: ['today'] });
-      const prev = qc.getQueryData<{ top_tasks: Task[] }>(['today']);
-      if (prev) {
-        qc.setQueryData(['today'], {
-          ...prev,
-          top_tasks: prev.top_tasks.map((t) =>
-            t.id === vars.id ? { ...t, status: vars.status } : t
-          ),
-        });
-      }
-      return { prev };
-    },
-    onError: (_e, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData(['today'], ctx.prev);
-    },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: ['today'] });
-      qc.invalidateQueries({ queryKey: ['focus'] });
-    },
-  });
-
   function gotoProfile(tab: string) {
     const href = tab === 'reputation' ? '/profile/reputation' : '/profile/offer';
     window.history.pushState({}, '', href);
     window.dispatchEvent(new PopStateEvent('popstate'));
   }
 
-  const tasks = topTasks.slice(0, 3);
-
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: 'var(--space-4)',
-        alignItems: 'stretch',
-      }}
-      className="long-game__pair"
-    >
-      {/* Section 1 - where the focus is */}
-      <Card eyebrow="today" title="where the focus is" style={{ height: '100%' }}>
-        {tasks.length === 0 ? (
-          <p style={{ margin: 0, color: 'var(--muted-2)', fontStyle: 'italic' }}>
-            no tasks queued. add some in focus →
-          </p>
-        ) : (
-          <ol
-            style={{
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--space-3)',
-              flex: 1,
-            }}
-          >
-            {tasks.map((t, i) => {
-              const done = t.status === 'completed';
-              return (
-                <li
-                  key={t.id}
-                  style={{
-                    display: 'flex',
-                    gap: 'var(--space-3)',
-                    alignItems: 'flex-start',
-                    padding: 'var(--space-3)',
-                    borderRadius: 'var(--radius-md)',
-                    transition: 'background 0.15s',
-                  }}
-                  className="long-game__task-row"
-                >
-                  <button
-                    type="button"
-                    onClick={() =>
-                      toggleTask.mutate({ id: t.id, status: done ? 'pending' : 'completed' })
-                    }
-                    aria-label={done ? 'mark task as not done' : 'mark task as done'}
-                    title={done ? 'mark as not done' : 'mark as done'}
-                    style={{
-                      ...buttonReset,
-                      width: 22,
-                      height: 22,
-                      minWidth: 22,
-                      marginTop: 2,
-                      borderRadius: '50%',
-                      border: '1.5px solid var(--muted-2)',
-                      background: done ? 'var(--recovery)' : 'transparent',
-                      borderColor: done ? 'var(--recovery)' : 'var(--muted-2)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s',
-                    }}
-                  >
-                    {done && (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--bg)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    )}
-                  </button>
-                  <span
-                    style={{
-                      fontFamily: 'var(--font-display)',
-                      fontSize: '1.2rem',
-                      fontWeight: 600,
-                      color: 'var(--muted)',
-                      minWidth: '1.2em',
-                      lineHeight: 1.35,
-                    }}
-                  >
-                    {i + 1}
-                  </span>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }}>
-                    <span
-                      style={{
-                        fontFamily: 'var(--font-display)',
-                        fontWeight: 600,
-                        fontSize: '1.05rem',
-                        lineHeight: 1.35,
-                        textDecoration: done ? 'line-through' : 'none',
-                        color: done ? 'var(--muted)' : 'inherit',
-                      }}
-                    >
-                      {t.title}
-                    </span>
-                    {(t.category || t.project_name) && (
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {t.category && <span style={chipStyle}>{t.category}</span>}
-                        {t.project_name && <span style={chipStyle}>{t.project_name}</span>}
-                      </div>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        )}
-      </Card>
+    <Card eyebrow="the long game" title="how the bigger picture moves">
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 'var(--space-4)',
+          alignItems: 'start',
+        }}
+        className="long-game__dials"
+      >
+        <button type="button" onClick={() => gotoProfile('reputation')} className="long-game__col" style={{ ...colStyle, ...buttonReset }}>
+          <span className="eyebrow">reputation</span>
+          <Ring
+            value={(reputation?.overall_score ?? 0) / 100}
+            label=""
+            bigNumber={`${reputation?.overall_score ?? 0}`}
+            unit="%"
+            color="var(--strain)"
+          />
+          <span className="muted" style={subStyle}>value · authority · pov · connection</span>
+        </button>
 
-      {/* Section 2 - how the bigger picture moves */}
-      <Card eyebrow="the long game" title="how the bigger picture moves" style={{ height: '100%' }}>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: 'var(--space-4)',
-            alignItems: 'start',
-            flex: 1,
-          }}
-          className="long-game__dials"
-        >
-          <button type="button" onClick={() => gotoProfile('reputation')} className="long-game__col" style={{ ...colStyle, ...buttonReset }}>
-            <span className="eyebrow">reputation</span>
-            <Ring
-              value={(reputation?.overall_score ?? 0) / 100}
-              label=""
-              bigNumber={`${reputation?.overall_score ?? 0}`}
-              unit="%"
-              color="var(--strain)"
-            />
-            <span className="muted" style={subStyle}>value · authority · pov · connection</span>
-          </button>
-
-          <button type="button" onClick={() => gotoProfile('offer')} className="long-game__col" style={{ ...colStyle, ...buttonReset }}>
-            <span className="eyebrow">offer</span>
-            <Ring
-              value={focusOfferScore / 100}
-              label=""
-              bigNumber={`${focusOfferScore}`}
-              unit="%"
-              color="var(--sleep)"
-            />
-            <span className="muted" style={subStyle}>{focusOfferLabel}</span>
-          </button>
-        </div>
-      </Card>
+        <button type="button" onClick={() => gotoProfile('offer')} className="long-game__col" style={{ ...colStyle, ...buttonReset }}>
+          <span className="eyebrow">offer</span>
+          <Ring
+            value={focusOfferScore / 100}
+            label=""
+            bigNumber={`${focusOfferScore}`}
+            unit="%"
+            color="var(--sleep)"
+          />
+          <span className="muted" style={subStyle}>{focusOfferLabel}</span>
+        </button>
+      </div>
 
       <style>{`
-        @media (max-width: 880px) {
-          .long-game__pair { grid-template-columns: 1fr !important; }
-        }
         @media (max-width: 560px) {
           .long-game__dials { grid-template-columns: 1fr !important; }
         }
         .long-game__col:hover { background: rgba(255,255,255,0.03); border-color: var(--hairline); }
-        .long-game__task-row:hover { background: rgba(255,255,255,0.03); }
       `}</style>
-    </div>
+    </Card>
   );
 }
 
@@ -753,17 +606,6 @@ const buttonReset: React.CSSProperties = {
   font: 'inherit',
   color: 'inherit',
   cursor: 'pointer',
-};
-
-const chipStyle: React.CSSProperties = {
-  fontSize: 10,
-  letterSpacing: '0.1em',
-  textTransform: 'uppercase',
-  fontWeight: 600,
-  color: 'var(--muted)',
-  background: 'rgba(255,255,255,0.06)',
-  padding: '3px 8px',
-  borderRadius: 'var(--radius-pill)',
 };
 
 const subStyle: React.CSSProperties = {

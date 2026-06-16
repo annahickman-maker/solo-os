@@ -121,6 +121,17 @@ info "Installing dependencies and building Solo OS.app. Takes about 2 minutes."
 cd "$INSTALL_DIR"
 ./setup.sh || fail "Setup failed. Scroll up to see the last error."
 
+# Give macOS Spotlight ~60s to finish indexing the freshly-cloned folder
+# BEFORE we launch the dashboard. Spotlight touches inode metadata during
+# its first pass, which Vite's file watcher misreads as source edits and
+# starts a cascade of phantom "page reload" pushes to the browser. The
+# net effect: a 1-2 minute window where the page never finishes mounting.
+# Sleeping here lets the indexer drain before Vite starts watching.
+step "Letting macOS finish indexing the new files"
+info "About a minute. This makes the first launch smooth."
+sleep 60
+ok "Ready to launch."
+
 # ─── 7. Launch ────────────────────────────────────────────────────────────
 
 step "Launching Solo OS"
