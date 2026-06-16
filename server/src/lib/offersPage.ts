@@ -692,29 +692,13 @@ function loadPricingRungs(): PricingRung[] {
     raw = [];
   }
 
-  // Seed defaults the first time the file is empty so the creator sees the
-  // low / mid / high frame immediately. Once she edits any rung the seed is
-  // a real persisted entry like any other.
-  if (raw.length === 0) {
-    raw = (['low', 'mid', 'high'] as const).map((tier, i) => ({
-      id: `seed-${tier}`,
-      price_label: '',
-      name: '',
-      proof_required: null,
-      promise: '',
-      status: 'idea',
-      sort_order: i + 1,
-      tier,
-      avatar_id: null,
-      featured: false,
-      created_at: now,
-      updated_at: now,
-    }));
-    try {
-      fs.mkdirSync(abs('00_System'), { recursive: true });
-      fs.writeFileSync(PRICING_RUNGS_FILE, JSON.stringify(raw, null, 2));
-    } catch {}
-  }
+  // No more "untitled offer" placeholder seeding. Previously this seeded three
+  // empty rungs (low/mid/high) on first load so the offer page had a frame to
+  // look at - but it created the wrong first impression ("here are three things
+  // you have not done"). Empty stays empty now. New users get rungs from the
+  // auto-extraction over their core_offer-suite.md, or they click "+ add offer"
+  // to create their own. the creator's existing rungs are persisted in the JSON file
+  // and unaffected by this change.
 
   // Normalise legacy rows that don't have the new fields yet.
   const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);

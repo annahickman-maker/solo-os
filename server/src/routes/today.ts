@@ -33,8 +33,15 @@ type GoalFrontmatter = {
   parent_id?: string | null;
 };
 
-function greetingFromHour(_h?: number): string {
-  return 'hello';
+// Greeting reads the user's wall-clock hour and the name slot in state.md.
+// Without a name it's "morning" / "afternoon" / "evening"; with a name it's
+// "morning {name}" etc. The bare "hello" fallback was a placeholder that
+// felt unfinished on first-load.
+function greetingFromHour(hour?: number, name?: string): string {
+  const h = typeof hour === 'number' ? hour : new Date().getHours();
+  const tod = h < 5 ? 'evening' : h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+  const trimmed = (name ?? '').trim();
+  return trimmed ? `${tod} ${trimmed.toLowerCase()}` : tod;
 }
 
 // Local wall-clock YYYY-MM-DD. We use local time everywhere so "today"
@@ -255,8 +262,18 @@ app.get('/', async (c) => {
     }));
   const strainScore = computeStrain(completedTasksForStrain, dayBlocks);
 
+  // Pull the user's name from state.md slot_user_name if set, fall back to
+  // slot_first_name. Greeting reads as "morning the creator" / "evening" etc.
+  const stateFm = (loadFile(abs('00_System', 'state.md'))?.frontmatter ?? {}) as Record<string, unknown>;
+  const nameSlot =
+    typeof stateFm.slot_user_name === 'string' && stateFm.slot_user_name.trim()
+      ? (stateFm.slot_user_name as string)
+      : typeof stateFm.slot_first_name === 'string' && stateFm.slot_first_name.trim()
+      ? (stateFm.slot_first_name as string)
+      : undefined;
+
   return c.json({
-    greeting: greetingFromHour(),
+    greeting: greetingFromHour(undefined, nameSlot),
     date: requestedDate ?? localYmd(new Date()),
     focus_goal,
     top_tasks: top,

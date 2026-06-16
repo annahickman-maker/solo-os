@@ -37,6 +37,8 @@ import audienceQuotes from './routes/audienceQuotes.js';
 import instagram from './routes/instagram.js';
 import journey from './routes/journey.js';
 import decks, { serveDeckFile, serveDeckAsset } from './routes/decks.js';
+import foundation from './routes/foundation.js';
+import onboarding from './routes/onboarding.js';
 
 const PORT = Number(process.env.PORT ?? 8790);
 
@@ -156,6 +158,8 @@ app.route('/api/audience-quotes', audienceQuotes);
 app.route('/api/instagram', instagram);
 app.route('/api/journey', journey);
 app.route('/api/decks', decks);
+app.route('/api/foundation', foundation);
+app.route('/api/onboarding', onboarding);
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`solo-os-dashboard-server listening on http://localhost:${info.port}`);

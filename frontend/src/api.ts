@@ -615,8 +615,33 @@ export const api = {
 
   archivePovs: () => request<{ items: Array<{ id: string; title: string; format: string; category: string; opinion: string }> }>('/api/archive/povs'),
 
-  profile: () => request<{ items: Array<{ id: string; title: string; summary: string; phase: string; sort_order: number; completion: number; updated_at: number }>; overall_completion: number }>('/api/profile'),
+  profile: () => request<{ items: Array<{ id: string; title: string; summary: string; phase: string; sort_order: number; completion: number; updated_at: number }>; overall_completion: number; slots_populated?: number; slots_total?: number; extraction_status?: 'idle' | 'running' | 'completed' | 'error'; extraction_error?: string | null; extraction_result?: Record<string, unknown> | null }>('/api/profile'),
   getProfileSection: (id: string) => request<{ id: string; title: string; content: string; summary: string; phase: string; completion: number; updated_at: number }>(`/api/profile/${id}`),
+  bridgeHealth: () => request<{ ok: boolean; claude_bin: string | null; error: string | null }>('/api/profile/bridge-health'),
+
+  foundation: () => request<{
+    groups: Array<{
+      id: string;
+      kind: string;
+      label: string;
+      populated: number;
+      total: number | null;
+      filled_pct: number | null;
+      source_path: string;
+      source_layer1: string | null;
+      status: 'empty' | 'partial' | 'populated' | 'unknown';
+      latest_preview: string | null;
+      recent: Array<{ id?: string; title?: string; preview?: string }>;
+      missing_hints: string[];
+    }>;
+    summary: {
+      total_groups: number;
+      populated: number;
+      partial: number;
+      empty: number;
+      overall_pct: number;
+    };
+  }>('/api/foundation'),
 
   getPov: (id: string) => request<{ id: string; title: string; format: string; content?: string }>(`/api/archive/povs/${id}`),
   archiveTranscripts: () => request<{ items: Array<{ id: string; filename: string; title?: string; type: string; date?: number; processed: number; summary?: string; client?: string | null; youtube_url?: string | null; has_raw?: boolean }> }>('/api/archive/transcripts'),

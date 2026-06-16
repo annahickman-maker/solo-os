@@ -772,7 +772,7 @@ Return ONLY valid JSON in this shape:
   "avatars": [
     {
       "name": "first name only, lowercase",
-      "title": "display title, e.g. 'Avatar - Adriana'",
+      "title": "display title, e.g. 'Avatar - the avatar'",
       "one_line": "one sentence describing who she is + what she's trying to do",
       "who_she_is": "2-4 sentences: background, current state, the human details (age, location, work, family if mentioned)",
       "trying_to_do": "1-2 sentences: what she wants to achieve",

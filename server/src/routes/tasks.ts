@@ -27,6 +27,17 @@ import { resetStaleWeeklyTasks, stampThisWeek } from '../lib/weeklyReset.js';
 
 const TASKS_DIR_REL = path.join('00_System', 'tasks');
 
+// Local wall-clock YYYY-MM-DD. Using toISOString() here was a real bug:
+// after ~5pm PDT, UTC is already on the next calendar day, so a task ticked
+// in the evening would stamp completed_at with tomorrow's date and never
+// show up in today's strain / tasks_done_today on the Today page.
+function localYmd(d: Date = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 type TaskStatus = 'pending' | 'in_progress' | 'completed';
 type TaskCategory =
   | 'filming'
@@ -206,7 +217,7 @@ app.post('/', async (c) => {
   while (loadFile(taskPath(id))) {
     id = `task-${slug}-${n++}`;
   }
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localYmd();
   // Frontend sends project_id; file format uses project. Treat them as the
   // same field (a project OR client id - never both).
   const projectRef =
@@ -239,7 +250,7 @@ app.patch('/:id', async (c) => {
     | null;
   if (!body) return c.json({ error: 'body required' }, 400);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localYmd();
   const patch: Partial<TaskFrontmatter> = { updated: today };
   if (body.status !== undefined) {
     patch.status = body.status;

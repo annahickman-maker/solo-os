@@ -8,6 +8,7 @@
 import { Hono } from 'hono';
 import fs from 'node:fs';
 import { abs, loadFile } from '../vault.js';
+import { BRIDGE_URL } from '../lib/bridge.js';
 import {
   extractAllFromCore,
   writeBrandSlotsToState,
@@ -154,6 +155,89 @@ function loadSection(s: typeof SECTIONS[number]) {
   };
 }
 
+// ─── AI bridge connectivity ────────────────────────────────────────────────
+//
+// Surface whether the claude-bridge is up AND has the `claude` CLI binary
+// available. The frontend uses this to render a clear "AI features need
+// setup" banner instead of letting users hit silent extraction failures.
+//
+// We do NOT spend a real Claude call to test auth - that would burn tokens
+// on every dashboard load. We only check the bridge is alive + the CLI is
+// installed. If a real call later fails because auth was never run, the
+// extraction_error field surfaces it.
+
+type BridgeHealth = {
+  ok: boolean;
+  claude_bin: string | null;
+  error: string | null;
+};
+
+async function checkBridgeHealth(): Promise<BridgeHealth> {
+  // BRIDGE_URL is .../run - swap for /health.
+  const healthUrl = BRIDGE_URL.replace(/\/run$/, '/health');
+  try {
+    const res = await fetch(healthUrl, { signal: AbortSignal.timeout(2000) });
+    if (!res.ok) return { ok: false, claude_bin: null, error: `bridge returned ${res.status}` };
+    const body = (await res.json()) as { ok?: boolean; claude_bin?: string };
+    return {
+      ok: body?.ok === true,
+      claude_bin: body?.claude_bin ?? null,
+      error: null,
+    };
+  } catch (err: any) {
+    return {
+      ok: false,
+      claude_bin: null,
+      error: err?.message ?? 'bridge unreachable',
+    };
+  }
+}
+
+app.get('/bridge-health', async (c) => {
+  const h = await checkBridgeHealth();
+  return c.json(h);
+});
+
+// The expected slot_* keys derived from Layer 2 - these are what extraction
+// fills and what Reputation + Offer pages read from. Keeping this in sync
+// with extractFromCore's SLOT_EXTRACT_PROMPT shape.
+const EXPECTED_SLOTS = [
+  'positioning_statement',
+  'who_you_help',
+  'before_state',
+  'after_state',
+  'transformation_result',
+  'value_method',
+  'value_step_1',
+  'value_step_2',
+  'value_step_3',
+  'value_step_4',
+  'value_step_5',
+  'common_enemy',
+  'core_named_mechanism',
+  'pov_1_flip',
+  'pov_2_flip',
+  'pov_3_flip',
+  'compressed_story',
+  'transformation_statement',
+];
+
+function countPopulatedSlots(): { populated: number; total: number } {
+  const total = EXPECTED_SLOTS.length;
+  try {
+    const state = loadFile(abs('00_System', 'state.md'));
+    const fm = (state?.frontmatter ?? {}) as Record<string, unknown>;
+    let populated = 0;
+    for (const slot of EXPECTED_SLOTS) {
+      const v = fm[`slot_${slot}`];
+      if (typeof v === 'string' && v.trim().length > 0) populated++;
+    }
+    return { populated, total };
+  } catch {
+    return { populated: 0, total };
+  }
+}
+
 app.get('/', (c) => {
   const items = SECTIONS.map((s) => {
     const x = loadSection(s);
@@ -168,12 +252,19 @@ app.get('/', (c) => {
     };
   });
   const overall = items.length ? Math.round(items.reduce((a, b) => a + b.completion, 0) / items.length) : 0;
+  const slotCounts = countPopulatedSlots();
 
   maybeKickOffExtraction(items);
 
   return c.json({
     items,
     overall_completion: overall,
+    // Layer 2 indicator: how many structured slot_* fields are actually populated
+    // in state.md. A user can have 100% Layer 1 file completion (all 6 core files
+    // exist and are full) but 0% Layer 2 slots until extraction runs. The UI
+    // surfaces BOTH numbers so "100% complete" stops being a false positive.
+    slots_populated: slotCounts.populated,
+    slots_total: slotCounts.total,
     extraction_status: extractionStatus,
     extraction_result: extractionResult,
     extraction_error: extractionError,

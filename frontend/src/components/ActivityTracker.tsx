@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import type { CalendarEvent, DeepWorkBlock, PickableTask, TickedTask } from '../api';
 import { Card } from '../components/Card';
+import { FloatingTimerButton } from '../components/FloatingTimer';
 
 // Whoop-style activity tracker. Replaces the "deep work" card on Today.
 // One running timer at the top (active block). Below: today's completed
@@ -389,6 +390,7 @@ function ActiveBlock({
         </div>
       ) : (
         <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          <FloatingTimerButton block={block} onFinish={onFinish} finishing={finishing} />
           <button type="button" className="btn btn--ghost" onClick={openEdit} title="edit times">
             edit
           </button>
