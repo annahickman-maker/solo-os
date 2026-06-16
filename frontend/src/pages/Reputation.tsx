@@ -346,11 +346,11 @@ function ValuePanel({
         subtitle="a running total of everything you've published. the more you ship, the more claude has to pull from when writing in your voice."
       >
         <div className="rep-vmetrics">
-          <div className="rep-vmetric">
-            <span className="rep-eyebrow">total hours shipped</span>
-            <span className="rep-vmetric__num">{baseline.total_long_form_hours}h</span>
-            <span className="rep-vmetric__sub">across all published videos</span>
-          </div>
+          <HoursShippedTile
+            autoHours={baseline.total_long_form_hours}
+            manualHours={baseline.hours_on_transformation}
+            onSave={(v) => onSaveField('hours_on_transformation', v)}
+          />
           <div className="rep-vmetric">
             <span className="rep-eyebrow">transformation series</span>
             <span className="rep-vmetric__num">
@@ -378,6 +378,104 @@ function ValuePanel({
         currentKind="value"
       />
     </>
+  );
+}
+
+// HoursShippedTile - editable count of long-form content hours. Auto-counted
+// from published videos in the channel folder. If the user has no YouTube /
+// Instagram linked (or simply has content elsewhere), they can click to type
+// the number in manually. The score uses whichever is larger.
+function HoursShippedTile({
+  autoHours,
+  manualHours,
+  onSave,
+}: {
+  autoHours: number;
+  manualHours: number;
+  onSave: (value: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(manualHours || ''));
+  useEffect(() => {
+    if (!editing) setDraft(String(manualHours || ''));
+  }, [manualHours, editing]);
+
+  const effective = Math.max(autoHours, manualHours);
+  const usingManual = manualHours > autoHours;
+
+  function save() {
+    const trimmed = draft.trim();
+    if (trimmed === '') {
+      onSave(null);
+    } else {
+      const parsed = parseFloat(trimmed);
+      onSave(isFinite(parsed) && parsed >= 0 ? String(Math.round(parsed * 10) / 10) : null);
+    }
+    setEditing(false);
+  }
+
+  return (
+    <div className="rep-vmetric" style={{ position: 'relative' }}>
+      <span className="rep-eyebrow">total hours shipped</span>
+      {editing ? (
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '4px 0' }}>
+          <input
+            type="number"
+            min={0}
+            step="0.1"
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') save();
+              else if (e.key === 'Escape') {
+                setDraft(String(manualHours || ''));
+                setEditing(false);
+              }
+            }}
+            onBlur={save}
+            style={{
+              width: 90,
+              background: 'transparent',
+              border: '1px solid var(--hairline)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--ink)',
+              fontFamily: 'var(--font-display)',
+              fontSize: '1.75rem',
+              fontWeight: 700,
+              padding: '2px 8px',
+              outline: 'none',
+            }}
+          />
+          <span className="rep-vmetric__num" style={{ fontSize: '1.25rem' }}>h</span>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          title="click to type in your hours manually if your channel is not linked"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            padding: 0,
+            margin: 0,
+            cursor: 'pointer',
+            textAlign: 'left',
+            color: 'inherit',
+            font: 'inherit',
+          }}
+        >
+          <span className="rep-vmetric__num">{effective}h</span>
+        </button>
+      )}
+      <span className="rep-vmetric__sub">
+        {usingManual
+          ? 'manual override · click number to edit'
+          : autoHours > 0
+            ? 'across all published videos · click to override'
+            : 'click the number to enter manually if your channel is not linked'}
+      </span>
+    </div>
   );
 }
 

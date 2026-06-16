@@ -254,9 +254,21 @@ function loadOutputBaseline(slots: Slots) {
     if (fm.has_transcript === true) withTranscript++;
     else if (typeof fm.youtube_id === 'string' && /## Transcript/.test(v.body)) withTranscript++;
   }
+  // Manual override: the user may type a number in the UI if they cannot
+  // (or have not yet) link YouTube / Instagram / wherever their content
+  // lives. Stored as a string in the slot, parsed back to a clean number
+  // here. NaN / negatives fall back to 0.
+  const manualRaw = slot(slots, 'hours_on_transformation');
+  let manualHours = 0;
+  if (typeof manualRaw === 'number' && isFinite(manualRaw)) {
+    manualHours = Math.max(0, manualRaw);
+  } else if (typeof manualRaw === 'string' && manualRaw.trim() !== '') {
+    const parsed = parseFloat(manualRaw);
+    if (isFinite(parsed)) manualHours = Math.max(0, parsed);
+  }
   return {
     total_long_form_hours: Math.round((totalSec / 3600) * 10) / 10,
-    hours_on_transformation: (slot(slots, 'hours_on_transformation') as number) ?? 0,
+    hours_on_transformation: manualHours,
     posting_consistency_90d: 0.5,
     current_streak_weeks: 0,
     multiplier: 1,

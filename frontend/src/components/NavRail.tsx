@@ -1,15 +1,21 @@
 import { NavLink } from 'react-router-dom';
 
-const ITEMS = [
+// Two groups separated by a hairline. Top group = "where I am right now"
+// (today, focus). Bottom group = everything else - the systems that move
+// slower than the day.
+const TOP_ITEMS = [
   { to: '/', label: 'today', end: true },
   { to: '/focus', label: 'focus' },
-  { to: '/projects', label: 'projects' },
-  { to: '/content', label: 'content' },
+];
+
+const REST_ITEMS = [
   { to: '/profile', label: 'profile' },
-  // { to: '/metrics', label: 'metrics' }, // parked - re-add when she comes back to it
-  { to: '/skills', label: 'skills' },
+  { to: '/content', label: 'content' },
+  { to: '/projects', label: 'projects' },
   { to: '/vault', label: 'vault' },
+  { to: '/skills', label: 'skills' },
   { to: '/inbox', label: 'inbox' },
+  // { to: '/metrics', label: 'metrics' }, // parked - re-add when she comes back to it
 ];
 
 export function NavRail() {
@@ -21,11 +27,37 @@ export function NavRail() {
       </div>
       <nav>
         <ul className="nav-rail__list">
-          {ITEMS.map((it) => (
+          {TOP_ITEMS.map((it) => (
             <li key={it.to}>
               <NavLink
                 to={it.to}
                 end={it.end}
+                className={({ isActive }) =>
+                  `nav-rail__link${isActive ? ' nav-rail__link--active' : ''}`
+                }
+              >
+                <span className="nav-rail__dot" />
+                <span className="nav-rail__link-text">{it.label}</span>
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+        {/* Thin hairline + extra spacing separating "today/focus" from the
+            rest of the nav. Makes the top pair feel like the active surface
+            and the bottom group feel like the system underneath. */}
+        <div
+          aria-hidden="true"
+          style={{
+            margin: '12px 16px',
+            height: 1,
+            background: 'var(--hairline)',
+          }}
+        />
+        <ul className="nav-rail__list">
+          {REST_ITEMS.map((it) => (
+            <li key={it.to}>
+              <NavLink
+                to={it.to}
                 className={({ isActive }) =>
                   `nav-rail__link${isActive ? ' nav-rail__link--active' : ''}`
                 }

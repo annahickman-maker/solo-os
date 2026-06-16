@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { Ring } from '../components/Ring';
 import { Card } from '../components/Card';
 import { ActivityTracker } from '../components/ActivityTracker';
 import { greetingFromHour } from '../lib/format';
 
-// Use the user's local wall-clock date everywhere - "today" should mean
-// "today in PDT/PST" not "today in UTC". This matters most after local
-// 5pm when UTC has already rolled to tomorrow.
+// Local wall-clock date helpers. "Today" should mean today in the user's
+// timezone, never UTC - this matters most after local 5pm when UTC has
+// already rolled to tomorrow.
 function ymd(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -38,15 +38,7 @@ function dayLabel(offset: number, date: Date): string {
   });
 }
 
-function formatHours(sec: number): string {
-  if (sec < 60) return '0m';
-  if (sec < 3600) return `${Math.floor(sec / 60)}m`;
-  const h = sec / 3600;
-  return h === Math.floor(h) ? `${h}h` : `${h.toFixed(1)}h`;
-}
-
 export function Today() {
-  const qc = useQueryClient();
   const today = (() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -57,26 +49,11 @@ export function Today() {
   const todayStr = ymd(today);
   const isToday = viewedDateStr === todayStr;
   const dayOffset = diffDays(selectedDate, today);
-  // Local midnight of the viewed day, as Unix seconds. This is the single
-  // source of truth for "what day are we showing" - backend filters with it,
-  // so timezone never matters server-side. Selected day → its local midnight.
   const viewedDayStart = Math.floor(selectedDate.getTime() / 1000);
 
   const { data, error } = useQuery({
     queryKey: ['today', viewedDateStr],
     queryFn: () => api.today({ date: viewedDateStr, day_start: viewedDayStart }),
-  });
-  // Deep work data is now read inside <ActivityTracker />, kept the query
-  // running for the rings to reflect totals.
-  useQuery({
-    queryKey: ['deep-work', 'today'],
-    queryFn: api.deepWorkToday,
-    refetchInterval: 30000,
-  });
-
-  const setTarget = useMutation({
-    mutationFn: (seconds: number) => api.setDeepWorkTarget(seconds),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['today'] }),
   });
 
   if (error) {
@@ -87,6 +64,8 @@ export function Today() {
   const dateStr =
     data?.date ??
     new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  // The server still returns deep_work_* fields - we just don't render them
+  // on the page anymore. Keep them in the fallback so the type matches.
   const rings = data?.rings ?? {
     strain_score: 0,
     strain_max: 21,
@@ -100,20 +79,19 @@ export function Today() {
   };
   const tasks = data?.top_tasks ?? [];
 
-  function editDeepWorkTarget() {
-    const currentHours = rings.deep_work_target_seconds / 3600;
-    const v = window.prompt(
-      'daily deep-work target in hours (e.g. 2.5):',
-      String(currentHours)
-    );
-    if (!v) return;
-    const h = parseFloat(v);
-    if (!Number.isFinite(h) || h <= 0) return;
-    setTarget.mutate(Math.round(h * 3600));
-  }
-
   return (
-    <div className="stack" style={{ gap: 'var(--space-7)' }}>
+    <div
+      className="stack"
+      style={{
+        gap: 'var(--space-7)',
+        // Two side-by-side dial cards at the top need horizontal room. Wider
+        // cap, still centered. Drop to a single column on narrower viewports
+        // via the media-query in <style> below.
+        maxWidth: 1200,
+        margin: '0 auto',
+        width: '100%',
+      }}
+    >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
         <header className="page-header">
           <span className="eyebrow">{dateStr}</span>
@@ -130,59 +108,59 @@ export function Today() {
         />
       </div>
 
+      {/* Side-by-side top: strain dial on the LEFT, task list on the RIGHT.
+          Both cards have a 378px floor on desktop so the layout doesn't
+          collapse to a stub on a light task day; either can stretch taller
+          when the task list has more rows. Below 980px the row stacks and
+          the floor is dropped. */}
       <div
-        className="today__rings"
+        className="today__top-row"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-          gap: 'var(--space-3)',
-          justifyItems: 'center',
-          alignItems: 'start',
-          padding: 'var(--space-2) 0',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 'var(--space-4)',
+          alignItems: 'stretch',
         }}
       >
-        <Ring
-          value={rings.focus_pct}
-          label="focus"
-          bigNumber={`${Math.round(rings.focus_pct * 100)}`}
-          unit="%"
-          subline={`${rings.focus_current} / ${rings.focus_target || '?'}`}
-          size="hero"
-          color="var(--recovery)"
-        />
-        <DeepWorkRing
-          seconds={rings.deep_work_seconds}
-          targetSeconds={rings.deep_work_target_seconds}
-          onEditTarget={editDeepWorkTarget}
-        />
-        <Ring
-          value={rings.strain_score / rings.strain_max}
-          label="strain"
-          bigNumber={rings.strain_score.toFixed(1)}
-          size="hero"
-          color="var(--strain)"
+        <Card style={{ height: '100%', minHeight: 378 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              height: '100%',
+            }}
+          >
+            <Ring
+              value={rings.strain_score / rings.strain_max}
+              label="impact"
+              bigNumber={rings.strain_score.toFixed(1)}
+              subline={`${rings.tasks_done_today} task${rings.tasks_done_today === 1 ? '' : 's'} ticked today`}
+              size="hero"
+              color="var(--strain)"
+            />
+          </div>
+        </Card>
+
+        <ActivityTracker
+          date={viewedDateStr}
+          dayStart={viewedDayStart}
+          isToday={isToday}
+          tasks={tasks}
         />
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-          gap: 'var(--space-3)',
-          fontSize: 'var(--body-sm)',
-          color: 'var(--muted)',
-          padding: '0 var(--space-3)',
-          textAlign: 'center',
-        }}
-      >
-        <span>{rings.focus_target ? `${Math.round(rings.focus_pct * 100)}% toward goal` : 'no active goal'}</span>
-        <span>{Math.round((rings.deep_work_seconds / Math.max(1, rings.deep_work_target_seconds)) * 100)}% toward today's focus</span>
-        <span>{rings.tasks_done_today} task{rings.tasks_done_today === 1 ? '' : 's'} ticked today</span>
-      </div>
+      <LongGame
+        focusPct={rings.focus_pct}
+        focusCurrent={rings.focus_current}
+        focusTarget={rings.focus_target}
+      />
 
-      <ActivityTracker date={viewedDateStr} dayStart={viewedDayStart} isToday={isToday} tasks={tasks} />
-
-      <LongGame />
+      <style>{`
+        @media (max-width: 980px) {
+          .today__top-row { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </div>
   );
 }
@@ -328,7 +306,6 @@ function DatePopover({
   const month = viewMonth.getUTCMonth();
   const monthLabel = viewMonth.toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' }).toUpperCase();
 
-  // Build cells - week starts Monday. Day-of-week: JS Sun=0..Sat=6, we want Mon=0..Sun=6.
   const firstOfMonth = new Date(Date.UTC(year, month, 1));
   const firstDow = (firstOfMonth.getUTCDay() + 6) % 7;
   const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
@@ -427,73 +404,9 @@ const popChevStyle: React.CSSProperties = {
 };
 
 // =========================================================================
-// Deep Work ring with a small pencil-edit button overlay for the target.
+// LongGame: just the reputation + offer dials now. The "where the focus is"
+// task list was moved up into the ActivityTracker card.
 // =========================================================================
-function DeepWorkRing({
-  seconds,
-  targetSeconds,
-  onEditTarget,
-}: {
-  seconds: number;
-  targetSeconds: number;
-  onEditTarget: () => void;
-}) {
-  const safeTarget = Math.max(1, targetSeconds);
-  return (
-    <div style={{ position: 'relative', width: '100%', display: 'flex', justifyContent: 'center' }}>
-      <Ring
-        value={Math.min(1, seconds / safeTarget)}
-        label="deep work"
-        bigNumber={`${Math.round((seconds / safeTarget) * 100)}`}
-        unit="%"
-        subline={`${formatHours(seconds)} / ${formatHours(targetSeconds)}`}
-        size="hero"
-        color="var(--sleep)"
-      />
-      <button
-        type="button"
-        onClick={onEditTarget}
-        title="edit daily target"
-        aria-label="edit daily deep work target"
-        style={{
-          position: 'absolute',
-          top: 4,
-          right: 'calc(50% - 112px)', // align with the right edge of the 220px max-width ring
-          width: 32,
-          height: 32,
-          borderRadius: '50%',
-          background: 'transparent',
-          border: 'none',
-          color: 'var(--ink)',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 0,
-        }}
-      >
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          stroke="none"
-          aria-hidden="true"
-        >
-          <path d="M5 19h2.4l8.6-8.6-2.4-2.4L5 16.6V19zm14.7-12.3l-2.4-2.4a1 1 0 0 0-1.4 0l-1.9 1.9 3.8 3.8 1.9-1.9a1 1 0 0 0 0-1.4z" />
-        </svg>
-      </button>
-    </div>
-  );
-}
-
-// =========================================================================
-// LongGame: where the focus is + how the bigger picture moves.
-// Left half = the 3 main tasks for today. Right half = brand + offer dials.
-// =========================================================================
-// Stage-weighted scoring for a single pricing rung (focus offer). Mirrors the
-// math in Offer.tsx so the Today + Focus pages show the SAME number for the
-// focus offer that its overall-offer-score card shows.
 const FOCUS_STAGE_WEIGHTS: Record<string, Record<'avatar' | 'pricing' | 'proof' | 'validation' | 'content', number>> = {
   idea:      { avatar: 0.30, content: 0.20, proof: 0.20, validation: 0.15, pricing: 0.15 },
   validated: { avatar: 0.25, content: 0.25, proof: 0.20, validation: 0.15, pricing: 0.15 },
@@ -522,13 +435,18 @@ function focusRungScore(rung: any): number {
   return Math.round(v * 100);
 }
 
-function LongGame() {
+function LongGame({
+  focusPct,
+  focusCurrent,
+  focusTarget,
+}: {
+  focusPct: number;
+  focusCurrent: number;
+  focusTarget: number;
+}) {
   const { data: reputation } = useQuery({ queryKey: ['reputation'], queryFn: api.reputation });
   const { data: offer } = useQuery({ queryKey: ['offers'], queryFn: api.offers });
 
-  // The "offer" dial reads the FOCUS (featured) offer's stage-weighted
-  // overall score. Falls back to the legacy suite-wide overall_score only if
-  // no rung is currently set as focus, so the dial is never blank.
   const pricingSection = offer?.sections?.find((s: any) => s.id === 'pricing');
   const focusRung = (pricingSection?.pricing_rungs ?? []).find((r: any) => r?.featured);
   const focusOfferScore = focusRung ? focusRungScore(focusRung) : (offer?.overall_score ?? 0);
@@ -536,50 +454,62 @@ function LongGame() {
     ? `focus offer · ${focusRung.name || 'unnamed'}`
     : 'no focus offer set';
 
-  function gotoProfile(tab: string) {
-    const href = tab === 'reputation' ? '/profile/reputation' : '/profile/offer';
+  function goto(href: string) {
     window.history.pushState({}, '', href);
     window.dispatchEvent(new PopStateEvent('popstate'));
   }
 
   return (
-    <Card eyebrow="the long game" title="how the bigger picture moves">
+    <Card eyebrow="the long game" title="the bigger picture">
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: 'var(--space-4)',
+          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+          gap: 'var(--space-3)',
+          justifyItems: 'center',
           alignItems: 'start',
         }}
         className="long-game__dials"
       >
-        <button type="button" onClick={() => gotoProfile('reputation')} className="long-game__col" style={{ ...colStyle, ...buttonReset }}>
-          <span className="eyebrow">reputation</span>
+        <button type="button" onClick={() => goto('/profile/reputation')} className="long-game__col" style={{ ...colStyle, ...buttonReset }}>
           <Ring
             value={(reputation?.overall_score ?? 0) / 100}
-            label=""
+            label="reputation"
             bigNumber={`${reputation?.overall_score ?? 0}`}
             unit="%"
+            size="hero"
             color="var(--strain)"
           />
           <span className="muted" style={subStyle}>value · authority · pov · connection</span>
         </button>
 
-        <button type="button" onClick={() => gotoProfile('offer')} className="long-game__col" style={{ ...colStyle, ...buttonReset }}>
-          <span className="eyebrow">offer</span>
+        <button type="button" onClick={() => goto('/profile/offer')} className="long-game__col" style={{ ...colStyle, ...buttonReset }}>
           <Ring
             value={focusOfferScore / 100}
-            label=""
+            label="offer"
             bigNumber={`${focusOfferScore}`}
             unit="%"
+            size="hero"
             color="var(--sleep)"
           />
           <span className="muted" style={subStyle}>{focusOfferLabel}</span>
         </button>
+
+        <button type="button" onClick={() => goto('/focus')} className="long-game__col" style={{ ...colStyle, ...buttonReset }}>
+          <Ring
+            value={focusPct}
+            label="focus"
+            bigNumber={`${Math.round(focusPct * 100)}`}
+            unit="%"
+            size="hero"
+            color="var(--recovery)"
+          />
+          <span className="muted" style={subStyle}>{focusCurrent} / {focusTarget || '?'} toward 90-day goal</span>
+        </button>
       </div>
 
       <style>{`
-        @media (max-width: 560px) {
+        @media (max-width: 880px) {
           .long-game__dials { grid-template-columns: 1fr !important; }
         }
         .long-game__col:hover { background: rgba(255,255,255,0.03); border-color: var(--hairline); }
