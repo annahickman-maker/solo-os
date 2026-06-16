@@ -735,3 +735,234 @@ export function writeJourneyEntries(entries: ExtractedJourneyEntry[]): { added: 
   }
   return { added, skipped };
 }
+
+// ─── Batched extraction (token-efficient) ───────────────────────────────────
+//
+// One call covers all 6 extractor types. The 6 core files are sent ONCE
+// instead of 6 times (or 4 times across the separate slot/avatar/POV/rung/
+// journey/wins extractors), so input tokens drop ~70% for the full first-run
+// extraction pass. Output token cost is similar to the sum of the 6 separate
+// calls. Wall clock is faster too because the model processes the file set
+// once and emits all outputs in a single generation.
+//
+// Quality trade-off: a single combined prompt is more crowded than 6 focused
+// ones. Mitigated by giving each section its own labelled JSON sub-key with
+// the same field rules the focused prompts use, so the model still gets
+// clear per-section guidance.
+
+const BATCH_EXTRACT_PROMPT = `You are extracting structured foundation data from a creator's 6 core vault files. You will return ONE JSON object with six keys: slots, avatars, povs, rungs, journey, wins. Each section has its own rules. Be precise and use the creator's own phrasings where they appear in the source.
+
+Return ONLY valid JSON in this shape:
+
+{
+  "slots": {
+    "positioning_statement": "...",
+    "who_you_help": "...",
+    "before_state": "...",
+    "after_state": "...",
+    "transformation_result": "...",
+    "value_method": "name of the method/system",
+    "value_step_1": "...", "value_step_2": "...", "value_step_3": "...", "value_step_4": "...", "value_step_5": "...",
+    "common_enemy": "...",
+    "core_named_mechanism": "...",
+    "pov_1_flip": "...", "pov_2_flip": "...", "pov_3_flip": "...",
+    "compressed_story": "...",
+    "transformation_statement": "..."
+  },
+  "avatars": [
+    {
+      "name": "first name only, lowercase",
+      "title": "display title, e.g. 'Avatar - Adriana'",
+      "one_line": "one sentence describing who she is + what she's trying to do",
+      "who_she_is": "2-4 sentences: background, current state, the human details (age, location, work, family if mentioned)",
+      "trying_to_do": "1-2 sentences: what she wants to achieve",
+      "before_state": "1-2 sentences: where she is now / what's frustrating her",
+      "after_state": "1-2 sentences: where she wants to be",
+      "limiting_mindsets": ["3-5 short bullets in her voice"],
+      "desire_language": ["3-5 short quotes/phrases of what she says she wants"],
+      "problem_language": ["3-5 short quotes/phrases of what's wrong"]
+    }
+  ],
+  "povs": [
+    {
+      "title": "short title (3-6 words)",
+      "pov": "one or two sentences stating the contrarian position. Often phrased as 'not X, but Y'.",
+      "idea_behind_it": "1-3 sentences of context - what makes this a POV vs a common opinion",
+      "why_believe_it": "1-3 sentences of reasoning or evidence",
+      "topics": ["1-3 topic tags from: positioning, offer-creation, content, audience, launch, scaling, mindset, voice"]
+    }
+  ],
+  "rungs": [
+    {
+      "tier": "low" | "mid" | "high",
+      "name": "offer name",
+      "price_label": "e.g. '$47/month' or '$10k+' or 'free'",
+      "promise": "one-sentence outcome statement - what the customer gets",
+      "proof_required": "what proof or asset the offer needs"
+    }
+  ],
+  "journey": [
+    {
+      "date": "YYYY-MM",
+      "type": "win" | "failure" | "lesson" | "avatar",
+      "title": "short title (max 12 words)",
+      "body": "1-3 sentences of context. Use the creator's voice."
+    }
+  ],
+  "wins": [
+    {
+      "title": "short specific result (max 12 words, includes numbers + timeline)",
+      "body": "1 sentence context",
+      "kind": "own" | "client",
+      "metric": "the specific number or proof point"
+    }
+  ]
+}
+
+Slot rules:
+- Each slot value is one short sentence (max 25 words).
+- If a slot is not clearly stated in the source, return null for that key.
+- pov_1_flip through pov_3_flip should be contrarian flips ("not X, but Y" stances).
+- compressed_story is the 30-second version of the founder's story.
+- value_method is the name of the named system.
+- value_step_1 through 5 are the 5 named steps of the method.
+
+Avatar rules:
+- Usually one avatar. Two only if the source explicitly names two distinct personas.
+- Preserve specifics (names, numbers, places). Empty string or empty array if a field is not in the source - never invent.
+
+POV rules:
+- 3-8 POVs. Quality over quantity. Each POV must be genuinely contrarian or non-obvious.
+
+Rung rules:
+- One rung per tier the source describes. Could be 1, 2, or 3 rungs total.
+- "low" = $0-99/month or one-time under $200. "mid" = $200-999/month or one-time $200-2000. "high" = $1000+/month or $2000+ one-time.
+- Use names + prices as written in the source. Don't invent prices.
+
+Journey rules:
+- 6-15 entries spread across the years the story covers.
+- date must be YYYY-MM. If only a year is mentioned, use a reasonable month.
+- "win" = a result/milestone. "failure" = something that did not work. "lesson" = a realization. "avatar" = a moment representing who they were at that time.
+
+Wins rules:
+- ONLY genuinely specific results. Skip anything vague.
+- Each "title" must have a number, dollar amount, percentage, or named timeframe.
+- 5-15 wins maximum.
+
+Universal rules:
+- No em dashes. Use hyphens.
+- Empty arrays / null fields are valid when the source does not contain the data.`;
+
+export type BatchedExtraction = {
+  slots: Record<string, string | null>;
+  avatars: ExtractedAvatar[];
+  povs: ExtractedPov[];
+  rungs: ExtractedRung[];
+  journey: ExtractedJourneyEntry[];
+  wins: Array<{ title: string; body?: string; kind: 'own' | 'client'; metric?: string }>;
+};
+
+export async function extractAllFromCore(): Promise<BatchedExtraction> {
+  // Single canonical payload. Send all 6 files in fixed order so the cache
+  // key (system + user prefix) is identical across runs - means hot reloads
+  // and re-extractions within the 5-minute Anthropic cache window hit cache.
+  const corePayload = [
+    `# core_positioning.md\n${readCore('core_positioning.md')}`,
+    `# core_audience.md\n${readCore('core_audience.md')}`,
+    `# core_my-story.md\n${readCore('core_my-story.md')}`,
+    `# core_ip.md\n${readCore('core_ip.md')}`,
+    `# core_offer-suite.md\n${readCore('core_offer-suite.md')}`,
+    `# core_voice-style.md\n${readCore('core_voice-style.md')}`,
+  ].join('\n\n');
+
+  const user = `${corePayload}\n\nExtract the JSON now. Return the full object with all six keys (slots, avatars, povs, rungs, journey, wins). Each section follows its own rules above.`;
+
+  const raw = await callBridge(BATCH_EXTRACT_PROMPT, user);
+  const parsed = parseJson(raw);
+
+  // Slot normalisation (same logic as extractBrandSlots)
+  const slots: Record<string, string | null> = {};
+  for (const [k, v] of Object.entries(parsed.slots ?? {})) {
+    slots[k] = typeof v === 'string' && v.trim().length > 0 ? clean(v) : null;
+  }
+
+  // Avatars
+  const avatars: ExtractedAvatar[] = Array.isArray(parsed.avatars)
+    ? parsed.avatars
+        .filter((a: any) => a && typeof a.name === 'string' && a.name.trim().length > 0)
+        .map((a: any) => ({
+          name: slugify(a.name),
+          title: clean(a.title || `Avatar - ${a.name}`),
+          one_line: clean(a.one_line || ''),
+          who_she_is: clean(a.who_she_is || ''),
+          trying_to_do: clean(a.trying_to_do || ''),
+          before_state: clean(a.before_state || ''),
+          after_state: clean(a.after_state || ''),
+          limiting_mindsets: Array.isArray(a.limiting_mindsets) ? a.limiting_mindsets.map(clean) : [],
+          desire_language: Array.isArray(a.desire_language) ? a.desire_language.map(clean) : [],
+          problem_language: Array.isArray(a.problem_language) ? a.problem_language.map(clean) : [],
+        }))
+    : [];
+
+  // POVs
+  const povs: ExtractedPov[] = Array.isArray(parsed.povs)
+    ? parsed.povs
+        .filter((p: any) => p && typeof p.title === 'string' && p.pov)
+        .map((p: any) => ({
+          title: clean(p.title),
+          pov: clean(p.pov),
+          idea_behind_it: clean(p.idea_behind_it || ''),
+          why_believe_it: clean(p.why_believe_it || ''),
+          topics: Array.isArray(p.topics) ? p.topics.filter((t: any) => typeof t === 'string') : [],
+        }))
+    : [];
+
+  // Rungs
+  const rungs: ExtractedRung[] = Array.isArray(parsed.rungs)
+    ? parsed.rungs
+        .filter(
+          (r: any) =>
+            r && typeof r.name === 'string' && ['low', 'mid', 'high'].includes(r.tier)
+        )
+        .map((r: any) => ({
+          tier: r.tier as 'low' | 'mid' | 'high',
+          name: clean(r.name),
+          price_label: clean(r.price_label || ''),
+          promise: clean(r.promise || ''),
+          proof_required: clean(r.proof_required || ''),
+        }))
+    : [];
+
+  // Journey
+  const journey: ExtractedJourneyEntry[] = Array.isArray(parsed.journey)
+    ? parsed.journey
+        .filter(
+          (e: any) =>
+            e &&
+            typeof e.title === 'string' &&
+            typeof e.date === 'string' &&
+            /^\d{4}-\d{2}$/.test(e.date) &&
+            ['win', 'failure', 'lesson', 'avatar'].includes(e.type)
+        )
+        .map((e: any) => ({
+          date: e.date,
+          type: e.type as 'win' | 'failure' | 'lesson' | 'avatar',
+          title: clean(e.title),
+          body: clean(e.body || ''),
+        }))
+    : [];
+
+  // Wins
+  const wins = Array.isArray(parsed.wins)
+    ? parsed.wins
+        .filter((w: any) => w && typeof w.title === 'string' && w.title.trim().length > 0)
+        .map((w: any) => ({
+          title: clean(w.title),
+          body: typeof w.body === 'string' ? clean(w.body) : undefined,
+          kind: w.kind === 'client' ? 'client' : 'own' as 'own' | 'client',
+          metric: typeof w.metric === 'string' ? clean(w.metric) : undefined,
+        }))
+    : [];
+
+  return { slots, avatars, povs, rungs, journey, wins };
+}

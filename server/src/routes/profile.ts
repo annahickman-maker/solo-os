@@ -9,17 +9,12 @@ import { Hono } from 'hono';
 import fs from 'node:fs';
 import { abs, loadFile } from '../vault.js';
 import {
-  extractBrandSlots,
+  extractAllFromCore,
   writeBrandSlotsToState,
-  extractAvatarsFromCore,
   writeAvatarFiles,
-  extractPovsFromCore,
   writePovFiles,
-  extractOfferRungsFromCore,
   writeOfferRungs,
-  extractJourneyFromCore,
   writeJourneyEntries,
-  extractWins,
   appendToBank,
 } from '../lib/extractFromCore.js';
 
@@ -99,18 +94,16 @@ function hasAnyPopulatedSlots(): boolean {
 async function runFullExtraction(): Promise<void> {
   const result: Record<string, unknown> = {};
   try {
-    const slots = await extractBrandSlots();
-    result.slots = writeBrandSlotsToState(slots);
-    const avatars = await extractAvatarsFromCore();
-    result.avatars = writeAvatarFiles(avatars);
-    const povs = await extractPovsFromCore();
-    result.povs = writePovFiles(povs);
-    const rungs = await extractOfferRungsFromCore();
-    result.offer_rungs = writeOfferRungs(rungs);
-    const journey = await extractJourneyFromCore();
-    result.journey = writeJourneyEntries(journey);
-    const wins = await extractWins();
-    result.wins = appendToBank('wins', wins);
+    // ONE bridge call returns the full structured extraction. The 6 core
+    // files are sent once instead of 6 times - ~70% fewer input tokens than
+    // the prior per-extractor approach. See extractAllFromCore for details.
+    const all = await extractAllFromCore();
+    result.slots = writeBrandSlotsToState(all.slots);
+    result.avatars = writeAvatarFiles(all.avatars);
+    result.povs = writePovFiles(all.povs);
+    result.offer_rungs = writeOfferRungs(all.rungs);
+    result.journey = writeJourneyEntries(all.journey);
+    result.wins = appendToBank('wins', all.wins);
     extractionResult = result;
     extractionStatus = 'completed';
     console.log('[profile] auto-extraction completed:', JSON.stringify(result));
