@@ -45,22 +45,38 @@ ${dim}This will set up your local dashboard. About 5 minutes.${reset}
 
 EOF
 
+# ─── 0. PATH bootstrap ────────────────────────────────────────────────────
+# When this script runs via `curl | bash`, the shell is non-interactive and
+# non-login, so ~/.zprofile / ~/.bash_profile never execute. brew and
+# nvm-installed node end up in standard locations but NOT on PATH, which
+# makes `command -v brew` and `command -v node` falsely report "not
+# installed". Load them ourselves before the checks below.
+
+if [ -x /opt/homebrew/bin/brew ]; then
+  eval "$(/opt/homebrew/bin/brew shellenv)"
+elif [ -x /usr/local/bin/brew ]; then
+  eval "$(/usr/local/bin/brew shellenv)"
+fi
+
+# nvm installs node at ~/.nvm/versions/node/<version>/bin. Pick the highest
+# installed version so a 20.x install satisfies our Node 20+ check.
+if [ -d "$HOME/.nvm/versions/node" ]; then
+  latest_nvm_node=$(ls "$HOME/.nvm/versions/node" 2>/dev/null | sort -V | tail -1)
+  if [ -n "$latest_nvm_node" ] && [ -d "$HOME/.nvm/versions/node/$latest_nvm_node/bin" ]; then
+    export PATH="$HOME/.nvm/versions/node/$latest_nvm_node/bin:$PATH"
+  fi
+fi
+
 # ─── 1. Homebrew ──────────────────────────────────────────────────────────
 
 step "Checking for Homebrew"
 if ! command -v brew >/dev/null 2>&1; then
-  info "Not installed. Installing now (you'll be asked for your Mac password)."
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || fail "Homebrew install failed."
-  # Add brew to PATH for this session (Apple Silicon installs into /opt/homebrew)
-  if [ -d "/opt/homebrew/bin" ]; then
-    eval "$(/opt/homebrew/bin/brew shellenv)"
-  elif [ -d "/usr/local/bin" ]; then
-    eval "$(/usr/local/bin/brew shellenv)"
-  fi
-  ok "Homebrew installed."
-else
-  ok "Homebrew already installed."
+  # `curl | bash` has no TTY and no sudo, so Homebrew's installer would
+  # fail immediately. Bail with a clear, actionable message instead.
+  fail "Homebrew is not installed. Run this in your terminal first, then re-run the installer:
+    /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
 fi
+ok "Homebrew already installed."
 
 # ─── 2. Node ──────────────────────────────────────────────────────────────
 
