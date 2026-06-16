@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import type { Video, VideoStatus, VideoSuggestions } from '../api';
-import { VideoScriptBuilder, type VideoScriptBuilderHandle } from './VideoScriptBuilder';
+import { VideoScriptBuilder, BankPicker, type VideoScriptBuilderHandle } from './VideoScriptBuilder';
 
 interface VideoDetailProps {
   videoId: string | null;
@@ -202,14 +202,21 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
   const [editingMetric, setEditingMetric] = useState<null | 'ctr_pct' | 'sub_rate_pct' | 'conversion_pct'>(null);
   const [metricDraft, setMetricDraft] = useState('');
 
+  // Only initialize local edit state from the server ONCE per videoId. Without
+  // this guard, every successful autosave triggers `qc.invalidateQueries` →
+  // refetch → new `data` reference → this effect overwrites whatever the user
+  // typed in the last few hundred ms (especially the trailing space or last
+  // character of a word). That was the "sometimes my space disappears" bug.
+  const initializedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (data) {
+    if (data && initializedFor.current !== videoId) {
       setTitle(data.title);
       setGoal(data.goal ?? '');
       setScript(data.script_content ?? '');
       setSaveStatus('idle');
+      initializedFor.current = videoId as string;
     }
-  }, [data]);
+  }, [data, videoId]);
 
   const updateMetric = useMutation({
     mutationFn: (vars: { field: string; value: number | null }) =>
@@ -273,18 +280,21 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
   // Debounce of 600ms after typing stops. On modal close we ALSO flush any
   // pending changes (see the unmount-flush effect further down) so the user
   // never loses edits by clicking away too fast.
-  const lastSavedRef = useRef<{ title: string; goal: string; script: string } | null>(null);
-  // Initialize ref the first time `data` lands so the auto-save effect
-  // doesn't fire a redundant save against the value just received.
+  const lastSavedRef = useRef<{ title: string; goal: string; script: string; videoId: string | null } | null>(null);
+  // Initialize ref the first time `data` lands FOR THIS videoId so the
+  // auto-save effect doesn't fire a redundant save against the value just
+  // received. Re-init when switching videos so a stale ref from the previous
+  // video can't fool the dirty-check.
   useEffect(() => {
-    if (data && !lastSavedRef.current) {
+    if (data && lastSavedRef.current?.videoId !== videoId) {
       lastSavedRef.current = {
         title: data.title,
         goal: data.goal ?? '',
         script: data.script_content ?? '',
+        videoId: videoId ?? null,
       };
     }
-  }, [data]);
+  }, [data, videoId]);
 
   useEffect(() => {
     if (!data || !videoId) return;
@@ -299,7 +309,7 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
         { title, goal, script_content: script },
         {
           onSuccess: () => {
-            lastSavedRef.current = { title, goal, script };
+            lastSavedRef.current = { title, goal, script, videoId: videoId ?? null };
           },
         },
       );
@@ -332,6 +342,50 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
   // we propagate the close. Without this, removing an anchor and closing
   // within the debounce window loses the change.
   const scriptBuilderRef = useRef<VideoScriptBuilderHandle | null>(null);
+
+  // Full-script textarea + "insert from bank" picker. The button opens the
+  // same BankPicker the script builder uses; on pick, the story text is
+  // spliced in at the textarea's cursor position so the creator can hand-write a
+  // script around her own excerpts (or paste them into a Claude draft).
+  const scriptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const lastScriptCursorRef = useRef<number | null>(null);
+  const [scriptBankOpen, setScriptBankOpen] = useState(false);
+  const banksQuery = useQuery({ queryKey: ['banks'], queryFn: api.listBanks, enabled: !!videoId });
+
+  function insertIntoScript(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const ta = scriptTextareaRef.current;
+    // Prefer the cursor position the textarea had right before the picker
+    // grabbed focus. Falling back to live selectionStart works too, but the
+    // picker dialog steals focus so the textarea's reported position is the
+    // last place the creator actually typed.
+    const current = scriptRef.current;
+    const fallback = current.length;
+    const pos = lastScriptCursorRef.current ?? ta?.selectionStart ?? fallback;
+    const start = Math.min(Math.max(pos, 0), current.length);
+    const before = current.slice(0, start);
+    const after = current.slice(start);
+    // Pad with a blank line on either side unless we're already at one, so
+    // pasted excerpts read as their own paragraph instead of jamming into
+    // the surrounding sentence.
+    const needsLeadGap = before.length > 0 && !/\n\n$/.test(before);
+    const needsTailGap = after.length > 0 && !/^\n\n/.test(after);
+    const lead = needsLeadGap ? (before.endsWith('\n') ? '\n' : '\n\n') : '';
+    const tail = needsTailGap ? (after.startsWith('\n') ? '\n' : '\n\n') : '';
+    const insertion = lead + trimmed + tail;
+    const next = before + insertion + after;
+    setScript(next);
+    const cursorAfter = start + insertion.length;
+    lastScriptCursorRef.current = cursorAfter;
+    requestAnimationFrame(() => {
+      const el = scriptTextareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.selectionStart = cursorAfter;
+      el.selectionEnd = cursorAfter;
+    });
+  }
 
   async function handleClose() {
     try {
@@ -374,8 +428,6 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
   }, [videoId, onClose]);
 
   if (!videoId) return null;
-
-  const currentStage = data ? STAGES.findIndex((s) => s.status === data.status) : -1;
 
   return (
     <>
@@ -449,26 +501,102 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
               gap: 'var(--space-6)',
             }}
           >
-            <input
-              value={title}
-              onChange={(e) => {
-                setTitle(e.target.value);
-                // auto-save handled by debounced effect — no manual flag needed
-              }}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                outline: 'none',
-                fontFamily: 'var(--font-display)',
-                fontSize: '2rem',
-                fontWeight: 700,
-                letterSpacing: '-0.02em',
-                color: 'var(--ink)',
-                lineHeight: 1.1,
-                padding: 0,
-                width: '100%',
-              }}
-            />
+            {/* Title + inline stage segmented control on a single row, the
+                same shape Projects / Clients use. The stage chips are the
+                primary way to advance a video through the pipeline; they
+                replace the old full-width progress bar. */}
+            <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
+              <input
+                value={title}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  // auto-save handled by debounced effect — no manual flag needed
+                }}
+                style={{
+                  flex: 1,
+                  minWidth: 200,
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  fontFamily: 'var(--font-display)',
+                  fontSize: '2rem',
+                  fontWeight: 700,
+                  letterSpacing: '-0.02em',
+                  color: 'var(--ink)',
+                  lineHeight: 1.1,
+                  padding: 0,
+                }}
+              />
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 2,
+                  padding: 2,
+                  background: 'var(--surface)',
+                  border: '1px solid var(--hairline)',
+                  borderRadius: 'var(--radius-sm)',
+                  flexShrink: 0,
+                }}
+                title="click a stage to move this video"
+              >
+                {STAGES.map((s) => {
+                  const active = s.status === data.status;
+                  return (
+                    <button
+                      key={s.status}
+                      type="button"
+                      onClick={() => setStage.mutate(s.status)}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: 'var(--radius-sm)',
+                        border: 'none',
+                        background: active ? 'var(--accent)' : 'transparent',
+                        color: active ? '#0E1116' : 'var(--muted)',
+                        fontSize: 10,
+                        fontWeight: active ? 700 : 600,
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {s.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Stage meta - queue position OR publish info. Pulled out of
+                the old progress block so it still sits near the top of the
+                detail view where the creator's eye lands first. */}
+            {(data.queue_order != null || (data.status === 'published' && data.publish_date)) && (
+              <div style={{ marginTop: 'calc(var(--space-4) * -1)', display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                {data.queue_order != null && (
+                  <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
+                    #{data.queue_order} in queue
+                  </span>
+                )}
+                {data.status === 'published' && data.publish_date && (
+                  <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
+                    published {new Date(data.publish_date * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                    {data.youtube_url && (
+                      <>
+                        {' · '}
+                        <a
+                          href={data.youtube_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: 'var(--strain)', textDecoration: 'underline' }}
+                        >
+                          watch on youtube
+                        </a>
+                      </>
+                    )}
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Goal of the video - shown as the subhead on each video card.
                 Keep it short, one line. the creator sets it here. */}
@@ -494,62 +622,6 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
                   width: '100%',
                 }}
               />
-            </div>
-
-            <div className="stack" style={{ gap: 'var(--space-3)' }}>
-              <span className="eyebrow">progress</span>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {STAGES.map((s, i) => {
-                  const filled = i <= currentStage;
-                  const active = i === currentStage;
-                  return (
-                    <button
-                      key={s.status}
-                      type="button"
-                      onClick={() => setStage.mutate(s.status)}
-                      style={{
-                        flex: 1,
-                        padding: '10px 4px',
-                        borderRadius: 'var(--radius-md)',
-                        border: 'none',
-                        background: filled ? 'var(--accent)' : 'rgba(255,255,255,0.06)',
-                        color: filled ? '#0E1116' : 'var(--muted)',
-                        fontSize: 10,
-                        fontWeight: active ? 700 : 600,
-                        letterSpacing: '0.08em',
-                        textTransform: 'uppercase',
-                        cursor: 'pointer',
-                        transition: 'background var(--duration-fast) var(--ease-out)',
-                      }}
-                    >
-                      {s.label}
-                    </button>
-                  );
-                })}
-              </div>
-              {data.queue_order != null && (
-                <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-                  #{data.queue_order} in queue
-                </span>
-              )}
-              {data.status === 'published' && data.publish_date && (
-                <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-                  published {new Date(data.publish_date * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                  {data.youtube_url && (
-                    <>
-                      {' · '}
-                      <a
-                        href={data.youtube_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: 'var(--strain)', textDecoration: 'underline' }}
-                      >
-                        watch on youtube
-                      </a>
-                    </>
-                  )}
-                </span>
-              )}
             </div>
 
             {data.status === 'published' && (
@@ -620,6 +692,7 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
                   title="script"
                   sub="fill in the brief for each section. suggest stories pulls from your bank. draft script weaves them all together."
                 />
+                <ClaudeInterviewCallout />
                 <VideoScriptBuilder
                   ref={scriptBuilderRef}
                   videoId={videoId as string}
@@ -635,15 +708,49 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
               <VdSectionHeading
                 eyebrow="step 2"
                 title="full script"
-                sub="the drafted script for this video. edit anything you want before filming."
+                sub="the drafted script for this video. edit anything you want before filming. drop your cursor anywhere and click insert story to splice an excerpt in."
               />
+              {/* Insert-story pill sits immediately above the textarea so it
+                  hugs the top edge - reads as an action attached to the
+                  text box rather than to the section heading. */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 'calc(var(--space-3) * -1)' }}>
+                <button
+                  type="button"
+                  className="vd-section-action"
+                  onClick={() => {
+                    const ta = scriptTextareaRef.current;
+                    if (ta && document.activeElement === ta) {
+                      lastScriptCursorRef.current = ta.selectionStart;
+                    }
+                    setScriptBankOpen(true);
+                  }}
+                  disabled={(banksQuery.data?.items?.length ?? 0) === 0}
+                  title={
+                    (banksQuery.data?.items?.length ?? 0) === 0
+                      ? 'no bank items yet'
+                      : 'splice a story from your bank at the cursor'
+                  }
+                >
+                  + insert story
+                </button>
+              </div>
               <textarea
+                ref={scriptTextareaRef}
                 value={script}
                 onChange={(e) => {
                   setScript(e.target.value);
-                  // auto-save handled by debounced effect — no manual flag needed
+                  lastScriptCursorRef.current = e.target.selectionStart;
                 }}
-                placeholder="no script yet. fill in the section briefs above, hit suggest stories, then draft script."
+                onSelect={(e) => {
+                  lastScriptCursorRef.current = (e.target as HTMLTextAreaElement).selectionStart;
+                }}
+                onBlur={(e) => {
+                  // Remember where the cursor was when focus left, so the
+                  // picker's insertion lands at the right spot even though
+                  // opening the picker steals focus.
+                  lastScriptCursorRef.current = (e.target as HTMLTextAreaElement).selectionStart;
+                }}
+                placeholder="no script yet. fill in the section briefs above, hit suggest stories, then draft script. or write it yourself - use + insert story to splice in excerpts from your bank."
                 style={{
                   width: '100%',
                   minHeight: 480,
@@ -660,6 +767,17 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
                 }}
               />
             </div>
+            {scriptBankOpen && (
+              <BankPicker
+                items={banksQuery.data?.items ?? []}
+                selectedIdsAcrossAll={new Set()}
+                onClose={() => setScriptBankOpen(false)}
+                onAdd={(id) => {
+                  const item = banksQuery.data?.items.find((i) => i.id === id);
+                  if (item) insertIntoScript(item.text);
+                }}
+              />
+            )}
 
             {/* ─── Title + thumbnail section ──────────────────────────── */}
             {data.status !== 'published' && (
@@ -879,10 +997,20 @@ function TitleRow({ title, tag, liked, onToggle }: { title: string; tag?: string
  */
 function DescriptionSection({ video }: { video: Video }) {
   const qc = useQueryClient();
-  // The generate mutation now optionally accepts an inline transcript. When
-  // the creator drops a transcript file onto the section, the file text is passed
-  // through and the description is drafted off that text (one-shot - it
-  // doesn't overwrite the video's full script).
+
+  // Linked / detected transcript for this video. Refetched after upload or
+  // link so the banner updates immediately. When `match` is present and
+  // `source === 'linked'`, the creator has wired it (or auto-pull did). When
+  // `source === 'detected'`, we matched by youtube_id or title slug and the
+  // UI should ask her to confirm before treating it as canonical.
+  const tsQuery = useQuery({
+    queryKey: ['video-transcript', video.id],
+    queryFn: () => api.getVideoTranscript(video.id),
+  });
+
+  // Generate the description. Backend will use the linked/detected vault
+  // transcript automatically when no inline transcript is provided, so the
+  // common path here is `generate.mutate(undefined)`.
   const generate = useMutation({
     mutationFn: (transcript?: string) => api.generateVideoDescription(video.id, transcript),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['video', video.id] }),
@@ -891,20 +1019,61 @@ function DescriptionSection({ video }: { video: Video }) {
     mutationFn: (description: string) => api.updateVideoDescription(video.id, description),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['video', video.id] }),
   });
+  // Persist a dropped file to the vault AND link it to this video. After
+  // success we re-run the description generator with no inline text so the
+  // backend reads from the now-linked file - a single source of truth.
+  const upload = useMutation({
+    mutationFn: (vars: { filename: string; text: string }) =>
+      api.uploadVideoTranscript(video.id, vars.filename, vars.text),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['video-transcript', video.id] });
+      qc.invalidateQueries({ queryKey: ['video', video.id] });
+    },
+  });
+  const link = useMutation({
+    mutationFn: (rel_path: string) => api.linkVideoTranscript(video.id, rel_path),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['video-transcript', video.id] });
+      qc.invalidateQueries({ queryKey: ['video', video.id] });
+      setPickerOpen(false);
+    },
+  });
+  const unlink = useMutation({
+    mutationFn: () => api.unlinkVideoTranscript(video.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['video-transcript', video.id] });
+      qc.invalidateQueries({ queryKey: ['video', video.id] });
+    },
+  });
+
   const [draft, setDraft] = useState<string>(video.description ?? '');
   const [copied, setCopied] = useState(false);
   const [dropActive, setDropActive] = useState(false);
-  const [droppedFileName, setDroppedFileName] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   useEffect(() => { setDraft(video.description ?? ''); }, [video.description]);
 
   const has = !!(video.description && video.description.trim());
   const hasScript = !!(video.script_content && video.script_content.trim());
+  const tsMatch = tsQuery.data?.match ?? null;
+  const tsSource = tsQuery.data?.source ?? null;
+  // The description generator has SOMETHING to chew on if there's a linked
+  // transcript, a detected-and-confirmable transcript, or the drafted full
+  // script. The dropped-file path also satisfies this via the upload flow.
+  const hasTranscriptSource = !!tsMatch || hasScript || upload.isPending;
 
   async function handleFile(file: File) {
     const text = await file.text();
     if (!text.trim()) return;
-    setDroppedFileName(file.name);
-    generate.mutate(text);
+    upload.mutate(
+      { filename: file.name, text },
+      {
+        onSuccess: () => {
+          // Kick off generation immediately once the upload settles. Backend
+          // pulls from the linked vault file (no inline text needed).
+          generate.mutate(undefined);
+        },
+      },
+    );
   }
 
   function copy() {
@@ -920,11 +1089,76 @@ function DescriptionSection({ video }: { video: Video }) {
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
-      {/* Transcript drop zone. Drop a .txt / .md / .vtt / .srt file in
-          here and the description is generated from that transcript. The
-          file isn't saved as the video's full script (the full script is
-          the drafted one, not the spoken recording) - this is one-shot
-          input for description generation. */}
+      {/* Transcript banner: linked (the creator wired it / auto-pulled), detected
+          (we matched by youtube_id or slug - she should confirm), or none.
+          When something is wired here the description generator reads it
+          automatically; no need to drop a file again. */}
+      {tsMatch && tsSource === 'linked' && (
+        <div className="vd-ts-banner vd-ts-banner--linked">
+          <div className="vd-ts-banner__main">
+            <span className="vd-ts-banner__icon" aria-hidden>📄</span>
+            <div className="vd-ts-banner__text">
+              <span className="vd-ts-banner__label">transcript</span>
+              <span className="vd-ts-banner__file">{tsMatch.title}</span>
+              <span className="vd-ts-banner__hint">{tsMatch.filename}</span>
+            </div>
+          </div>
+          <div className="vd-ts-banner__actions">
+            <button type="button" className="btn btn--ghost" onClick={() => setPickerOpen(true)}>change</button>
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={() => unlink.mutate()}
+              disabled={unlink.isPending}
+              title="remove the link (does not delete the transcript file)"
+            >
+              {unlink.isPending ? 'unlinking…' : 'unlink'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {tsMatch && tsSource === 'detected' && (
+        <div className="vd-ts-banner vd-ts-banner--detected">
+          <div className="vd-ts-banner__main">
+            <span className="vd-ts-banner__icon" aria-hidden>🔎</span>
+            <div className="vd-ts-banner__text">
+              <span className="vd-ts-banner__label">found a matching transcript in your vault</span>
+              <span className="vd-ts-banner__file">{tsMatch.title}</span>
+              <span className="vd-ts-banner__hint">{tsMatch.filename}</span>
+            </div>
+          </div>
+          <div className="vd-ts-banner__actions">
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => link.mutate(tsMatch.rel_path)}
+              disabled={link.isPending}
+            >
+              {link.isPending ? 'linking…' : 'use this'}
+            </button>
+            <button type="button" className="btn btn--ghost" onClick={() => setPickerOpen(true)}>
+              pick a different one
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!tsMatch && (
+        <div className="vd-ts-actions">
+          <button type="button" className="btn btn--ghost" onClick={() => setPickerOpen(true)}>
+            pick from transcript vault
+          </button>
+          <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
+            or drop a file below to upload + link it in one shot
+          </span>
+        </div>
+      )}
+
+      {/* Transcript drop zone. Drop a .txt / .md / .vtt / .srt file - we
+          save it to 05_Assets/Transcripts/YouTube-Videos/ AND link it to
+          this video so the description generator reads from the same file
+          next time. */}
       <label
         htmlFor={`yt-desc-drop-${video.id}`}
         onDragEnter={(e) => { e.preventDefault(); setDropActive(true); }}
@@ -957,14 +1191,16 @@ function DescriptionSection({ video }: { video: Video }) {
           <line x1="12" y1="3" x2="12" y2="15" />
         </svg>
         <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 'var(--body)', color: dropActive ? 'var(--recovery)' : 'var(--ink)' }}>
-          {droppedFileName
-            ? droppedFileName
+          {upload.isPending
+            ? 'saving transcript to your vault…'
             : dropActive
             ? 'drop the transcript file'
+            : tsMatch
+            ? 'drop a different transcript to replace'
             : 'drop a transcript here, or click to browse'}
         </span>
         <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-          .txt / .md / .vtt / .srt - generates the description from it
+          .txt / .md / .vtt / .srt - lands in 05_Assets/Transcripts/YouTube-Videos/
         </span>
         <input
           id={`yt-desc-drop-${video.id}`}
@@ -988,8 +1224,8 @@ function DescriptionSection({ video }: { video: Video }) {
           type="button"
           className="btn btn--primary"
           onClick={() => generate.mutate(undefined)}
-          disabled={generate.isPending || (!hasScript && !droppedFileName)}
-          title={hasScript || droppedFileName ? '' : 'drop a transcript above first, or add a script in the full script section'}
+          disabled={generate.isPending || upload.isPending || !hasTranscriptSource}
+          title={hasTranscriptSource ? '' : 'link a vault transcript above, drop one, or add the full script first'}
         >
           {generate.isPending ? 'drafting…' : has ? 'regenerate' : 'generate description'}
         </button>
@@ -1000,15 +1236,21 @@ function DescriptionSection({ video }: { video: Video }) {
         )}
       </div>
 
-      {!hasScript && !droppedFileName && (
+      {!hasTranscriptSource && (
         <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-          drop the transcript above to generate the description, or paste it into the full script section first.
+          link a vault transcript, drop one above, or fill in the full script section first.
         </span>
       )}
 
-      {generate.isPending && hasScript && (
+      {generate.isPending && (
         <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-          drafting description in your voice. uses your focus CTA + script content. usually 20-60 seconds.
+          drafting description in your voice. uses your focus CTA + the transcript. usually 20-60 seconds.
+        </span>
+      )}
+
+      {upload.isError && (
+        <span style={{ color: 'var(--danger)', fontSize: 'var(--body-sm)' }}>
+          upload failed: {(upload.error as Error)?.message}
         </span>
       )}
 
@@ -1035,17 +1277,186 @@ function DescriptionSection({ video }: { video: Video }) {
         />
       )}
 
-      {!has && !generate.isPending && hasScript && (
-        <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-          click generate to draft a ready-to-paste description: your focus CTA at the top, a 2-sentence hook, and 4-6 timestamped chapters pulled from the script.
-        </span>
-      )}
-
       {generate.isError && (
         <span style={{ color: 'var(--danger)', fontSize: 'var(--body-sm)' }}>
           {(generate.error as Error).message}
         </span>
       )}
+
+      {pickerOpen && (
+        <TranscriptPicker
+          currentRelPath={tsMatch?.rel_path ?? null}
+          onClose={() => setPickerOpen(false)}
+          onPick={(rel) => link.mutate(rel)}
+          linking={link.isPending}
+        />
+      )}
+
+      <style>{`
+        .vd-ts-banner {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: var(--space-3);
+          padding: var(--space-3) var(--space-4);
+          border-radius: var(--radius-md);
+          border: 1px solid var(--hairline);
+          background: rgba(255,255,255,0.03);
+          flex-wrap: wrap;
+        }
+        .vd-ts-banner--linked {
+          border-color: color-mix(in srgb, var(--recovery) 30%, var(--hairline));
+          background: color-mix(in srgb, var(--recovery) 6%, rgba(255,255,255,0.03));
+        }
+        .vd-ts-banner--detected {
+          border-color: color-mix(in srgb, var(--strain) 35%, var(--hairline));
+          background: color-mix(in srgb, var(--strain) 6%, rgba(255,255,255,0.03));
+        }
+        .vd-ts-banner__main { display: flex; align-items: center; gap: var(--space-3); flex: 1; min-width: 0; }
+        .vd-ts-banner__icon { font-size: 18px; line-height: 1; }
+        .vd-ts-banner__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .vd-ts-banner__label {
+          font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+          color: var(--muted); font-weight: 700;
+        }
+        .vd-ts-banner__file {
+          font-family: var(--font-display); font-weight: 600;
+          font-size: var(--body); color: var(--ink);
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .vd-ts-banner__hint {
+          font-size: 11px; color: var(--muted-2);
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .vd-ts-banner__actions { display: flex; gap: var(--space-2); align-items: center; flex-shrink: 0; }
+        .vd-ts-actions { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+      `}</style>
+    </div>
+  );
+}
+
+/**
+ * Right-side slide-over for picking a YouTube transcript from the vault.
+ * Mirrors the BankPicker UX so it feels familiar - search at the top, a
+ * scrollable list of cards, click to link. The current selection (if any)
+ * is rendered with a different action label.
+ */
+function TranscriptPicker({
+  currentRelPath,
+  onClose,
+  onPick,
+  linking,
+}: {
+  currentRelPath: string | null;
+  onClose: () => void;
+  onPick: (rel_path: string) => void;
+  linking: boolean;
+}) {
+  const list = useQuery({ queryKey: ['yt-transcripts'], queryFn: api.listYoutubeTranscripts });
+  const [query, setQuery] = useState('');
+  const items = list.data?.items ?? [];
+  const filtered = items.filter((i) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      i.title.toLowerCase().includes(q)
+      || i.filename.toLowerCase().includes(q)
+      || (i.youtube_id ?? '').toLowerCase().includes(q)
+    );
+  });
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.6)',
+        zIndex: 120,
+        display: 'flex',
+        justifyContent: 'flex-end',
+      }}
+    >
+      <aside
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 'min(560px, 100%)',
+          height: '100%',
+          background: 'var(--bg)',
+          borderLeft: '1px solid var(--hairline)',
+          padding: 'var(--space-5)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--space-3)',
+          overflow: 'hidden',
+        }}
+      >
+        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-3)' }}>
+          <div>
+            <span className="eyebrow">pick a transcript</span>
+            <h3 style={{ margin: '4px 0 0', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.25rem' }}>
+              {items.length} in your vault
+            </h3>
+          </div>
+          <button type="button" className="btn btn--ghost" onClick={onClose}>done</button>
+        </header>
+        <input
+          type="text"
+          placeholder="search by title, filename, or youtube id…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          autoFocus
+          style={{
+            width: '100%',
+            padding: '10px 12px',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--hairline)',
+            background: 'rgba(255,255,255,0.04)',
+            color: 'var(--ink)',
+            fontSize: 'var(--body)',
+            outline: 'none',
+          }}
+        />
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', paddingBottom: 'var(--space-4)' }}>
+          {list.isLoading && <p className="muted">loading…</p>}
+          {!list.isLoading && filtered.length === 0 && <p className="muted">no transcripts match.</p>}
+          {filtered.map((i) => {
+            const isCurrent = i.rel_path === currentRelPath;
+            return (
+              <article
+                key={i.rel_path}
+                style={{
+                  padding: 'var(--space-3)',
+                  borderRadius: 'var(--radius-md)',
+                  border: `1px solid ${isCurrent ? 'var(--recovery)' : 'var(--hairline)'}`,
+                  background: isCurrent ? 'color-mix(in srgb, var(--recovery) 8%, transparent)' : 'rgba(255,255,255,0.02)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-2)' }}>
+                  <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 'var(--body-sm)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {i.title}
+                  </span>
+                  <button
+                    type="button"
+                    className={`btn ${isCurrent ? 'btn--ghost' : 'btn--primary'}`}
+                    onClick={() => onPick(i.rel_path)}
+                    disabled={isCurrent || linking}
+                    style={{ fontSize: 'var(--body-sm)', padding: '4px 12px', flexShrink: 0 }}
+                  >
+                    {isCurrent ? 'in use' : linking ? '…' : 'use this'}
+                  </button>
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--muted-2)' }}>
+                  {i.filename}
+                  {i.youtube_id ? ` · ${i.youtube_id}` : ''}
+                </span>
+              </article>
+            );
+          })}
+        </div>
+      </aside>
     </div>
   );
 }
@@ -1056,7 +1467,73 @@ function DescriptionSection({ video }: { video: Video }) {
  * subtle top border separates the section from whatever came above so the
  * panel doesn't blur into one continuous wall.
  */
-function VdSectionHeading({ eyebrow, title, sub }: { eyebrow?: string; title: string; sub?: string }) {
+/**
+ * Tiny callout above the script builder reminding the creator she doesn't HAVE to
+ * fill the briefs in by hand - she can open Claude in this vault and run
+ * /youtube-script to be interviewed instead. Both paths write to the same
+ * video file so they're interchangeable. Click-to-copy on the command so
+ * she can paste it straight into Claude.
+ */
+function ClaudeInterviewCallout() {
+  const [copied, setCopied] = useState(false);
+  function copyCmd() {
+    navigator.clipboard.writeText('/youtube-script');
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--space-3)',
+        padding: 'var(--space-3) var(--space-4)',
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--hairline)',
+        background: 'rgba(255,255,255,0.02)',
+        flexWrap: 'wrap',
+      }}
+    >
+      <span style={{ fontSize: 18, lineHeight: 1 }} aria-hidden>💬</span>
+      <span style={{ fontSize: 'var(--body-sm)', color: 'var(--ink)', flex: 1, minWidth: 240, lineHeight: 1.5 }}>
+        prefer to talk it out? open Claude in this vault and run{' '}
+        <button
+          type="button"
+          onClick={copyCmd}
+          title="copy to clipboard"
+          style={{
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.18)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '1px 8px',
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            fontSize: '0.95em',
+            color: 'var(--ink)',
+            cursor: 'pointer',
+          }}
+        >
+          {copied ? '✓ copied' : '/youtube-script'}
+        </button>{' '}
+        - Claude will interview you through your idea and fill these briefs in. either path writes to the same file.
+      </span>
+    </div>
+  );
+}
+
+function VdSectionHeading({
+  eyebrow,
+  title,
+  sub,
+  rightAction,
+}: {
+  eyebrow?: string;
+  title: string;
+  sub?: string;
+  // Optional action button rendered on the right side of the heading row -
+  // baseline-aligned with the title so it sits inline with the section
+  // descriptor rather than floating below it.
+  rightAction?: ReactNode;
+}) {
   return (
     <div
       style={{
@@ -1069,18 +1546,21 @@ function VdSectionHeading({ eyebrow, title, sub }: { eyebrow?: string; title: st
       }}
     >
       {eyebrow && <span className="eyebrow" style={{ color: 'var(--strain)' }}>{eyebrow}</span>}
-      <h3
-        className="h2"
-        style={{
-          margin: 0,
-          fontSize: '1.5rem',
-          fontWeight: 700,
-          letterSpacing: '-0.02em',
-          lineHeight: 1.15,
-        }}
-      >
-        {title}
-      </h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+        <h3
+          className="h2"
+          style={{
+            margin: 0,
+            fontSize: '1.5rem',
+            fontWeight: 700,
+            letterSpacing: '-0.02em',
+            lineHeight: 1.15,
+          }}
+        >
+          {title}
+        </h3>
+        {rightAction}
+      </div>
       {sub && (
         <p className="muted" style={{ margin: '4px 0 0', fontSize: 'var(--body-sm)', lineHeight: 1.5, maxWidth: '56ch' }}>
           {sub}

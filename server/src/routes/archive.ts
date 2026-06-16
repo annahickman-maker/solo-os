@@ -87,8 +87,8 @@ const TRANSCRIPT_DIRS: Array<{ rel: string; type: string }> = [
 
 function detectClient(filename: string): string | null {
   const f = filename.toLowerCase();
-  const match = f.match(/\b(client-[a-z0-9-]+)\b/);
-  return match ? match[1] : null;
+  const match = f.match(/\b(fab|client-a|client-b|client-[a-z0-9-]+)\b/);
+  return match ? match[1]! : null;
 }
 
 function dateFromFilename(filename: string): number | null {
@@ -231,7 +231,8 @@ app.post('/transcripts/upload', async (c) => {
     const lc = name.toLowerCase();
     if (/^yt-|youtube/.test(lc)) return 'video';
     if (/workshop|live/.test(lc)) return 'workshop';
-    if (/client|coaching|1on1/.test(lc)) return 'client';
+    if (/client|coaching|1on1|fab|client-a|client-b/.test(lc)) return 'client';
+    // (When new clients get added, the regex above plus detectClient's regex are the two places to extend.)
     return 'qa';
   }
   const type = explicitType && validTypes.includes(explicitType)

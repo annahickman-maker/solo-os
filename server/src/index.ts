@@ -1,5 +1,5 @@
 /**
- * Solo OS dashboard server. Hono on :8791. Every route reads/writes vault
+ * the creator's dashboard server. Hono on :8790. Every route reads/writes vault
  * files under VAULT_ROOT directly - there is no database.
  */
 
@@ -38,13 +38,13 @@ import instagram from './routes/instagram.js';
 import journey from './routes/journey.js';
 import decks, { serveDeckFile, serveDeckAsset } from './routes/decks.js';
 
-const PORT = Number(process.env.PORT ?? 8791);
+const PORT = Number(process.env.PORT ?? 8790);
 
 const app = new Hono();
 
 app.use('*', cors({ origin: '*' }));
 
-app.get('/', (c) => c.json({ ok: true, service: 'solo-os-dashboard-server' }));
+app.get('/', (c) => c.json({ ok: true, service: 'solo-os-dashboard-server (Phase 2)' }));
 app.get('/health', (c) => c.json({ ok: true }));
 
 // Vault asset serving has to live ABOVE the auth middleware because

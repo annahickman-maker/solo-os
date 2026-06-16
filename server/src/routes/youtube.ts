@@ -26,6 +26,7 @@ import path from 'node:path';
 import { YoutubeTranscript } from 'youtube-transcript';
 import { abs, loadFile, saveFile, VAULT_ROOT } from '../vault.js';
 import { fetchAllUploads, fetchStatistics, resolveChannel, type Upload } from '../lib/youtube.js';
+import { saveTranscript } from '../lib/transcriptVault.js';
 
 const VIDEOS_DIR_REL = path.join('04_Channel', '04_Projects');
 const STATE_FILE_REL = path.join('00_System', 'state.md');
@@ -124,6 +125,26 @@ async function updateExistingVideoFile(
       (next as any).has_transcript = true;
       (next as any).transcript_fetched_at = new Date().toISOString();
       transcriptFetched = true;
+      // Also mirror to the vault transcript folder and wire the link from
+      // the video frontmatter. Don't overwrite an existing manual link
+      // unless force=true (the creator may have hand-picked a different file).
+      const existingPath = typeof (next as any).transcript_path === 'string'
+        ? String((next as any).transcript_path)
+        : null;
+      if (!existingPath || options.force) {
+        try {
+          const saved = saveTranscript({
+            videoTitle: upload.title,
+            youtubeId: upload.videoId,
+            youtubeUrl: `https://www.youtube.com/watch?v=${upload.videoId}`,
+            text: transcript,
+            originalFilename: null,
+          });
+          (next as any).transcript_path = saved.relPath;
+        } catch (err: any) {
+          console.error('vault transcript write failed for', upload.videoId, err?.message);
+        }
+      }
     }
   }
   saveFile(filePath, next as Record<string, unknown>, body);
@@ -141,6 +162,24 @@ async function createNewVideoFile(
   if (options.fetchTranscript) {
     transcript = await fetchTranscript(upload.videoId);
   }
+  // When we got a transcript, also persist it to the vault and link from
+  // the video frontmatter so the description generator and the creator's pickers
+  // both see it without any extra step.
+  let transcriptPath: string | null = null;
+  if (transcript) {
+    try {
+      const saved = saveTranscript({
+        videoTitle: upload.title,
+        youtubeId: upload.videoId,
+        youtubeUrl: `https://www.youtube.com/watch?v=${upload.videoId}`,
+        text: transcript,
+        originalFilename: null,
+      });
+      transcriptPath = saved.relPath;
+    } catch (err: any) {
+      console.error('vault transcript write failed for', upload.videoId, err?.message);
+    }
+  }
   const frontmatter: Record<string, unknown> = {
     id: `yt-${upload.videoId}`,
     type: 'video',
@@ -154,6 +193,7 @@ async function createNewVideoFile(
     comment_count: stats?.comments ?? 0,
     duration_sec: stats?.duration_sec ?? 0,
     has_transcript: !!transcript,
+    transcript_path: transcriptPath ?? undefined,
     last_yt_sync: new Date().toISOString(),
     transcript_fetched_at: transcript ? new Date().toISOString() : undefined,
     created: today,

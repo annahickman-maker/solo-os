@@ -10,6 +10,14 @@ import { createFileRoute, slugify, todayISO } from './_factory.js';
 import { loadCollection, loadFile, saveFile, abs } from '../vault.js';
 import { generateTitles, type Suggestions } from '../lib/titleGen.js';
 import { generateVideoDescription } from '../lib/videoDescription.js';
+import { suggestIntroFromScript } from '../lib/introFromScript.js';
+import {
+  findForVideo as findTranscriptForVideo,
+  listAll as listAllTranscripts,
+  readByRelPath as readTranscriptByRelPath,
+  relIsTranscript,
+  saveTranscript,
+} from '../lib/transcriptVault.js';
 import {
   draftOneSection,
   draftScriptFromAnchors,
@@ -333,14 +341,32 @@ app.post('/:id/description', async (c) => {
   // because the transcript is the raw spoken word, not the drafted script.
   const body = (await c.req.json().catch(() => null)) as { transcript?: string } | null;
   let scriptContent = '';
+  let transcriptSource: 'inline' | 'linked' | 'detected' | 'video-body' | 'none' = 'none';
   if (typeof body?.transcript === 'string' && body.transcript.trim()) {
     scriptContent = body.transcript.trim();
+    transcriptSource = 'inline';
   } else {
-    // Fall back to the video file's body. Prefer the part after the H1
-    // heading, but if there's an explicit `## Transcript` section, use that.
-    scriptContent = entry.body.replace(/^#\s+[^\n]*\n?/, '').trim();
-    const transcriptMatch = entry.body.match(/##\s+Transcript\s*\n+([\s\S]*?)(?=\n##\s|$)/i);
-    if (transcriptMatch && transcriptMatch[1]) scriptContent = transcriptMatch[1].trim();
+    // Prefer a vault transcript (linked first, then detected). Falls back to
+    // the video file's own body (## Transcript section or post-H1 prose) for
+    // historic videos that haven't been wired to the vault yet.
+    const found = findTranscriptForVideo({
+      videoTranscriptPath: typeof fm.transcript_path === 'string' ? fm.transcript_path : null,
+      videoYoutubeId: typeof fm.youtube_id === 'string' ? fm.youtube_id : null,
+      videoTitle: typeof fm.title === 'string' ? fm.title : null,
+    });
+    if (found.match) {
+      const ts = readTranscriptByRelPath(found.match.relPath);
+      if (ts && ts.text.trim()) {
+        scriptContent = ts.text.trim();
+        transcriptSource = found.source === 'linked' ? 'linked' : 'detected';
+      }
+    }
+    if (!scriptContent) {
+      scriptContent = entry.body.replace(/^#\s+[^\n]*\n?/, '').trim();
+      const transcriptMatch = entry.body.match(/##\s+Transcript\s*\n+([\s\S]*?)(?=\n##\s|$)/i);
+      if (transcriptMatch && transcriptMatch[1]) scriptContent = transcriptMatch[1].trim();
+      if (scriptContent.trim()) transcriptSource = 'video-body';
+    }
   }
   if (!scriptContent.trim()) {
     return c.json({ error: 'no transcript provided. drop a transcript file or add the script first.' }, 400);
@@ -369,10 +395,179 @@ app.post('/:id/description', async (c) => {
       ok: true,
       description: result.description,
       generated_at: result.generated_at,
+      transcript_source: transcriptSource,
     });
   } catch (err: any) {
     console.error('generate-description failed:', err);
     return c.json({ error: err?.message ?? 'generation failed' }, 500);
+  }
+});
+
+// ─── Transcript vault ──────────────────────────────────────────────────────
+
+// GET /:id/transcript - returns the transcript currently associated with
+// this video, plus the source ('linked' or 'detected'). When source is
+// 'detected' the UI should ask the creator to confirm before treating it as
+// authoritative.
+app.get('/:id/transcript', (c) => {
+  const id = c.req.param('id');
+  const entry = findVideoEntry(id);
+  if (!entry) return c.json({ error: 'video not found' }, 404);
+  const fm = entry.frontmatter as any;
+  const result = findTranscriptForVideo({
+    videoTranscriptPath: typeof fm.transcript_path === 'string' ? fm.transcript_path : null,
+    videoYoutubeId: typeof fm.youtube_id === 'string' ? fm.youtube_id : null,
+    videoTitle: typeof fm.title === 'string' ? fm.title : null,
+  });
+  if (!result.match) return c.json({ match: null, source: null });
+  return c.json({
+    match: {
+      rel_path: result.match.relPath,
+      filename: result.match.filename,
+      title: result.match.title,
+      youtube_id: result.match.youtube_id,
+      youtube_url: result.match.youtube_url,
+    },
+    source: result.source,
+  });
+});
+
+// POST /:id/transcript/upload - body { filename, text }. Persists the
+// transcript file in the vault AND wires `transcript_path` onto the video's
+// frontmatter so subsequent loads see it as 'linked'.
+app.post('/:id/transcript/upload', async (c) => {
+  const id = c.req.param('id');
+  const entry = findVideoEntry(id);
+  if (!entry) return c.json({ error: 'video not found' }, 404);
+  const body = (await c.req.json().catch(() => null)) as { filename?: string; text?: string } | null;
+  const text = (body?.text ?? '').trim();
+  if (!text) return c.json({ error: 'transcript text required' }, 400);
+  const fm = entry.frontmatter as any;
+  const youtubeId = typeof fm.youtube_id === 'string' ? fm.youtube_id : null;
+  const youtubeUrl = typeof fm.youtube_url === 'string' ? fm.youtube_url : null;
+  const title = typeof fm.title === 'string' ? fm.title : entry.id;
+  const saved = saveTranscript({
+    videoTitle: title,
+    youtubeId,
+    youtubeUrl,
+    text,
+    originalFilename: body?.filename ?? null,
+  });
+  // Link it back from the video.
+  const filePath = abs(entry.relPath);
+  const fileEntry = loadFile(filePath);
+  const nextFm = {
+    ...(fileEntry?.frontmatter ?? {}),
+    transcript_path: saved.relPath,
+    updated: new Date().toISOString().slice(0, 10),
+  };
+  saveFile(filePath, nextFm, fileEntry?.body ?? entry.body);
+  return c.json({ ok: true, rel_path: saved.relPath, created: saved.created });
+});
+
+// POST /:id/transcript/link - body { rel_path }. the creator picked an existing
+// vault transcript from the list. We write transcript_path to the video.
+app.post('/:id/transcript/link', async (c) => {
+  const id = c.req.param('id');
+  const entry = findVideoEntry(id);
+  if (!entry) return c.json({ error: 'video not found' }, 404);
+  const body = (await c.req.json().catch(() => null)) as { rel_path?: string } | null;
+  const rel = body?.rel_path;
+  if (!rel || !relIsTranscript(rel)) return c.json({ error: 'invalid transcript path' }, 400);
+  const ts = readTranscriptByRelPath(rel);
+  if (!ts) return c.json({ error: 'transcript not found' }, 404);
+  const filePath = abs(entry.relPath);
+  const fileEntry = loadFile(filePath);
+  const nextFm = {
+    ...(fileEntry?.frontmatter ?? {}),
+    transcript_path: ts.relPath,
+    updated: new Date().toISOString().slice(0, 10),
+  };
+  saveFile(filePath, nextFm, fileEntry?.body ?? entry.body);
+  return c.json({ ok: true, rel_path: ts.relPath });
+});
+
+// DELETE /:id/transcript - clear the link from the video (does NOT delete
+// the transcript file itself - it stays in the vault).
+app.delete('/:id/transcript', (c) => {
+  const id = c.req.param('id');
+  const entry = findVideoEntry(id);
+  if (!entry) return c.json({ error: 'video not found' }, 404);
+  const filePath = abs(entry.relPath);
+  const fileEntry = loadFile(filePath);
+  const fmIn = (fileEntry?.frontmatter ?? {}) as Record<string, unknown>;
+  const { transcript_path: _drop, ...rest } = fmIn;
+  saveFile(filePath, { ...rest, updated: new Date().toISOString().slice(0, 10) }, fileEntry?.body ?? entry.body);
+  return c.json({ ok: true });
+});
+
+// GET /transcripts/youtube - flat list for the picker UI. Newest first.
+app.get('/transcripts/youtube', (c) => {
+  const items = listAllTranscripts().map((f) => ({
+    rel_path: f.relPath,
+    filename: f.filename,
+    slug: f.slug,
+    title: f.title,
+    youtube_id: f.youtube_id,
+    youtube_url: f.youtube_url,
+    mtime: f.mtime,
+  }));
+  return c.json({ items });
+});
+
+// POST /:id/intro/from-script - derive the 5 intro brief parts (clarity,
+// belief, contrarian, proof, outcome) from EVERYTHING the video has so far:
+// the drafted full script body (in entry.body, not frontmatter), the section
+// briefs the creator typed for each part (intro / context / value / cta / outro),
+// and the actual story text of every bank item she's already linked to a
+// section. The generator can run with any of those - even with an empty
+// script body, the briefs + linked stories are enough to draft an intro.
+// Returned object is patched straight into the intro section's brief by the
+// frontend; we don't persist server-side because the creator will usually massage
+// the parts before they become the saved brief.
+app.post('/:id/intro/from-script', async (c) => {
+  const id = c.req.param('id');
+  const entry = findVideoEntry(id);
+  if (!entry) return c.json({ error: 'video not found' }, 404);
+  const fm = entry.frontmatter as any;
+  // The full script lives in the file body (everything after the H1 title),
+  // not in frontmatter. This matches how the GET /:id detail view computes
+  // script_content (see the videos factory above).
+  const scriptContent = entry.body.replace(/^#\s+[^\n]*\n?/, '').trim();
+
+  // Assemble per-section context. We use whatever the creator has saved in
+  // script_sections (the script builder's persisted state) and inline the
+  // text of every linked bank item so the model sees what each section is
+  // actually going to be made of.
+  const bank = loadAllBanks();
+  const byId = new Map(bank.map((b) => [b.id, b]));
+  const sections: Array<{ label: string; kind: string; brief: string; anchorTexts: string[] }> = [];
+  const rawSections = Array.isArray((fm as any).script_sections) ? (fm as any).script_sections : [];
+  for (const s of rawSections) {
+    if (!s || typeof s !== 'object') continue;
+    const anchorIds: string[] = Array.isArray(s.anchor_ids) ? s.anchor_ids : [];
+    const anchorTexts = anchorIds
+      .map((id: string) => byId.get(id)?.text ?? '')
+      .filter((t: string) => t.trim().length > 0);
+    sections.push({
+      label: typeof s.label === 'string' ? s.label : String(s.kind ?? 'section'),
+      kind: typeof s.kind === 'string' ? s.kind : 'value',
+      brief: typeof s.brief === 'string' ? s.brief : '',
+      anchorTexts,
+    });
+  }
+
+  try {
+    const parts = await suggestIntroFromScript({
+      videoTitle: fm.title ?? entry.id,
+      videoGoal: typeof fm.goal === 'string' ? fm.goal : null,
+      scriptContent,
+      sections,
+    });
+    return c.json({ ok: true, parts });
+  } catch (err: any) {
+    console.error('intro-from-script failed:', err);
+    return c.json({ error: err?.message ?? 'intro generation failed' }, 500);
   }
 });
 

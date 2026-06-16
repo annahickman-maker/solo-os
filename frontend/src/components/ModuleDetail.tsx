@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, deckEditorUrl } from '../api';
 import type { SSModule, Task, TaskCategory, TaskEnergy, DeckEntry } from '../api';
@@ -35,13 +35,19 @@ export function ModuleDetail({ moduleId, onClose }: ModuleDetailProps) {
   // projects always show tasks.
   const [panelTab, setPanelTab] = useState<'tasks' | 'content'>('tasks');
 
+  // Only initialize local form state from the server ONCE per moduleId. Stage
+  // clicks and other mutations invalidate the module query, which would
+  // otherwise overwrite in-progress name/description edits on every refetch.
+  const initializedFor = useRef<string | null>(null);
+
   useEffect(() => {
-    if (data) {
+    if (data && initializedFor.current !== moduleId) {
       setName(data.name);
       setDescription(data.description ?? '');
       setDirty(false);
+      initializedFor.current = moduleId as string;
     }
-  }, [data]);
+  }, [data, moduleId]);
 
   function invalidate() {
     qc.invalidateQueries({ queryKey: ['ss-module', moduleId] });

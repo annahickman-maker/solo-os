@@ -226,15 +226,41 @@
   filter: brightness(1.1);
 }
 
+/* Secondary buttons keep a faint visible outline so they're recognisably
+   clickable next to text and primary CTAs. Don't drop this to transparent -
+   ghost-with-no-border buttons look like links, not buttons. */
 .btn--ghost {
-  border-color: transparent;
+  border-color: rgba(255, 255, 255, 0.18);
   color: var(--muted);
 }
 
 .btn--ghost:hover {
   color: var(--ink);
   background: var(--surface);
+  border-color: rgba(255, 255, 255, 0.36);
 }
+
+/* Inline section action pill (e.g. `+ insert story` next to a section
+   heading). Matches the `+ add story` pill from the script builder so the
+   two read as the same affordance. */
+.vd-section-action {
+  background: transparent;
+  border: 1px dashed var(--hairline);
+  color: var(--muted);
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.vd-section-action:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+.vd-section-action:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .empty {
   padding: var(--space-7) var(--space-5);

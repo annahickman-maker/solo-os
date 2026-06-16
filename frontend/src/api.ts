@@ -927,6 +927,47 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ description }),
     }),
+  suggestIntroFromScript: (id: string) =>
+    request<{
+      ok: true;
+      parts: { clarity: string; belief: string; contrarian: string; proof: string; outcome: string };
+    }>(`/api/videos/${id}/intro/from-script`, { method: 'POST' }),
+  // Transcript vault wiring per video.
+  getVideoTranscript: (id: string) =>
+    request<{
+      match: {
+        rel_path: string;
+        filename: string;
+        title: string;
+        youtube_id: string | null;
+        youtube_url: string | null;
+      } | null;
+      source: 'linked' | 'detected' | null;
+    }>(`/api/videos/${id}/transcript`),
+  uploadVideoTranscript: (id: string, filename: string, text: string) =>
+    request<{ ok: true; rel_path: string; created: boolean }>(
+      `/api/videos/${id}/transcript/upload`,
+      { method: 'POST', body: JSON.stringify({ filename, text }) },
+    ),
+  linkVideoTranscript: (id: string, rel_path: string) =>
+    request<{ ok: true; rel_path: string }>(`/api/videos/${id}/transcript/link`, {
+      method: 'POST',
+      body: JSON.stringify({ rel_path }),
+    }),
+  unlinkVideoTranscript: (id: string) =>
+    request<{ ok: true }>(`/api/videos/${id}/transcript`, { method: 'DELETE' }),
+  listYoutubeTranscripts: () =>
+    request<{
+      items: Array<{
+        rel_path: string;
+        filename: string;
+        slug: string;
+        title: string;
+        youtube_id: string | null;
+        youtube_url: string | null;
+        mtime: number;
+      }>;
+    }>('/api/videos/transcripts/youtube'),
   setReputationSlot: (slot: string, value: string | null) =>
     request<{ ok: true }>('/api/reputation/slots', {
       method: 'PATCH',

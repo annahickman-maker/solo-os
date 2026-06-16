@@ -345,6 +345,7 @@ export const VideoScriptBuilder = forwardRef<VideoScriptBuilderHandle, {
               <Fragment key={section.id}>
                 <SectionBox
                   section={section}
+                  videoId={videoId}
                   byId={byId}
                   proofItems={proofItems}
                   canRemove={section.kind === 'value'}
@@ -427,6 +428,56 @@ export const VideoScriptBuilder = forwardRef<VideoScriptBuilderHandle, {
   );
 });
 
+// ─── Intro draft button ───────────────────────────────────────────────────
+// Lives in the SectionBox header for the intro section, alongside `+ add
+// story`. Fires the suggest-intro endpoint and writes the serialized 5-part
+// brief back through onResult so the editor re-parses and shows the new
+// values. Visually matches the `+ add story` pill (same size, same shape)
+// but with a solid white-tinted border to mark it as the more deliberate
+// action - drafting replaces the entire intro, picking a story doesn't.
+function IntroDraftButton({
+  videoId,
+  currentBrief,
+  onResult,
+}: {
+  videoId: string;
+  currentBrief: string;
+  onResult: (serialized: string) => void;
+}) {
+  const draft = useMutation({
+    mutationFn: () => api.suggestIntroFromScript(videoId),
+    onSuccess: (data) => {
+      const next: Record<IntroPartKey, string> = {
+        clarity: data.parts.clarity ?? '',
+        belief: data.parts.belief ?? '',
+        contrarian: data.parts.contrarian ?? '',
+        proof: data.parts.proof ?? '',
+        outcome: data.parts.outcome ?? '',
+      };
+      onResult(serializeIntroBrief(next));
+    },
+  });
+  const hasContent = currentBrief.trim().length > 0;
+  return (
+    <button
+      type="button"
+      className="sb-section__draft"
+      onClick={() => {
+        if (hasContent && !confirm('replace what\'s already in the 5 intro fields?')) return;
+        draft.mutate();
+      }}
+      disabled={draft.isPending}
+      title={
+        draft.isError
+          ? (draft.error as Error)?.message
+          : 'read script body + section briefs + linked stories and propose the 5 intro pieces'
+      }
+    >
+      {draft.isPending ? 'drafting…' : 'draft intro'}
+    </button>
+  );
+}
+
 // ─── Intro brief editor ───────────────────────────────────────────────────
 // The intro section is special: instead of one freeform brief, the creator writes
 // one sentence per element of her intro framework (clarity / belief /
@@ -494,26 +545,28 @@ function parseIntroBrief(brief: string): Record<IntroPartKey, string> {
       // whitespace - that would eat every space the user types mid-edit and
       // make the textarea feel broken.
       let v = buffer.join('\n');
-      v = v.replace(/^\*{2}\s*/, '').replace(/\s*\*{2}$/, '');
+      // Strip ONLY the `**` markers, never surrounding whitespace - leading
+      // and trailing spaces the user typed must survive the round trip.
+      v = v.replace(/^\*{2}/, '').replace(/\*{2}$/, '');
       // Strip trailing NEWLINES only (the blank line that separates sections
       // in the serialised form gets absorbed into the previous section's
       // buffer otherwise, so every keystroke would accrue a `\n` and make
       // space/backspace feel like Enter). Trailing spaces stay intact.
       v = v.replace(/\n+$/, '');
-      // Only the EMPTY check uses trim; the stored value is raw.
-      if (v.trim()) out[currentKey] = v;
+      // Empty check is whether the value has any non-empty content at all.
+      // We preserve raw whitespace if there's any character there - the
+      // local-state in IntroBriefEditor is what actually gates the textarea.
+      if (v !== '') out[currentKey] = v;
     }
     buffer = [];
   };
   for (const line of lines) {
-    // Tolerate either order of `**` around the label:
-    //   `**Proof:** value` (the canonical form the serializer emits)
-    //   `**Proof**: value`
-    //   `Proof: value`
-    // Trailing-end now only consumes optional `**...**` wrappers, NOT
-    // trailing whitespace. Previously `\s*\*{0,2}\s*$` stripped any space
-    // typed at the end of a line - breaking spacebar input.
-    const m = line.match(/^\s*\*{0,2}\s*([A-Za-z][A-Za-z\s]*?)\s*\*{0,2}\s*:\s*\*{0,2}\s*(.*?)(?:\s*\*{2}\s*)?$/);
+    // Match the canonical serialized form `**Label:** value` with exactly
+    // one space between `**` and the value, so any extra leading whitespace
+    // the user typed becomes part of the captured value. Tolerates the
+    // legacy `**Label**: value` and bare `Label: value` shapes too.
+    // The capture group is greedy `(.*)` so trailing spaces are preserved.
+    const m = line.match(/^\s*\*{0,2}\s*([A-Za-z][A-Za-z\s]*?)\s*\*{0,2}\s*:\s*\*{0,2} ?(.*)$/);
     const label = m?.[1]?.trim().toLowerCase();
     if (label && labelToKey[label]) {
       flush();
@@ -556,16 +609,37 @@ function IntroBriefEditor({
   // next to the Proof line. Pre-filtered to kind === 'proof' by the parent.
   proofItems: BankItem[];
 }) {
-  // Controlled directly off `value` - no internal state, no useEffect. Every
-  // keystroke serialises back through onChange, parent updates the brief,
-  // and the next render re-parses. Parser is cheap text matching so the
-  // round-trip is imperceptible.
-  const parts = useMemo(() => parseIntroBrief(value), [value]);
+  // Local state per part. The textarea is bound to what the user actually
+  // typed - we never re-derive its value from a parse/serialize round-trip
+  // mid-keystroke. The serialize step is one-way: emit on every keystroke
+  // so the parent / autosave see the latest, but never read back through it.
+  //
+  // Re-init from `value` only when the parent gives us a value that didn't
+  // come from our own most recent emit (e.g. switching to a different video,
+  // or "+ add proof" pre-fills the proof field). lastEmittedRef breaks the
+  // self-loop so a value === lastEmitted is recognised as our echo, not an
+  // external write.
+  const [parts, setParts] = useState<Record<IntroPartKey, string>>(() => parseIntroBrief(value));
+  const lastEmittedRef = useRef<string>(value);
   const [proofPickerOpen, setProofPickerOpen] = useState(false);
 
+  useEffect(() => {
+    if (value !== lastEmittedRef.current) {
+      setParts(parseIntroBrief(value));
+      lastEmittedRef.current = value;
+    }
+  }, [value]);
+
   function patch(key: IntroPartKey, next: string) {
-    onChange(serializeIntroBrief({ ...parts, [key]: next }));
+    setParts((prev) => {
+      const updated = { ...prev, [key]: next };
+      const serialized = serializeIntroBrief(updated);
+      lastEmittedRef.current = serialized;
+      onChange(serialized);
+      return updated;
+    });
   }
+
 
   function pickProof(id: string) {
     const bi = proofItems.find((i) => i.id === id);
@@ -629,6 +703,7 @@ function IntroBriefEditor({
 
 function SectionBox({
   section,
+  videoId,
   byId,
   proofItems,
   canRemove,
@@ -644,6 +719,7 @@ function SectionBox({
   onDrop,
 }: {
   section: ScriptSection;
+  videoId: string;
   byId: Map<string, BankItem>;
   // Combined "Add proof" picker source: approved proof bank + wins bank
   // from the authority section. Pre-merged by the parent so the picker
@@ -685,6 +761,13 @@ function SectionBox({
           <span className="sb-section__label">{section.label}</span>
         </div>
         <div className="sb-section__actions">
+          {section.kind === 'intro' && (
+            <IntroDraftButton
+              videoId={videoId}
+              currentBrief={section.brief}
+              onResult={onBriefChange}
+            />
+          )}
           <button type="button" className="sb-section__add" onClick={onPick}>+ add story</button>
           {canRemove && (
             <button type="button" className="sb-section__remove" onClick={onRemoveSection} aria-label="remove section">
@@ -809,7 +892,7 @@ function SectionAnchor({
 
 // ─── Bank picker ──────────────────────────────────────────────────────────
 
-function BankPicker({
+export function BankPicker({
   items,
   selectedIdsAcrossAll,
   onClose,
@@ -1055,6 +1138,25 @@ const SB_CSS = `
   letter-spacing: 0.04em;
 }
 .sb-section__add:hover { color: var(--ink); border-color: var(--ink); }
+/* Sibling to + add story: same pill, but solid white-tinted border so the
+   draft-intro action reads as the more deliberate / prominent of the two. */
+.sb-section__draft {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: var(--ink);
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.sb-section__draft:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.04);
+}
+.sb-section__draft:disabled { opacity: 0.55; cursor: not-allowed; }
 .sb-section__remove {
   background: transparent;
   border: none;
