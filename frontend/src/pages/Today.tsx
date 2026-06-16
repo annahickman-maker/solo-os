@@ -99,6 +99,7 @@ export function Today() {
     focus_current: 0,
     focus_target: 0,
   };
+  const tasks = data?.top_tasks ?? [];
 
   function editDeepWorkTarget() {
     const currentHours = rings.deep_work_target_seconds / 3600;
@@ -180,7 +181,7 @@ export function Today() {
         <span>{rings.tasks_done_today} task{rings.tasks_done_today === 1 ? '' : 's'} ticked today</span>
       </div>
 
-      <ActivityTracker date={viewedDateStr} dayStart={viewedDayStart} isToday={isToday} />
+      <ActivityTracker date={viewedDateStr} dayStart={viewedDayStart} isToday={isToday} tasks={tasks} />
 
       <LongGame topTasks={data?.top_tasks ?? []} />
     </div>
