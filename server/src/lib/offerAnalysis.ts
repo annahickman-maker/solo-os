@@ -130,8 +130,12 @@ function loadPinnedProof(): string {
   }
 }
 
+// Sentinel string the prompt looks for to enforce score=1 on sales-page-
+// dependent questions. Any reason the page can't be read collapses to this.
+const SALES_PAGE_UNREADABLE = '(SALES PAGE COULD NOT BE READ)';
+
 async function fetchSalesPageText(url: string): Promise<string> {
-  if (!url || !/^https?:\/\//i.test(url)) return '(no sales-page URL provided)';
+  if (!url || !/^https?:\/\//i.test(url)) return SALES_PAGE_UNREADABLE;
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
@@ -140,10 +144,8 @@ async function fetchSalesPageText(url: string): Promise<string> {
       signal: controller.signal,
     });
     clearTimeout(timeout);
-    if (!res.ok) return `(sales-page fetch failed: HTTP ${res.status})`;
+    if (!res.ok) return SALES_PAGE_UNREADABLE;
     const html = await res.text();
-    // Strip scripts/styles, then collapse tags to text. Crude but good enough
-    // for an LLM to read the copy.
     const stripped = html
       .replace(/<script[\s\S]*?<\/script>/gi, ' ')
       .replace(/<style[\s\S]*?<\/style>/gi, ' ')
@@ -157,10 +159,14 @@ async function fetchSalesPageText(url: string): Promise<string> {
       .replace(/&quot;/g, '"')
       .replace(/\s+/g, ' ')
       .trim();
-    // Cap at ~6k chars so we don't blow Claude's context.
+    // JS-rendered SPAs (e.g. Skool) return an almost-empty shell when fetched
+    // server-side. Under ~500 chars of meaningful text means the page wasn't
+    // really delivered - treat it as unreadable so Claude doesn't rate
+    // sales-page questions off a stub.
+    if (stripped.length < 500) return SALES_PAGE_UNREADABLE;
     return stripped.length > 6000 ? stripped.slice(0, 6000) + '… [truncated]' : stripped;
-  } catch (err: any) {
-    return `(sales-page fetch errored: ${err?.message ?? 'unknown'})`;
+  } catch {
+    return SALES_PAGE_UNREADABLE;
   }
 }
 
@@ -277,21 +283,28 @@ function parseClaudeJson(raw: string): { scores: number[]; reasoning: string[] }
 export async function analyzeSection(section: SectionKey, rung: any): Promise<AnalysisResult> {
   const questions = QUESTIONS[section];
   const context = await buildContext(section, rung);
-  const system = `You are an offer-strategy analyst. You are given a context block about ONE specific offer in the creator's solopreneur business, then a list of 5 questions about the "${section}" dimension of that offer. Score each question 1-5 where:
-1 = clearly absent / very weak
-2 = weak / unconvincing
-3 = present but generic / partial
-4 = solid / mostly there
-5 = excellent / fully realised
+  const system = `You are a SKEPTICAL offer-strategy critic. You are given a context block about ONE specific offer in the creator's solopreneur business, then a list of 5 questions about the "${section}" dimension. Score each question 1-5 where:
+1 = clearly absent / very weak / no evidence in the context
+2 = weak / unconvincing / partial evidence
+3 = present but generic / not yet strong
+4 = solid / mostly there / clear evidence
+5 = excellent / fully realised / quantified evidence cited
 
-Use ONLY the context block as evidence. If the context lacks information needed to evaluate a question, score it 1-2 and explain what is missing. Reasoning must be 1 short sentence per question.
+HARD RULES (these override the rubric above - apply them mechanically):
+- Default to 1-2. A 4 or 5 requires explicit, specific evidence cited from the context block. Vague positive impressions are NOT evidence.
+- If the SALES PAGE COPY block contains the string "${SALES_PAGE_UNREADABLE}", any question that depends on the sales page (avatar fit, sales-page clarity, objections-addressed, friend-understands, proof-shows-up-across-content, etc.) MUST score 1. No exceptions, no "but maybe..." reasoning. If you can't read the sales page, you can't judge it.
+- If a required field is "(not set)" or "(no ... provided)" or "(no ... set)", any question that depends on it scores 1.
+- Round ties down. When in doubt between 3 and 4, pick 3. Between 4 and 5, pick 4.
+- Be willing to score 1s. A row of all 4s and 5s is a sign you are flattering the input.
+
+Reasoning is 1 short sentence per question. CITE the specific evidence (or its absence) you scored against.
 
 Return JSON ONLY in this shape:
 {
   "questions": [
-    { "score": 4, "reasoning": "..." },
+    { "score": 2, "reasoning": "..." },
     { "score": 3, "reasoning": "..." },
-    { "score": 5, "reasoning": "..." },
+    { "score": 1, "reasoning": "..." },
     { "score": 2, "reasoning": "..." },
     { "score": 1, "reasoning": "..." }
   ]

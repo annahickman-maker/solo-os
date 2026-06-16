@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import type { FocusResponse, Task, TaskCategory, TaskEnergy } from '../api';
@@ -6,6 +6,7 @@ import { Card } from '../components/Card';
 import { Ring } from '../components/Ring';
 import { TaskRow } from '../components/TaskRow';
 import { YearGrid } from '../components/YearGrid';
+import { MonthGrid } from '../components/MonthGrid';
 import { FocusTargetEditor } from '../components/FocusTargetEditor';
 import { EditableHeading } from '../components/EditableHeading';
 import { daysBetween, formatDate } from '../lib/format';
@@ -72,6 +73,24 @@ export function Focus() {
     queryKey: ['metrics'],
     queryFn: () => api.metrics(),
   });
+  // Short-form content tracker - same data the Instagram page uses, so the
+  // MonthGrid on Focus stays in lock-step with what the IG page shows.
+  const { data: igOutput } = useQuery({
+    queryKey: ['ig-output'],
+    queryFn: api.igOutput,
+  });
+  const setIgTarget = useMutation({
+    mutationFn: (n: number) => api.setIgTarget(n),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ig-output'] }),
+  });
+  function editIgTarget() {
+    const cur = igOutput?.target_per_week ?? 3;
+    const v = window.prompt('how many reels per week do you want to publish?', String(cur));
+    if (!v) return;
+    const n = parseFloat(v);
+    if (!Number.isFinite(n) || n <= 0) return;
+    setIgTarget.mutate(Math.round(n));
+  }
 
   const [filter, setFilter] = useState<TaskCategory | 'all'>('all');
   const [showCompleted, setShowCompleted] = useState(false);
@@ -265,19 +284,36 @@ export function Focus() {
   const mrrProgress = mrrTarget && mrrTarget > 0 ? Math.min(1, currentMrr / mrrTarget) : progress;
 
   return (
-    <div className="stack" style={{ gap: 'var(--space-8)' }}>
-      <header
-        className="page-header"
+    <div className="stack" style={{ gap: 'var(--space-5)' }}>
+      {/* "Set target" pill sits flush to the right with no left-side eyebrow.
+          The "90-day focus" label now lives inside the goal block below, so
+          this top row is just the action affordance. Tighter bottom margin
+          pulls the pill closer to the hero content. */}
+      <div
         style={{
           display: 'flex',
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          gap: 'var(--space-4)',
-          flexWrap: 'wrap',
+          justifyContent: 'flex-end',
+          marginBottom: 'calc(var(--space-5) * -1 + var(--space-3))',
         }}
       >
-        <div className="stack" style={{ gap: 4, minWidth: 0, flex: 1 }}>
+        <FocusTargetToggle targets={targets} goalId={goal?.id ?? null} />
+      </div>
+
+      {/* Two-column hero. LEFT: goal text on plain page background (no card).
+          RIGHT: only the dial is wrapped in a Card so the box visually
+          contains just the metric. Both columns share a top-aligned start so
+          the goal eyebrow + dial card top read as one horizontal line. */}
+      <div
+        className="focus__hero"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 'var(--space-7)',
+          alignItems: 'start',
+        }}
+      >
+        {/* LEFT: plain background, no card. Top-aligned. */}
+        <div className="stack" style={{ gap: 'var(--space-3)', minWidth: 0 }}>
           <span className="eyebrow">90-day focus</span>
           <EditableHeading
             value={goal?.title ?? ''}
@@ -290,58 +326,28 @@ export function Focus() {
                 .catch((e) => window.alert(`save failed: ${(e as Error).message}`));
             }}
           />
-        </div>
-        <FocusTargetToggle targets={targets} goalId={goal?.id ?? null} />
-      </header>
-
-      <Card>
-        <div
-          className="focus__hero"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr) minmax(160px, 220px)',
-            gap: 'var(--space-7)',
-            alignItems: 'center',
-          }}
-        >
-          <div className="stack" style={{ gap: 'var(--space-3)' }}>
-            <span className="eyebrow">monthly recurring revenue</span>
-            <span
-              style={{
-                fontFamily: 'var(--font-display)',
-                fontWeight: 700,
-                fontSize: 'clamp(3.5rem, 9vw, 7rem)',
-                letterSpacing: '-0.02em',
-                lineHeight: 0.95,
-                fontVariationSettings: "'opsz' 144",
-              }}
-            >
-              ${currentMrr.toLocaleString('en-US')}
-              {mrrTarget ? (
-                <span
-                  style={{
-                    color: 'var(--muted)',
-                    fontSize: '0.18em',
-                    fontWeight: 500,
-                    letterSpacing: '0.02em',
-                    marginLeft: '0.4em',
-                    verticalAlign: 'baseline',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  / ${mrrTarget.toLocaleString('en-US')}
-                </span>
-              ) : (
-                <span style={{ color: 'var(--muted)', fontSize: '0.4em', fontWeight: 500 }}> / mo</span>
-              )}
+          {goal?.target_date && (
+            <span className="muted" style={{ marginTop: 'var(--space-2)' }}>
+              {daysLeft} days remaining, target {formatDate(goal.target_date)}
             </span>
-            {goal?.target_date && (
-              <span className="muted">
-                {daysLeft} days remaining, target {formatDate(goal.target_date)}
-              </span>
-            )}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-2)' }}>
+          )}
+
+          {/* Connecting to your offer - reads/writes the same focus rung
+              that the Offer page uses (pricing_rungs.featured). Click to set
+              the focus offer; setting here propagates to the Offer page. */}
+          <FocusOfferConnector />
+        </div>
+
+        {/* RIGHT: the dial inside its own card. */}
+        <Card>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 'var(--space-3)',
+            }}
+          >
             <Ring
               value={mrrProgress}
               label={`out of ${target || '?'} members`}
@@ -349,7 +355,34 @@ export function Focus() {
               unit="%"
               size="hero"
             />
-            {/* Inline member editor: click the number to edit, Enter / blur saves, Esc cancels. */}
+            <span
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontWeight: 700,
+                fontSize: 'clamp(1.6rem, 3.5vw, 2.6rem)',
+                letterSpacing: '-0.02em',
+                lineHeight: 1,
+                textAlign: 'center',
+              }}
+            >
+              ${currentMrr.toLocaleString('en-US')}
+              {mrrTarget ? (
+                <span
+                  style={{
+                    color: 'var(--muted)',
+                    fontSize: '0.55em',
+                    fontWeight: 500,
+                    letterSpacing: '0.02em',
+                    marginLeft: '0.3em',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  / ${mrrTarget.toLocaleString('en-US')}
+                </span>
+              ) : (
+                <span style={{ color: 'var(--muted)', fontSize: '0.55em', fontWeight: 500 }}> / mo</span>
+              )}
+            </span>
             {editingMembers ? (
               <input
                 autoFocus
@@ -407,22 +440,46 @@ export function Focus() {
               </button>
             )}
           </div>
-        </div>
-      </Card>
-
-      {/* Long-form content tracker - publish grid for the year. */}
-      {pipeline?.weekly_publish_year && (
-        <Card eyebrow="long-form content" title="consistent content this year">
-          <YearGrid
-            data={pipeline.weekly_publish_year}
-            targetPerWeeks={
-              targets?.long_form_per_week && targets.long_form_per_week > 0
-                ? Math.max(1, Math.round(1 / targets.long_form_per_week))
-                : targets?.youtube_target_per_weeks ?? 1
-            }
-          />
         </Card>
-      )}
+      </div>
+
+      <style>{`
+        @media (max-width: 720px) {
+          .focus__hero { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+
+      {/* Long-form + short-form publish counters, stacked. Both read the
+          same data as the YouTube + Instagram pages so the counts here stay
+          in lock-step. */}
+      <div className="stack" style={{ gap: 'var(--space-5)' }}>
+        {pipeline?.weekly_publish_year && (
+          <Card eyebrow="long-form content" title="YouTube">
+            <YearGrid
+              data={pipeline.weekly_publish_year}
+              targetPerWeeks={
+                targets?.long_form_per_week && targets.long_form_per_week > 0
+                  ? Math.max(1, Math.round(1 / targets.long_form_per_week))
+                  : targets?.youtube_target_per_weeks ?? 1
+              }
+            />
+          </Card>
+        )}
+
+        {igOutput && (
+          <Card eyebrow="short-form content" title="Instagram">
+            <MonthGrid
+              months={igOutput.months}
+              targetPerWeek={igOutput.target_per_week}
+            />
+          </Card>
+        )}
+      </div>
+
+      {/* Small gap between the content counters group and the master task
+          list - just enough to separate the two sections without breaking
+          the page rhythm. */}
+      <div style={{ height: 'var(--space-3)' }} />
 
       {/* Split: sticky vertical Mon-Fri planner on the LEFT, master
           todo list on the RIGHT. Drag any row from the master todo
@@ -534,6 +591,228 @@ export function Focus() {
         )}
       </section>
       </div>
+    </div>
+  );
+}
+
+// =========================================================================
+// FocusOfferConnector: reads the featured rung from /api/offers and renders
+// either (a) a compact card showing the focus offer name + price + stage,
+// or (b) a "select your focus offer" empty box (same dashed-border feel as
+// the FeaturedDropZone on the Offer page). Clicking either opens a picker
+// with all available rungs - selecting one calls setFeaturedRung, which
+// promotes that rung and propagates to the Offer page since both surfaces
+// read the same /api/offers data.
+// =========================================================================
+function FocusOfferConnector() {
+  const qc = useQueryClient();
+  const { data: offer } = useQuery({ queryKey: ['offers'], queryFn: api.offers });
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  const pricingSection = offer?.sections?.find((s: any) => s.id === 'pricing');
+  const rungs: any[] = pricingSection?.pricing_rungs ?? [];
+  const featured = rungs.find((r) => r?.featured) ?? null;
+
+  const setFeatured = useMutation({
+    mutationFn: (id: string) => api.setFeaturedRung(id, true),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['offers'] });
+      qc.invalidateQueries({ queryKey: ['today'] });
+      qc.invalidateQueries({ queryKey: ['focus'] });
+    },
+  });
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    function onDocClick(e: MouseEvent) {
+      if (!pickerRef.current?.contains(e.target as Node)) setPickerOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setPickerOpen(false);
+    }
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [pickerOpen]);
+
+  function gotoOffer() {
+    window.history.pushState({}, '', '/profile/offer');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }
+
+  return (
+    <div ref={pickerRef} style={{ position: 'relative', marginTop: 'var(--space-4)' }}>
+      <span className="eyebrow" style={{ display: 'block', marginBottom: 6 }}>
+        connecting to your offer
+      </span>
+      {featured ? (
+        <button
+          type="button"
+          onClick={() => setPickerOpen((o) => !o)}
+          title="click to change the focus offer"
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: 'var(--space-4)',
+            background: 'var(--surface)',
+            border: '1.5px solid var(--recovery)',
+            borderRadius: 'var(--radius-lg)',
+            color: 'var(--ink)',
+            cursor: 'pointer',
+            textAlign: 'left',
+            fontFamily: 'inherit',
+          }}
+        >
+          <span style={{ color: 'var(--recovery)', fontSize: '1em', flexShrink: 0 }}>★</span>
+          <span className="eyebrow" style={{ color: 'var(--muted)', flexShrink: 0 }}>focus offer</span>
+          <span
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontWeight: 700,
+              fontSize: '1.05rem',
+              letterSpacing: '-0.01em',
+              marginLeft: 4,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {featured.name || '(unnamed offer)'}
+          </span>
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setPickerOpen((o) => !o)}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 'var(--space-6)',
+            background: 'transparent',
+            border: '2px dashed var(--hairline)',
+            borderRadius: 'var(--radius-lg)',
+            color: 'var(--muted)',
+            fontSize: 'var(--body-sm)',
+            fontStyle: 'italic',
+            textAlign: 'center',
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            transition: 'border-color 0.15s, color 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.borderColor = 'var(--recovery)';
+            (e.currentTarget as HTMLElement).style.color = 'var(--ink)';
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.borderColor = 'var(--hairline)';
+            (e.currentTarget as HTMLElement).style.color = 'var(--muted)';
+          }}
+        >
+          ★ select your focus offer · this is what you're building this sprint
+        </button>
+      )}
+
+      {pickerOpen && (
+        <div
+          role="dialog"
+          aria-label="pick a focus offer"
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 6px)',
+            left: 0,
+            right: 0,
+            zIndex: 30,
+            background: 'var(--bg)',
+            border: '1px solid var(--hairline)',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+            padding: 6,
+            display: 'flex',
+            flexDirection: 'column',
+            maxHeight: 320,
+            overflowY: 'auto',
+          }}
+        >
+          {rungs.length === 0 && (
+            <div style={{ padding: 'var(--space-3)', color: 'var(--muted)', fontSize: 'var(--body-sm)' }}>
+              no offers yet.{' '}
+              <button
+                type="button"
+                onClick={gotoOffer}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--recovery)',
+                  cursor: 'pointer',
+                  padding: 0,
+                  font: 'inherit',
+                  textDecoration: 'underline',
+                }}
+              >
+                add one on the offer page →
+              </button>
+            </div>
+          )}
+          {rungs.map((r) => {
+            const isFeatured = r.id === featured?.id;
+            return (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => {
+                  if (!isFeatured) setFeatured.mutate(r.id);
+                  setPickerOpen(false);
+                }}
+                disabled={setFeatured.isPending}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 'var(--space-3)',
+                  padding: 'var(--space-3)',
+                  background: isFeatured ? 'rgba(157,183,209,0.06)' : 'transparent',
+                  border: 'none',
+                  borderRadius: 'var(--radius-sm)',
+                  cursor: isFeatured ? 'default' : 'pointer',
+                  color: 'var(--ink)',
+                  fontSize: 'var(--body-sm)',
+                  textAlign: 'left',
+                  fontFamily: 'inherit',
+                  width: '100%',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isFeatured) {
+                    (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isFeatured) {
+                    (e.currentTarget as HTMLElement).style.background = 'transparent';
+                  }
+                }}
+              >
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
+                  <span style={{ fontWeight: 600 }}>{r.name || '(unnamed)'}</span>
+                  <span className="muted" style={{ fontSize: 11 }}>
+                    {r.price_label || 'no price'} · {r.status || 'idea'}
+                  </span>
+                </span>
+                {isFeatured && (
+                  <span style={{ color: 'var(--recovery)', fontSize: '0.9em' }}>★ focus</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

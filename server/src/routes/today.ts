@@ -130,14 +130,30 @@ app.get('/', async (c) => {
   resetStaleWeeklyTasks();
   const requestedDate = c.req.query('date');
   const dayStartParam = c.req.query('day_start');
-  // Top tasks: prefer anything pinned to TODAY's weekday in the Focus
-  // page's WeekPlanner over generic this_week tasks. Weekday-pinned
+
+  // Top tasks: prefer anything pinned to the VIEWED day's weekday in the
+  // Focus page's WeekPlanner over generic this_week tasks. Weekday-pinned
   // tasks come first; remaining slots fill from this_week.
   //
   // The WeekPlanner stores a day-of-week string ("mon"..."sun"), not a
-  // date, so a task pinned to "wed" surfaces here every Wednesday.
-  const _now = new Date();
-  const todayWeekday = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][_now.getDay()]!;
+  // date - so a task pinned to "wed" surfaces every Wednesday. When the
+  // user toggles the Today page to yesterday/tomorrow/etc., we need to
+  // pick the weekday of THAT day, not whatever today's calendar says, or
+  // the task list won't update with the date picker.
+  function pickViewedWeekday(): string {
+    const wdNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const dayStartNum = dayStartParam ? Number(dayStartParam) : NaN;
+    if (Number.isFinite(dayStartNum) && dayStartNum > 0) {
+      return wdNames[new Date(dayStartNum * 1000).getDay()]!;
+    }
+    if (requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
+      const [y, m, d] = requestedDate.split('-').map(Number) as [number, number, number];
+      return wdNames[new Date(y, m - 1, d).getDay()]!;
+    }
+    return wdNames[new Date().getDay()]!;
+  }
+  const viewedWeekday = pickViewedWeekday();
+
   const allTasks = loadCollection<TaskFrontmatter>('00_System/tasks', { type: 'task' });
   function taskWeekday(fm: any): string | null {
     const wd = fm?.scheduled_weekday;
@@ -153,13 +169,13 @@ app.get('/', async (c) => {
   const scheduledToday = allTasks.filter((e) => {
     const fm = e.frontmatter;
     return (
-      taskWeekday(fm) === todayWeekday &&
+      taskWeekday(fm) === viewedWeekday &&
       (fm.status === 'pending' || fm.status === 'in_progress')
     );
   });
   const thisWeekUnscheduled = allTasks.filter((e) => {
     const fm = e.frontmatter;
-    if (taskWeekday(fm) === todayWeekday) return false; // already counted
+    if (taskWeekday(fm) === viewedWeekday) return false; // already counted
     return fm?.this_week === true && (fm.status === 'pending' || fm.status === 'in_progress');
   });
   const top = [...scheduledToday, ...thisWeekUnscheduled]

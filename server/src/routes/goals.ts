@@ -17,6 +17,11 @@ type GoalFrontmatter = {
   mrr_target_usd?: number | null;
   // Used in the editor's calculator: members needed = revenue / avg_price.
   avg_member_price_usd?: number | null;
+  // What revenue model is this goal running? Drives editor labels: e.g.
+  // "members" for recurring, "clients" for service, "buyers" for products,
+  // "cohort seats" for launches. Front-end derives the unit word from this.
+  // 'recurring' | 'service' | 'product' | 'cohort' | null.
+  revenue_model?: string | null;
   created?: string;
   updated?: string;
 };
@@ -31,6 +36,7 @@ type GoalResponse = {
   parent_id: string | null;
   mrr_target_usd: number | null;
   avg_member_price_usd: number | null;
+  revenue_model: string | null;
   source_file: string;
   updated_at: number;
 };
@@ -52,6 +58,7 @@ export default createFileRoute<GoalFrontmatter, GoalResponse>({
       parent_id: fm.parent_id ?? null,
       mrr_target_usd: fm.mrr_target_usd ?? null,
       avg_member_price_usd: fm.avg_member_price_usd ?? null,
+      revenue_model: fm.revenue_model ?? null,
       source_file: entry.relPath,
       updated_at: entry.mtimeSec,
     };
@@ -85,6 +92,7 @@ export default createFileRoute<GoalFrontmatter, GoalResponse>({
     if (body.parent_id !== undefined) fm.parent_id = body.parent_id;
     if (body.mrr_target_usd !== undefined) fm.mrr_target_usd = body.mrr_target_usd;
     if (body.avg_member_price_usd !== undefined) fm.avg_member_price_usd = body.avg_member_price_usd;
+    if (body.revenue_model !== undefined) fm.revenue_model = body.revenue_model;
     fm.updated = todayISO();
     let newBody = entry.body;
     if (body.title !== undefined) {

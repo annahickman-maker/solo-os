@@ -6,30 +6,6 @@
 import { useEffect, useState } from 'react';
 import { Voice } from '../pages/Voice';
 
-function LightbulbSvg() {
-  // Outline lightbulb in the same visual language as AvatarSvg: 48-unit
-  // viewBox, hairline circle backdrop, recovery-color outline at 1.6 stroke.
-  return (
-    <svg viewBox="0 0 48 48" aria-hidden>
-      <circle cx="24" cy="24" r="23" fill="rgba(255,255,255,0.04)" stroke="var(--hairline)" />
-      {/* bulb dome */}
-      <path
-        d="M16 22a8 8 0 1 1 16 0c0 3-1.6 5.4-3.4 7-1 .9-1.6 1.7-1.6 3v1H21v-1c0-1.3-.6-2.1-1.6-3-1.8-1.6-3.4-4-3.4-7Z"
-        fill="none"
-        stroke="var(--recovery)"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      {/* screw threads */}
-      <path d="M20 35h8" fill="none" stroke="var(--recovery)" strokeWidth="1.6" strokeLinecap="round" />
-      <path d="M21 38h6" fill="none" stroke="var(--recovery)" strokeWidth="1.6" strokeLinecap="round" />
-      {/* filament hint */}
-      <path d="M22 23v3M26 23v3" fill="none" stroke="var(--recovery)" strokeWidth="1.2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 export function BrainstormButton() {
   const [open, setOpen] = useState(false);
 
@@ -56,8 +32,7 @@ export function BrainstormButton() {
         style={{
           display: 'inline-flex',
           alignItems: 'center',
-          gap: 8,
-          padding: '6px 12px 6px 6px',
+          padding: '6px 14px',
           background: 'var(--surface)',
           border: '1px solid var(--hairline)',
           borderRadius: 'var(--radius-pill)',
@@ -76,17 +51,6 @@ export function BrainstormButton() {
           (e.currentTarget as HTMLElement).style.borderColor = 'var(--hairline)';
         }}
       >
-        <span
-          style={{
-            width: 18,
-            height: 18,
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <LightbulbSvg />
-        </span>
         <span
           style={{
             display: 'inline-flex',

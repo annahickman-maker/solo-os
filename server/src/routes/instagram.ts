@@ -267,13 +267,18 @@ app.get('/output', (c) => {
       days: [...dayCounts.entries()].sort((a, b) => a[0] - b[0]).map(([day, count]) => ({ day, count })),
     });
   }
-  // Read target_per_week from state.md (default 3/wk for IG)
+  // Read target_per_week from state.md. Prefer instagram_target_per_week,
+  // fall back to short_form_per_week (set by the Focus Target Editor) so the
+  // two fields stay in lock-step from either direction. Default 3/wk.
   let target = 3;
   try {
     const stateFile = loadFile(abs(STATE_FILE_REL[0], STATE_FILE_REL[1]));
     if (stateFile?.frontmatter) {
-      const v = (stateFile.frontmatter as any).instagram_target_per_week;
-      if (typeof v === 'number' && v > 0) target = v;
+      const fm = stateFile.frontmatter as any;
+      const igVal = fm.instagram_target_per_week;
+      const sfVal = fm.short_form_per_week;
+      if (typeof igVal === 'number' && igVal > 0) target = igVal;
+      else if (typeof sfVal === 'number' && sfVal > 0) target = sfVal;
     }
   } catch {}
 
@@ -317,7 +322,15 @@ app.patch('/output/target', async (c) => {
   }
   const filePath = abs(STATE_FILE_REL[0], STATE_FILE_REL[1]);
   const stateFile = loadFile(filePath);
-  const fm = { ...((stateFile?.frontmatter as any) ?? {}), instagram_target_per_week: n, updated: new Date().toISOString() };
+  // Write both fields so the Focus Target Editor (which reads
+  // short_form_per_week) and the IG MonthGrid (which reads
+  // instagram_target_per_week) always agree.
+  const fm = {
+    ...((stateFile?.frontmatter as any) ?? {}),
+    instagram_target_per_week: n,
+    short_form_per_week: n,
+    updated: new Date().toISOString(),
+  };
   saveFile(filePath, fm as Record<string, unknown>, stateFile?.body ?? '# Dashboard State\n');
   return c.json({ ok: true });
 });

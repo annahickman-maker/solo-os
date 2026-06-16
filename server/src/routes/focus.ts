@@ -152,6 +152,7 @@ app.get('/', (c) => {
       mrr_target_usd: primary?.frontmatter.mrr_target_usd ?? null,
       member_target: primary?.frontmatter.target_value ?? null,
       avg_member_price_usd: primary?.frontmatter.avg_member_price_usd ?? null,
+      revenue_model: (primary?.frontmatter as any)?.revenue_model ?? null,
       youtube_target_per_weeks: ytTargetPerWeeks,
       long_form_per_week: longFormPerWeek,
       short_form_per_week: shortFormPerWeek,

@@ -196,6 +196,86 @@
   flex-direction: column;
 }
 
+/* Slide-over panel used by every "click chip → opens panel on the right"
+   pattern (set target, your avatar, reputation value box, etc.). Originally
+   embedded inside AvatarToggle's <style> block - lifted into global so any
+   page can use the class regardless of which other components are mounted. */
+.ytav-wrap {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 50;
+  display: flex;
+  justify-content: flex-end;
+  animation: ytav-fade 0.18s ease-out;
+}
+@keyframes ytav-fade { from { opacity: 0; } to { opacity: 1; } }
+.ytav-panel {
+  width: min(680px, 100%);
+  background: var(--bg);
+  border-left: 1px solid var(--recovery);
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  animation: ytav-slide 0.22s ease-out;
+}
+@keyframes ytav-slide { from { transform: translateX(40px); } to { transform: translateX(0); } }
+.ytav-panel__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+.ytav-panel__title {
+  margin: 4px 0 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.45rem;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
+/* Compact pill trigger used in page-header top-right slots (e.g. "your
+   avatar" on Content, "set target" on Focus). Originally embedded inside
+   AvatarToggle's <style> block - lifted into global so any page can use
+   the class regardless of which other components are mounted. */
+.ytav-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 14px 6px 6px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--body-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+.ytav-trigger:hover {
+  border-color: color-mix(in srgb, var(--recovery) 50%, var(--hairline));
+  transform: translateY(-1px);
+}
+.ytav-trigger__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ytav-trigger__icon svg { width: 28px; height: 28px; display: block; }
+.ytav-trigger__label {
+  color: var(--recovery);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;

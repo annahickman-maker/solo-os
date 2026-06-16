@@ -62,6 +62,16 @@ body,
   height: 100%;
 }
 
+/* Set the page background on html too. body is height:100% (viewport height),
+   so any content taller than the viewport scrolls past the bottom of the body
+   and reveals the html element underneath. If html doesn't carry the same
+   --bg color, you see a lighter band when scrolling (browser's default
+   canvas color blends through). Belt + suspenders: html, body, and the
+   overscroll color all explicitly --bg. */
+html {
+  background: var(--bg);
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -72,6 +82,9 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  /* Stop the lighter overscroll/rubber-band band Safari shows when you
+     scroll past the bottom of long pages. */
+  overscroll-behavior-y: none;
 }
 
 button {

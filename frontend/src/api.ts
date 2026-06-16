@@ -176,6 +176,7 @@ export interface FocusTargets {
   mrr_target_usd: number | null;
   member_target: number | null;
   avg_member_price_usd: number | null;
+  revenue_model: string | null;
   youtube_target_per_weeks: number;
   long_form_per_week: number;
   short_form_per_week: number;
@@ -492,6 +493,7 @@ export const api = {
       target_date?: string | null;
       mrr_target_usd?: number | null;
       avg_member_price_usd?: number | null;
+      revenue_model?: string | null;
     }
   ) =>
     request<Goal>(`/api/goals/${id}`, {
