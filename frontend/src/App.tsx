@@ -19,6 +19,7 @@ import { Profile } from './pages/Profile';
 import { Journey } from './pages/Journey';
 import { Settings } from './pages/Settings';
 import { Decks } from './pages/Decks';
+import { TeleprompterProvider } from './components/TeleprompterProvider';
 
 function handleAuthError(err: unknown) {
   if (err instanceof UnauthorizedError) {
@@ -81,7 +82,9 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <PasswordGate>
-          <Shell />
+          <TeleprompterProvider>
+            <Shell />
+          </TeleprompterProvider>
         </PasswordGate>
       </BrowserRouter>
     </QueryClientProvider>

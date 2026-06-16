@@ -3,100 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import type { BankItem, BankKind, Video, VideoStatus, VideoSuggestions } from '../api';
 import { VideoScriptBuilder, BankPicker, type VideoScriptBuilderHandle } from './VideoScriptBuilder';
+import { useTeleprompter } from './TeleprompterProvider';
 
 interface VideoDetailProps {
   videoId: string | null;
   onClose: () => void;
 }
-
-// Self-contained HTML for the teleprompter pop-out. Talks to the opener
-// window via postMessage: requests the current script on load, sends back
-// every edit (debounced), and tells the opener when it closes.
-const TELEPROMPTER_HTML = `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>teleprompter</title>
-<style>
-  html, body { margin: 0; padding: 0; height: 100%; background: #0a0a0a; color: #f5f5f5; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif; }
-  .wrap { display: flex; flex-direction: column; height: 100vh; }
-  .toolbar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: #111; border-bottom: 1px solid #222; flex: 0 0 auto; }
-  .toolbar button { background: #1a1a1a; color: #f5f5f5; border: 1px solid #2a2a2a; border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 14px; font-family: inherit; }
-  .toolbar button:hover { background: #262626; }
-  .toolbar .size { min-width: 56px; text-align: center; color: #999; font-size: 13px; font-variant-numeric: tabular-nums; }
-  .toolbar .spacer { flex: 1; }
-  .toolbar .lbl { color: #777; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
-  textarea { flex: 1 1 auto; width: 100%; box-sizing: border-box; background: #0a0a0a; color: #f5f5f5; border: none; outline: none; padding: 48px 96px; line-height: 1.55; resize: none; font-family: inherit; caret-color: #f5f5f5; }
-  textarea::selection { background: #2a3a55; }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <div class="toolbar">
-    <span class="lbl">teleprompter</span>
-    <div class="spacer"></div>
-    <button id="dec" title="smaller (cmd -)">A−</button>
-    <span class="size" id="sz">32px</span>
-    <button id="inc" title="bigger (cmd +)">A+</button>
-    <button id="close" title="close window">close</button>
-  </div>
-  <textarea id="t" spellcheck="false"></textarea>
-</div>
-<script>
-  (function(){
-    var t = document.getElementById('t');
-    var sz = document.getElementById('sz');
-    var size = parseInt(localStorage.getItem('teleprompter:size') || '32', 10);
-    if (isNaN(size)) size = 32;
-    function applySize(){ t.style.fontSize = size + 'px'; sz.textContent = size + 'px'; localStorage.setItem('teleprompter:size', String(size)); }
-    applySize();
-    document.getElementById('inc').onclick = function(){ size = Math.min(120, size + 4); applySize(); };
-    document.getElementById('dec').onclick = function(){ size = Math.max(12, size - 4); applySize(); };
-    document.getElementById('close').onclick = function(){ window.close(); };
-
-    window.addEventListener('message', function(e){
-      if (!e.data || typeof e.data !== 'object') return;
-      if (e.data.type === 'teleprompter:init') {
-        var next = e.data.script || '';
-        if (t.value !== next) {
-          var s = t.selectionStart, en = t.selectionEnd;
-          t.value = next;
-          try { t.setSelectionRange(s, en); } catch (_) {}
-        }
-      }
-    });
-
-    if (window.opener) {
-      try { window.opener.postMessage({ type: 'teleprompter:ready' }, '*'); } catch (_) {}
-    }
-
-    var timer = null;
-    t.addEventListener('input', function(){
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(function(){
-        if (window.opener) {
-          try { window.opener.postMessage({ type: 'teleprompter:update', script: t.value }, '*'); } catch (_) {}
-        }
-      }, 200);
-    });
-
-    document.addEventListener('keydown', function(e){
-      if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) { e.preventDefault(); size = Math.min(120, size + 4); applySize(); }
-      else if ((e.metaKey || e.ctrlKey) && e.key === '-') { e.preventDefault(); size = Math.max(12, size - 4); applySize(); }
-      else if ((e.metaKey || e.ctrlKey) && (e.key === '0')) { e.preventDefault(); size = 32; applySize(); }
-    });
-
-    window.addEventListener('beforeunload', function(){
-      if (window.opener) {
-        try { window.opener.postMessage({ type: 'teleprompter:closed' }, '*'); } catch (_) {}
-      }
-    });
-
-    setTimeout(function(){ t.focus(); }, 50);
-  })();
-</script>
-</body>
-</html>`;
 
 const STAGES: { status: VideoStatus; label: string }[] = [
   { status: 'idea', label: 'idea' },
@@ -440,79 +352,23 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
   const lastScriptCursorRef = useRef<number | null>(null);
   const [scriptBankOpen, setScriptBankOpen] = useState(false);
 
-  // Teleprompter pop-out window. the creator opens a separate browser window with
-  // big editable text + font-size controls to read off-camera while filming.
-  // Edits in the pop-out sync back to `script` via postMessage; edits in the
-  // main textarea (or inserts from the bank) push out to the pop-out.
-  const teleprompterWinRef = useRef<Window | null>(null);
-  const [teleprompterOpen, setTeleprompterOpen] = useState(false);
+  // Teleprompter pop-out lives at the app level (TeleprompterProvider) so
+  // it persists across page navigation. This component just opens it for
+  // the current video and pushes local script changes (e.g. bank inserts)
+  // out to the window. Edits in the pop-out are saved to the vault by the
+  // provider directly, so they survive even when VideoDetail isn't mounted.
+  const teleprompter = useTeleprompter();
+  const teleprompterOpen = videoId ? teleprompter.isOpenFor(videoId) : false;
 
   useEffect(() => {
-    function onMessage(e: MessageEvent) {
-      const win = teleprompterWinRef.current;
-      if (!win || e.source !== win) return;
-      const d = e.data;
-      if (!d || typeof d !== 'object') return;
-      if (d.type === 'teleprompter:ready') {
-        win.postMessage({ type: 'teleprompter:init', script: scriptRef.current }, '*');
-      } else if (d.type === 'teleprompter:update') {
-        setScript(typeof d.script === 'string' ? d.script : '');
-      } else if (d.type === 'teleprompter:closed') {
-        teleprompterWinRef.current = null;
-        setTeleprompterOpen(false);
-      }
-    }
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, []);
-
-  // Push parent-side script changes into the teleprompter (e.g. when the creator
-  // inserts from the bank in the main textarea). The child compares before
-  // applying, so echoes from its own typing are no-ops.
-  useEffect(() => {
-    const win = teleprompterWinRef.current;
-    if (!win || win.closed) return;
-    win.postMessage({ type: 'teleprompter:init', script }, '*');
-  }, [script]);
-
-  // Poll for window close so the "open teleprompter" button knows to flip
-  // back to "open" state when the creator closes the pop-out manually.
-  useEffect(() => {
-    if (!teleprompterOpen) return;
-    const id = setInterval(() => {
-      const win = teleprompterWinRef.current;
-      if (!win || win.closed) {
-        teleprompterWinRef.current = null;
-        setTeleprompterOpen(false);
-      }
-    }, 800);
-    return () => clearInterval(id);
-  }, [teleprompterOpen]);
-
-  // Close the pop-out if the VideoDetail unmounts so a stale window doesn't
-  // get left behind pointing at nothing.
-  useEffect(() => {
-    return () => {
-      const win = teleprompterWinRef.current;
-      if (win && !win.closed) win.close();
-      teleprompterWinRef.current = null;
-    };
-  }, []);
+    if (!videoId) return;
+    if (!teleprompter.isOpenFor(videoId)) return;
+    teleprompter.pushScript(videoId, script);
+  }, [script, videoId, teleprompter]);
 
   function openTeleprompter() {
-    const existing = teleprompterWinRef.current;
-    if (existing && !existing.closed) {
-      existing.focus();
-      existing.postMessage({ type: 'teleprompter:init', script: scriptRef.current }, '*');
-      return;
-    }
-    const w = window.open('', 'teleprompter', 'width=960,height=760');
-    if (!w) return;
-    w.document.open();
-    w.document.write(TELEPROMPTER_HTML);
-    w.document.close();
-    teleprompterWinRef.current = w;
-    setTeleprompterOpen(true);
+    if (!videoId) return;
+    teleprompter.openFor(videoId, scriptRef.current);
   }
   const banksQuery = useQuery({ queryKey: ['banks'], queryFn: api.listBanks, enabled: !!videoId });
   // Reputation feeds the wins bank (own / student / client wins from the

@@ -404,7 +404,18 @@ export function buildReputationResponse() {
   // alignment_avg is 0-1 across the 4 dimensions
   const alignment_avg = dims.reduce((a, b) => a + b.score, 0) / (dims.length * 5);
   const alignment_score = Math.round(alignment_avg * 50);
-  const overall = volume_score + alignment_score;
+  // Hard floor: no published content, no reputation. A brand defined only on
+  // paper - no hours shipped - reads as 0, regardless of how filled in the
+  // brand profile is. Per-dimension scores also zero out (nothing to evidence
+  // them against) so the rings on the frontend read empty too.
+  const hasContent = hours > 0;
+  const overall = hasContent ? volume_score + alignment_score : 0;
+  if (!hasContent) {
+    for (const d of dims) {
+      d.score = 0;
+      d.activation_score = 0;
+    }
+  }
 
   const transformation_anchor = {
     positioning_statement: slot(slots, 'positioning_statement'),
