@@ -1,57 +1,123 @@
 # Solo OS
 
-A local-only operating dashboard for solopreneurs. Reads and writes a vault folder of markdown + JSON files. Three services on your machine, no cloud.
+A local-only operating dashboard for solopreneurs. The same tool I use every day to run my one-person business.
 
-```
-:5174  frontend       Vite + React UI
-:8791  server         Hono - reads/writes vault files
-:8789  claude-bridge  spawns `claude -p` for AI features
-```
+> **This is one part of a bigger system.** The dashboard is a tool. The methodology that makes it work - the positioning, the offer ladder, the content engine, the way the foundation files feed every downstream surface - lives inside [**Solopreneur Systems**](https://www.skool.com/mastermind-5724/about), my paid community.
+>
+> If you just want the code, clone it. It runs. But the dashboard is built around a specific way of thinking about a one-person business: define your foundation once, let it drive everything downstream. Without the methodology, you have a clean UI over your own markdown files. With the methodology, you have an operating system.
+>
+> If you're an SS member, the dashboard came to you through the community and you already know what it's for. If you found this repo on its own, welcome - [come check out SS](https://www.skool.com/mastermind-5724/about) to see how the pieces fit together.
 
-## Install
+---
+
+## What it does
+
+A vault folder of markdown + JSON files is the database. Three local services on your machine read and write that vault. No cloud, no signup, no data leaves your laptop.
+
+The dashboard has 13 pages. The important ones:
+
+- **Today** - your greeting, focus rings (strain / deep work / focus), the tasks you committed to this week
+- **Focus** - your 90-day goal, sub-goals, the rolling sprint
+- **Projects** - one-person businesses are a project portfolio; this tracks both your own projects and client engagements
+- **Content** - YouTube pipeline + Instagram queue, AI title gen, transcript drop, video script builder
+- **Profile** - the 6 foundational files (positioning, audience, story, IP, offer suite, voice) + Foundation map of every Layer 2 store + Reputation + Offer
+- **Voice** - 200+ brainstorm questions to mine your voice for content
+- **Inbox** - Skool replies, Zoom transcripts, generic inbox
+- **Skills, Vault, Settings** - the rest
+
+The foundation is the part to understand: 6 prose files in `01_Core/` describe who you are, who you help, your story, your IP, your offers, your voice. The dashboard parses those into 18+ structured slots, then every other page reads from those slots. Define your foundation once. Every video title, every offer page, every script knows who you are.
+
+## Install (Mac, ~10 minutes)
+
+You need three things first:
+1. **Node 20+** (download from https://nodejs.org)
+2. **A Claude subscription** - Pro ($20/mo) or Max ($100/mo). The dashboard uses YOUR subscription for all AI features. No API key, no metered billing.
+3. **The Claude Code CLI** from https://claude.com/code. After installing, run `claude auth login` once - browser opens, sign in to your Claude account.
+
+Then:
 
 ```bash
-git clone <this-repo> ~/Desktop/solo-os
+git clone https://github.com/annahickman-maker/solo-os.git ~/Desktop/solo-os
 cd ~/Desktop/solo-os
-(cd server && npm install) && (cd frontend && npm install) && (cd claude-bridge && npm install)
-./start-local.sh
+./setup.sh
 ```
 
-Open http://localhost:5174 - password is `dev`. You'll land on the example data in `sample-vault/`.
+The setup script runs `npm install` in three sub-folders, verifies your Claude CLI is set up, and builds **Solo OS.app** into your `/Applications/` folder with a custom icon. Double-click it (or hit ⌘-space and type "Solo OS") to launch.
+
+The first launch takes ~10 seconds to spin up the three services. Then Chrome opens to http://localhost:5174. Password is `dev`.
+
+**Windows users:** see [WINDOWS.md](WINDOWS.md) for the manual install steps (no `.exe` installer yet).
+
+## Daily flow
+
+Double-click Solo OS in your Dock or Applications folder. Browser opens. Use the dashboard. Close the tab when you're done; the services keep running until you restart your Mac.
 
 ## Point at your own vault
 
-```bash
-VAULT_ROOT="/path/to/your/vault" ./start-local.sh
-```
-
-Or set it once in `server/.env`:
-
-```
-VAULT_ROOT=/path/to/your/vault
-```
-
-Your vault should follow the structure in `sample-vault/`. See [DEPLOY.md](DEPLOY.md) for the full setup guide.
-
-## Updating
-
-When the maintainer publishes changes:
+By default the dashboard uses the bundled `sample-vault/`. To use your own:
 
 ```bash
+VAULT_ROOT="/path/to/your/vault" open "/Applications/Solo OS.app"
+```
+
+Or edit the default in `start-local.sh`.
+
+Your vault should follow the structure under `sample-vault/`. The 6 `01_Core/core_*.md` files are the most important - drop yours in and the dashboard auto-extracts your brand slots, avatars, POVs, journey timeline, offer rungs, and wins the first time you open it. This takes ~90 seconds. Reputation and Offer pages populate immediately after.
+
+## What you get from this repo vs. what you get from SS
+
+**This repo (free):**
+- The dashboard code, runs on your machine
+- A sample vault you can poke at to see what the structure looks like
+- The auto-extraction that turns 6 prose files into structured Layer 2 data
+
+**Solopreneur Systems ($47/mo at [skool.com/mastermind-5724](https://www.skool.com/mastermind-5724/about)):**
+- The methodology the dashboard is built around (positioning, offer ladder, content engine, launch sprint, scaling)
+- The Foundation workshop that walks you through writing the 6 core files in the first place (without these, the rest of the dashboard is empty)
+- Weekly Q&A calls where I answer your specific questions on your specific business
+- The community of other solopreneurs running the same system
+- Every future update to the dashboard, automatically (`git pull`)
+
+The dashboard is a tool. SS is how the tool gets used. If you're serious about running a lean one-person business, the methodology is the part that compounds.
+
+## Updates
+
+When I ship improvements:
+
+```bash
+cd ~/Desktop/solo-os
 git pull
 ```
 
-Your vault (outside this repo) is never touched. If you set `VAULT_ROOT` to a folder inside the repo, that's on you - prefer keeping it outside.
+Your vault (outside this repo) is never touched.
+
+## Troubleshooting
+
+**Dashboard opens but AI features do not work.** You haven't run `claude auth login` yet. Open a terminal: `claude auth login`. Browser flow. Done.
+
+**Solo OS will not launch.** First launch takes ~10 seconds to boot three services. If it still won't open, double-click `start-local.sh` directly from the cloned repo to see the logs in Terminal.
+
+**Extraction never finishes.** Check `/tmp/solo-os-server.log` and `/tmp/solo-os-claude-bridge.log` for errors. Almost always: `claude auth login` hasn't been run.
+
+**Something else.** Drop a comment in the [SS community](https://www.skool.com/mastermind-5724/about) - if you're a member, that's where the help lives. Non-members can open a GitHub issue.
 
 ## What's in here
 
 ```
-server/         Hono backend that reads/writes the vault
+server/         Hono backend that reads + writes the vault
 frontend/       Vite + React dashboard UI
 claude-bridge/  Tiny HTTP service that spawns `claude -p`
 sample-vault/   Example vault - default VAULT_ROOT
-spec/           Historical SPEC (out of date - see CLAUDE.md for actual)
+setup.sh        One-time installer (npm install + build the .app)
 start-local.sh  Supervised launcher for all three services
-CLAUDE.md       Guide for AI coding assistants
-DEPLOY.md       Setup guide
+AppIcon.icns    Branded macOS app icon
+CLAUDE.md       Architecture guide for anyone modifying the dashboard
+DEPLOY.md       Detailed setup guide
+WINDOWS.md      Manual install steps for Windows
 ```
+
+## License + maintenance
+
+I maintain this repo because I run my business off of it. Forks and PRs are welcome but I don't promise to merge them. If you want material changes to land, the [SS community](https://www.skool.com/mastermind-5724/about) is the place - your ideas inform what I build next.
+
+This is meant as a tool you make your own. Use it, modify it, change the things that don't work for your brain.
