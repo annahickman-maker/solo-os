@@ -69,16 +69,16 @@ Your vault should follow the structure under `sample-vault/`. The 6 `01_Core/cor
 **This repo (free):**
 - The dashboard code, runs on your machine
 - A sample vault you can poke at to see what the structure looks like
-- The auto-extraction that turns 6 prose files into structured Layer 2 data
+- The auto-extraction that turns your 6 core files into structured data the rest of the dashboard reads
 
 **Solopreneur Systems ($47/mo at [skool.com/mastermind-5724](https://www.skool.com/mastermind-5724/about)):**
 - The methodology the dashboard is built around (positioning, offer ladder, content engine, launch sprint, scaling)
-- The Foundation workshop that walks you through writing the 6 core files in the first place (without these, the rest of the dashboard is empty)
+- The Foundation workshop that teaches you what to put in the 6 core files - your positioning, who you help, your transformation, your IP, your offers, your voice. The dashboard will run without these. It won't run *for* you.
 - Weekly Q&A calls where I answer your specific questions on your specific business
 - The community of other solopreneurs running the same system
 - Every future update to the dashboard, automatically (`git pull`)
 
-The dashboard is a tool. SS is how the tool gets used. If you're serious about running a lean one-person business, the methodology is the part that compounds.
+The dashboard is a smart workspace. SS is what makes it work for your specific business. Clone the repo and you have a clean UI over a folder of files. Pair it with the methodology and you have an operating system.
 
 ## Updates
 
