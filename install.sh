@@ -67,18 +67,9 @@ if [ -d "$HOME/.nvm/versions/node" ]; then
   fi
 fi
 
-# ─── 1. Homebrew ──────────────────────────────────────────────────────────
-
-step "Checking for Homebrew"
-if ! command -v brew >/dev/null 2>&1; then
-  # `curl | bash` has no TTY and no sudo, so Homebrew's installer would
-  # fail immediately. Bail with a clear, actionable message instead.
-  fail "Homebrew is not installed. Run this in your terminal first, then re-run the installer:
-    /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
-fi
-ok "Homebrew already installed."
-
-# ─── 2. Node ──────────────────────────────────────────────────────────────
+# ─── 1. Node ──────────────────────────────────────────────────────────────
+# Node 20+ is the only hard requirement. If it's already on PATH (or we
+# loaded it from nvm above), we can skip the whole brew dance entirely.
 
 step "Checking for Node 20+"
 node_ok=false
@@ -88,10 +79,21 @@ if command -v node >/dev/null 2>&1; then
     ok "Node $(node -v) already installed."
     node_ok=true
   else
-    info "Found Node $(node -v) but need 20 or higher. Upgrading."
+    info "Found Node $(node -v) but need 20 or higher."
   fi
 fi
+
 if [ "$node_ok" = false ]; then
+  # Need to install Node. We rely on Homebrew for this. If brew is also
+  # missing we have to bail - Homebrew's own installer requires TTY +
+  # sudo, which `curl | bash` doesn't have.
+  if ! command -v brew >/dev/null 2>&1; then
+    fail "Node 20+ is not installed, and neither is Homebrew. Install Homebrew first, then re-run the installer:
+    /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"
+
+  Or install Node 20+ another way (nvm, the installer from nodejs.org) and re-run."
+  fi
+  info "Installing Node via Homebrew."
   brew install node || fail "Node install failed."
   ok "Node $(node -v) installed."
 fi
