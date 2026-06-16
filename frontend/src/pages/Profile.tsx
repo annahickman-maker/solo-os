@@ -35,11 +35,10 @@ function gradualPhaseColor(completion: number): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-type Tab = 'overview' | 'foundation' | 'reputation' | 'offer';
+type Tab = 'overview' | 'reputation' | 'offer';
 
 const TABS: { id: Tab; label: string; path: string }[] = [
   { id: 'overview', label: 'overview', path: '/profile' },
-  { id: 'foundation', label: 'foundation', path: '/profile/foundation' },
   { id: 'reputation', label: 'reputation', path: '/profile/reputation' },
   { id: 'offer', label: 'offer', path: '/profile/offer' },
 ];
@@ -52,8 +51,6 @@ export function Profile() {
     ? 'offer'
     : path.endsWith('/reputation')
     ? 'reputation'
-    : path.endsWith('/foundation')
-    ? 'foundation'
     : 'overview';
 
   return (
@@ -99,7 +96,6 @@ export function Profile() {
       </div>
 
       {activeTab === 'overview' && <ProfileOverview />}
-      {activeTab === 'foundation' && <FoundationView />}
       {activeTab === 'reputation' && <Reputation />}
       {activeTab === 'offer' && <Offer />}
     </div>
@@ -920,151 +916,3 @@ const PHASE_CARD_CSS = `
 .md__link { color: var(--dim-c); text-decoration: underline; }
 .md__hr { border: none; border-top: 1px solid var(--hairline); margin: var(--space-2) 0; }
 `;
-
-// ─── Foundation surface ────────────────────────────────────────────────────
-// Visual map of every Layer 2 artifact group (slot fields, avatars, POVs,
-// proof, offer rungs, journey timeline, audience quotes, wins). Shows what's
-// populated, what's missing, and where it gets its data from. Replaces the
-// "100% complete" false positive on the Overview tab with an honest picture.
-
-function FoundationView() {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['foundation'],
-    queryFn: api.foundation,
-  });
-
-  if (isLoading) return <div className="empty">loading foundation map...</div>;
-  if (error) return <div className="empty">couldn't load foundation: {(error as Error).message}</div>;
-  if (!data) return <div className="empty">no foundation data</div>;
-
-  const { groups, summary } = data;
-
-  const statusColor = (s: string) => {
-    if (s === 'populated') return 'var(--recovery)';
-    if (s === 'partial') return 'var(--strain)';
-    if (s === 'empty') return 'var(--danger)';
-    return 'var(--muted-2)';
-  };
-
-  const statusLabel = (s: string) => {
-    if (s === 'populated') return 'POPULATED';
-    if (s === 'partial') return 'PARTIAL';
-    if (s === 'empty') return 'EMPTY';
-    return 'UNKNOWN';
-  };
-
-  return (
-    <div className="stack" style={{ gap: 'var(--space-7)' }}>
-      <section
-        style={{
-          padding: 'var(--space-6)',
-          background: 'rgba(255,255,255,0.02)',
-          border: '1px solid var(--hairline)',
-          borderRadius: 'var(--radius-lg)',
-        }}
-      >
-        <span className="eyebrow">foundation</span>
-        <h2 style={{ margin: 'var(--space-2) 0 var(--space-4)', fontSize: '1.5rem' }}>
-          {summary.populated}/{summary.total_groups} groups populated &middot;{' '}
-          <span style={{ color: 'var(--muted)' }}>{summary.overall_pct}% overall</span>
-        </h2>
-        <p style={{ color: 'var(--muted)', fontSize: 'var(--body-sm)', lineHeight: 1.55, margin: 0 }}>
-          Every page in this dashboard reads from one of the stores below. When a row is empty,
-          the matching page surfaces are also empty. Hover any row to see where the data should
-          come from (Layer 1 source) and which file it gets written to (Layer 2 store).
-        </p>
-      </section>
-
-      <section className="stack" style={{ gap: 'var(--space-3)' }}>
-        {groups.map((g) => (
-          <div
-            key={g.id}
-            style={{
-              padding: 'var(--space-5)',
-              background: 'rgba(255,255,255,0.02)',
-              border: '1px solid var(--hairline)',
-              borderLeft: `3px solid ${statusColor(g.status)}`,
-              borderRadius: 'var(--radius-md)',
-              display: 'grid',
-              gridTemplateColumns: '1fr auto',
-              gap: 'var(--space-4)',
-              alignItems: 'start',
-            }}
-          >
-            <div className="stack" style={{ gap: 'var(--space-2)' }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3)' }}>
-                <h3 style={{ margin: 0, fontSize: 'var(--body-lg)', fontWeight: 600 }}>{g.label}</h3>
-                <span
-                  style={{
-                    fontSize: 'var(--eyebrow)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.14em',
-                    color: statusColor(g.status),
-                    fontWeight: 600,
-                  }}
-                >
-                  {statusLabel(g.status)}
-                </span>
-              </div>
-              {g.latest_preview && (
-                <p style={{ margin: 0, color: 'var(--muted)', fontSize: 'var(--body-sm)', lineHeight: 1.55 }}>
-                  {g.latest_preview}
-                </p>
-              )}
-              {g.missing_hints.length > 0 && (
-                <div style={{ marginTop: 'var(--space-2)' }}>
-                  {g.missing_hints.map((h, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        fontSize: 'var(--body-sm)',
-                        color: 'var(--muted-2)',
-                        fontStyle: 'italic',
-                        paddingLeft: 'var(--space-3)',
-                        borderLeft: '2px solid var(--hairline)',
-                      }}
-                    >
-                      missing: {h}
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div
-                style={{
-                  marginTop: 'var(--space-2)',
-                  fontSize: 'var(--eyebrow)',
-                  color: 'var(--muted-2)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                }}
-                title={`source: ${g.source_path}\nfeeds from Layer 1: ${g.source_layer1 ?? '(none)'}`}
-              >
-                {g.source_path}
-              </div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div
-                style={{
-                  fontSize: '1.75rem',
-                  fontWeight: 700,
-                  fontVariantNumeric: 'tabular-nums',
-                  color: statusColor(g.status),
-                }}
-              >
-                {g.populated}
-                {g.total !== null && (
-                  <span style={{ fontSize: '1rem', color: 'var(--muted-2)' }}>
-                    /{g.total}
-                  </span>
-                )}
-              </div>
-              {g.filled_pct !== null && (
-                <div style={{ fontSize: 'var(--body-sm)', color: 'var(--muted)' }}>{g.filled_pct}%</div>
-              )}
-            </div>
-          </div>
-        ))}
-      </section>
-    </div>
-  );
-}

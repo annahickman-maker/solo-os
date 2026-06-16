@@ -619,30 +619,6 @@ export const api = {
   getProfileSection: (id: string) => request<{ id: string; title: string; content: string; summary: string; phase: string; completion: number; updated_at: number }>(`/api/profile/${id}`),
   bridgeHealth: () => request<{ ok: boolean; claude_bin: string | null; error: string | null }>('/api/profile/bridge-health'),
 
-  foundation: () => request<{
-    groups: Array<{
-      id: string;
-      kind: string;
-      label: string;
-      populated: number;
-      total: number | null;
-      filled_pct: number | null;
-      source_path: string;
-      source_layer1: string | null;
-      status: 'empty' | 'partial' | 'populated' | 'unknown';
-      latest_preview: string | null;
-      recent: Array<{ id?: string; title?: string; preview?: string }>;
-      missing_hints: string[];
-    }>;
-    summary: {
-      total_groups: number;
-      populated: number;
-      partial: number;
-      empty: number;
-      overall_pct: number;
-    };
-  }>('/api/foundation'),
-
   getPov: (id: string) => request<{ id: string; title: string; format: string; content?: string }>(`/api/archive/povs/${id}`),
   archiveTranscripts: () => request<{ items: Array<{ id: string; filename: string; title?: string; type: string; date?: number; processed: number; summary?: string; client?: string | null; youtube_url?: string | null; has_raw?: boolean }> }>('/api/archive/transcripts'),
   // Upload a transcript file. The server auto-detects category from
@@ -835,12 +811,15 @@ export const api = {
     return request<DeepWorkTodayResponse>(`/api/deep-work/today${qs ? `?${qs}` : ''}`);
   },
   calendarEvents: (q: { date: string; day_start: number }) => {
-    const params = new URLSearchParams({ date: q.date, day_start: String(q.day_start) });
-    return request<{ connected: boolean; events: CalendarEvent[] }>(
+    const params = new URLSearchParams({
+      date: q.date,
+      day_start: String(q.day_start),
+    });
+    return request<{ configured: boolean; connected: boolean; events: CalendarEvent[] }>(
       `/api/calendar/events?${params.toString()}`
     );
   },
-  googleStatus: () => request<{ connected: boolean; email: string | null }>('/api/google/status'),
+  googleStatus: () => request<{ configured: boolean; connected: boolean; email: string | null }>('/api/google/status'),
   googleConnectUrl: () => request<{ url: string }>('/api/google/connect-url'),
   googleDisconnect: () => request<{ ok: true }>('/api/google/disconnect', { method: 'POST' }),
   pickableTasks: () => request<{ items: PickableTask[] }>('/api/deep-work/pickable-tasks'),

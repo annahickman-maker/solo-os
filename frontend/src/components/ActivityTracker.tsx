@@ -178,6 +178,7 @@ export function ActivityTracker({
   const hasAnyActivity = completed.length > 0 || standaloneTicks.length > 0;
   const events = calendar?.events ?? [];
   const calendarConnected = calendar?.connected ?? false;
+  const calendarConfigured = calendar?.configured ?? false;
 
   const showStartCta = isToday && !active && !pickerOpen;
   const totalActivities = completed.length + standaloneTicks.length;
@@ -199,7 +200,7 @@ export function ActivityTracker({
         />
       )}
       {events.length === 0 && !calendarConnected && isToday && (
-        <ConnectCalendarPrompt />
+        <ConnectCalendarPrompt configured={calendarConfigured} />
       )}
 
       {/* Active block timer */}
@@ -867,7 +868,73 @@ function CalendarEventList({
   );
 }
 
-function ConnectCalendarPrompt() {
+// Connect-calendar prompt. Two shapes:
+//   - Credentials NOT configured (SS member's default state): show a "run
+//     this prompt in Claude" panel. The prompt invokes the
+//     connect-google-calendar skill which guides the member through Google
+//     Cloud Console, writes their client ID + secret to .google-config.json,
+//     restarts the server, and walks them to the OAuth grant.
+//   - Credentials configured but no tokens (the creator's state right after env
+//     setup, or after a member finishes the BYO skill): show the native
+//     connect button that kicks off the OAuth flow.
+const CONNECT_PROMPT = 'Connect my Google Calendar to the dashboard';
+
+function ConnectCalendarPrompt({ configured }: { configured: boolean }) {
+  if (!configured) return <ConnectViaClaudePanel />;
+  return <ConnectViaOAuthButton />;
+}
+
+function ConnectViaClaudePanel() {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(CONNECT_PROMPT);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      window.prompt('copy this prompt:', CONNECT_PROMPT);
+    }
+  }
+  return (
+    <div
+      style={{
+        padding: 'var(--space-3)',
+        border: '1px dashed var(--hairline)',
+        borderRadius: 'var(--radius-md)',
+        marginBottom: 'var(--space-3)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-2)',
+      }}
+    >
+      <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
+        connect google calendar so today's meetings show up here. run this prompt in claude inside this vault:
+      </span>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-2)',
+          padding: 'var(--space-2) var(--space-3)',
+          background: 'rgba(255,255,255,0.04)',
+          borderRadius: 'var(--radius-sm)',
+          fontFamily: 'var(--font-mono, monospace)',
+          fontSize: 'var(--body-sm)',
+        }}
+      >
+        <span style={{ flex: 1, color: 'var(--ink)' }}>{CONNECT_PROMPT}</span>
+        <button type="button" className="btn btn--ghost" onClick={copy}>
+          {copied ? 'copied' : 'copy'}
+        </button>
+      </div>
+      <span className="muted" style={{ fontSize: 11 }}>
+        claude will guide you through a one-time google cloud console setup (~10 min) and wire up your own credentials. your tokens stay on this machine.
+      </span>
+    </div>
+  );
+}
+
+function ConnectViaOAuthButton() {
   const [pending, setPending] = useState(false);
   async function connect() {
     setPending(true);
@@ -894,7 +961,7 @@ function ConnectCalendarPrompt() {
       }}
     >
       <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-        connect google calendar to surface today's meetings as activities
+        google credentials are configured. grant access to surface today's meetings.
       </span>
       <button type="button" className="btn" disabled={pending} onClick={connect}>
         {pending ? 'opening google' : 'connect calendar'}

@@ -15,6 +15,12 @@ dist/
 server/.env
 .dev.vars
 
+# Google Calendar BYO credentials + OAuth tokens. Per-install, NEVER commit.
+**/00_System/.google-config.json
+**/00_System/.google-tokens.json
+sample-vault/00_System/.google-config.json
+sample-vault/00_System/.google-tokens.json
+
 # Logs
 *.log
 /tmp/solo-os-*.log

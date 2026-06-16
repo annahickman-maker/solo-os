@@ -3,6 +3,16 @@
  * files under VAULT_ROOT directly - there is no database.
  */
 
+// Load server/.env into process.env if it exists. Does NOT override vars
+// already set by the launcher (start-local.sh exports PORT, DASHBOARD_PASSWORD,
+// etc.) - so the env block in the supervisor still wins where it sets a key.
+// Anything ONLY in .env (e.g. GOOGLE_CLIENT_ID/SECRET, FRONTEND_URL) flows in.
+try {
+  (process as any).loadEnvFile?.('./.env');
+} catch {
+  // No .env file - that's fine; vars may be set by the launcher.
+}
+
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -37,7 +47,8 @@ import audienceQuotes from './routes/audienceQuotes.js';
 import instagram from './routes/instagram.js';
 import journey from './routes/journey.js';
 import decks, { serveDeckFile, serveDeckAsset } from './routes/decks.js';
-import foundation from './routes/foundation.js';
+import google, { callbackApp as googleCallback } from './routes/google.js';
+import calendar from './routes/calendar.js';
 import onboarding from './routes/onboarding.js';
 
 const PORT = Number(process.env.PORT ?? 8790);
@@ -122,6 +133,11 @@ app.get('/api/decks/file', (c) => serveDeckFile(c.req.url));
 // Public so <img> tags resolve. Path-locked to deck folders.
 app.get('/api/decks/asset/*', (c) => serveDeckAsset(c.req.url));
 
+// Google OAuth callback - PUBLIC because Google's redirect can't send the
+// dashboard password header. Bound to this dashboard via a signed state
+// param (HMAC over DASHBOARD_PASSWORD, 10-min expiry).
+app.route('/api/google/callback', googleCallback);
+
 // Auth middleware on /api/* (same X-Dashboard-Password header as before).
 app.use('/api/*', auth);
 
@@ -158,7 +174,8 @@ app.route('/api/audience-quotes', audienceQuotes);
 app.route('/api/instagram', instagram);
 app.route('/api/journey', journey);
 app.route('/api/decks', decks);
-app.route('/api/foundation', foundation);
+app.route('/api/google', google);
+app.route('/api/calendar', calendar);
 app.route('/api/onboarding', onboarding);
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
