@@ -963,6 +963,28 @@ function WeekPlanner({
       unscheduled.push(t);
     }
   }
+  // Group each day's tasks by category so filming sits with filming, building
+  // with building, admin with admin etc. Same order used everywhere else
+  // (highest-strain-first to match the activity tracker picker on Today).
+  const CATEGORY_ORDER: Record<string, number> = {
+    filming: 0,
+    operations: 1,
+    scripting: 2,
+    building: 3,
+    admin: 4,
+    other: 5,
+  };
+  function byCategoryThenStatus(a: Task, b: Task): number {
+    const ca = CATEGORY_ORDER[a.category ?? 'other'] ?? 99;
+    const cb = CATEGORY_ORDER[b.category ?? 'other'] ?? 99;
+    if (ca !== cb) return ca - cb;
+    // in_progress before pending inside the same category
+    const sa = a.status === 'in_progress' ? 0 : 1;
+    const sb = b.status === 'in_progress' ? 0 : 1;
+    return sa - sb;
+  }
+  for (const arr of byDay.values()) arr.sort(byCategoryThenStatus);
+  unscheduled.sort(byCategoryThenStatus);
 
   function onDragStart(e: React.DragEvent, taskId: string) {
     e.dataTransfer.setData('text/plain', taskId);

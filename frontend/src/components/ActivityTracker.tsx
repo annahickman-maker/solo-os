@@ -92,6 +92,21 @@ export function ActivityTracker({
   const calendarConnected = calendar?.connected ?? false;
   const calendarConfigured = calendar?.configured ?? false;
 
+  // Group tasks by category so filming sits with filming, building with
+  // building, admin with admin etc. Same order used in the Focus week
+  // planner so both surfaces feel consistent.
+  const CATEGORY_ORDER: Record<string, number> = {
+    filming: 0, operations: 1, scripting: 2, building: 3, admin: 4, other: 5,
+  };
+  const sortedTasks = [...tasks].sort((a, b) => {
+    const ca = CATEGORY_ORDER[a.category ?? 'other'] ?? 99;
+    const cb = CATEGORY_ORDER[b.category ?? 'other'] ?? 99;
+    if (ca !== cb) return ca - cb;
+    const sa = a.status === 'in_progress' ? 0 : 1;
+    const sb = b.status === 'in_progress' ? 0 : 1;
+    return sa - sb;
+  });
+
   return (
     <Card
       eyebrow={isToday ? 'today' : 'focus'}
@@ -111,13 +126,13 @@ export function ActivityTracker({
       )}
 
       {/* Tasks - tickable, with editable name + category. */}
-      {tasks.length === 0 ? (
+      {sortedTasks.length === 0 ? (
         <p style={{ margin: 0, color: 'var(--muted-2)', fontStyle: 'italic' }}>
           no tasks queued for today. add some in focus →
         </p>
       ) : (
         <div className="stack" style={{ gap: 0 }}>
-          {tasks.map((t) => (
+          {sortedTasks.map((t) => (
             <TaskRow
               key={t.id}
               task={t}
