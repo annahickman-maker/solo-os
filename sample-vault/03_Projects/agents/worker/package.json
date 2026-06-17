@@ -1,0 +1,18 @@
+{
+  "name": "solo-os-tracking",
+  "version": "0.1.0",
+  "description": "Solo OS tracking worker. Serves /go/<slug> redirects from the bundled link manifest and counts clicks in Cloudflare KV. Deployed via `npm run deploy`.",
+  "private": true,
+  "scripts": {
+    "sync-links": "node -e \"const m=require('../../../scripts/link_manifest.json');delete m._meta;require('fs').writeFileSync('src/link-manifest.ts','// AUTO-GENERATED from /scripts/link_manifest.json - do not edit by hand. Edit the JSON and run npm run sync-links (or npm run deploy).\\n\\nexport interface LinkEntry { destination: string; source?: string; created?: string; }\\n\\nexport const LINKS: Record<string, LinkEntry> = '+JSON.stringify(m,null,2)+';\\n');\"",
+    "dev": "npm run sync-links && wrangler dev",
+    "deploy": "npm run sync-links && wrangler deploy",
+    "tail": "wrangler tail",
+    "types": "wrangler types"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240605.0",
+    "typescript": "^5.4.5",
+    "wrangler": "^3.60.0"
+  }
+}

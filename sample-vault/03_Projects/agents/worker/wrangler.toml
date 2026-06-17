@@ -1,0 +1,38 @@
+# Solo OS tracking worker config.
+#
+# Two things you need to fill in before this will deploy:
+#
+#   1. The `routes` block below - either point at your own domain, or
+#      comment the whole block out to use the default workers.dev URL.
+#
+#   2. The KV namespace `id` in the [[kv_namespaces]] block at the bottom -
+#      get it by running, from this folder:
+#         wrangler kv namespace create LINK_CLICKS
+#      and paste the id Cloudflare returns.
+#
+# After both edits, run:
+#   npm install
+#   npm run deploy
+
+name = "solo-os-tracking"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ─── routes ───────────────────────────────────────────────────────────────
+#
+# Option A - your own domain (replace yourdomain.com in both lines):
+#
+# routes = [
+#   { pattern = "yourdomain.com/go/*", zone_name = "yourdomain.com" },
+#   { pattern = "yourdomain.com/link-stats", zone_name = "yourdomain.com" },
+# ]
+#
+# Option B - leave the routes block commented out and the worker auto-
+# publishes to https://solo-os-tracking.<your-account>.workers.dev
+
+# ─── KV: where click counts are stored ────────────────────────────────────
+
+[[kv_namespaces]]
+binding = "LINK_CLICKS"
+id = "PASTE_KV_ID_HERE"
