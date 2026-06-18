@@ -218,9 +218,9 @@ export interface Video {
 }
 
 export interface VideoSuggestions {
-  titles_explicit: Array<{ title: string; formula?: string; liked?: boolean }>;
-  titles_implied: Array<{ title: string; formula?: string; liked?: boolean }>;
-  thumbnail_phrases: Array<{ phrase: string; gap?: string; liked?: boolean }>;
+  titles_explicit: Array<{ title: string; formula?: string; liked?: boolean; edited?: boolean }>;
+  titles_implied: Array<{ title: string; formula?: string; liked?: boolean; edited?: boolean }>;
+  thumbnail_phrases: Array<{ phrase: string; gap?: string; liked?: boolean; edited?: boolean }>;
   generated_at: number;
 }
 

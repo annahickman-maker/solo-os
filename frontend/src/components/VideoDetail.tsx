@@ -231,7 +231,10 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
 
   const generate = useMutation({
     mutationFn: (preserve: boolean) => api.generateTitles(videoId as string, preserve),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      qc.setQueryData(['video', videoId], (prev: any) =>
+        prev ? { ...prev, suggestions_json: JSON.stringify(data), suggestions_at: data.generated_at } : prev
+      );
       qc.invalidateQueries({ queryKey: ['video', videoId] });
     },
   });
@@ -254,6 +257,30 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
       ...suggestions,
       [kind]: suggestions[kind].map((item, i) => (i === index ? { ...item, liked: !item.liked } : item)),
     } as VideoSuggestions;
+    qc.setQueryData(['video', videoId], (prev: any) => prev ? { ...prev, suggestions_json: JSON.stringify(next) } : prev);
+    saveSugg.mutate(next);
+  }
+
+  function editTitle(kind: 'titles_explicit' | 'titles_implied', index: number, newText: string) {
+    if (!suggestions) return;
+    const current = suggestions[kind][index];
+    if (!current || current.title === newText) return;
+    const next: VideoSuggestions = {
+      ...suggestions,
+      [kind]: suggestions[kind].map((item, i) => (i === index ? { ...item, title: newText, edited: true, liked: true } : item)),
+    } as VideoSuggestions;
+    qc.setQueryData(['video', videoId], (prev: any) => prev ? { ...prev, suggestions_json: JSON.stringify(next) } : prev);
+    saveSugg.mutate(next);
+  }
+
+  function editPhrase(index: number, newText: string) {
+    if (!suggestions) return;
+    const current = suggestions.thumbnail_phrases[index];
+    if (!current || current.phrase === newText) return;
+    const next: VideoSuggestions = {
+      ...suggestions,
+      thumbnail_phrases: suggestions.thumbnail_phrases.map((item, i) => (i === index ? { ...item, phrase: newText, edited: true, liked: true } : item)),
+    };
     qc.setQueryData(['video', videoId], (prev: any) => prev ? { ...prev, suggestions_json: JSON.stringify(next) } : prev);
     saveSugg.mutate(next);
   }
@@ -515,14 +542,57 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
       >
         <header
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
+            display: 'grid',
+            gridTemplateColumns: '1fr auto 1fr',
             alignItems: 'center',
+            gap: 'var(--space-4)',
             padding: 'var(--space-5) var(--space-6)',
             borderBottom: '1px solid var(--hairline)',
           }}
         >
-          <span className="eyebrow">video detail</span>
+          <span className="eyebrow" style={{ justifySelf: 'start' }}>video detail</span>
+          {data ? (
+            <div
+              style={{
+                display: 'flex',
+                gap: 2,
+                padding: 2,
+                background: 'var(--surface)',
+                border: '1px solid var(--hairline)',
+                borderRadius: 'var(--radius-sm)',
+                justifySelf: 'center',
+              }}
+              title="click a stage to move this video"
+            >
+              {STAGES.map((s) => {
+                const active = s.status === data.status;
+                return (
+                  <button
+                    key={s.status}
+                    type="button"
+                    onClick={() => setStage.mutate(s.status)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: 'none',
+                      background: active ? 'var(--accent)' : 'transparent',
+                      color: active ? '#0E1116' : 'var(--muted)',
+                      fontSize: 10,
+                      fontWeight: active ? 700 : 600,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <span />
+          )}
           <button
             type="button"
             onClick={() => void handleClose()}
@@ -536,6 +606,7 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
               cursor: 'pointer',
               fontSize: 'var(--body-sm)',
               fontWeight: 500,
+              justifySelf: 'end',
             }}
           >
             close
@@ -557,71 +628,27 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
               gap: 'var(--space-6)',
             }}
           >
-            {/* Title + inline stage segmented control on a single row, the
-                same shape Projects / Clients use. The stage chips are the
-                primary way to advance a video through the pipeline; they
-                replace the old full-width progress bar. */}
-            <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
-              <input
-                value={title}
-                onChange={(e) => {
-                  setTitle(e.target.value);
-                  // auto-save handled by debounced effect — no manual flag needed
-                }}
-                style={{
-                  flex: 1,
-                  minWidth: 200,
-                  background: 'transparent',
-                  border: 'none',
-                  outline: 'none',
-                  fontFamily: 'var(--font-display)',
-                  fontSize: '2rem',
-                  fontWeight: 700,
-                  letterSpacing: '-0.02em',
-                  color: 'var(--ink)',
-                  lineHeight: 1.1,
-                  padding: 0,
-                }}
-              />
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 2,
-                  padding: 2,
-                  background: 'var(--surface)',
-                  border: '1px solid var(--hairline)',
-                  borderRadius: 'var(--radius-sm)',
-                  flexShrink: 0,
-                }}
-                title="click a stage to move this video"
-              >
-                {STAGES.map((s) => {
-                  const active = s.status === data.status;
-                  return (
-                    <button
-                      key={s.status}
-                      type="button"
-                      onClick={() => setStage.mutate(s.status)}
-                      style={{
-                        padding: '4px 10px',
-                        borderRadius: 'var(--radius-sm)',
-                        border: 'none',
-                        background: active ? 'var(--accent)' : 'transparent',
-                        color: active ? '#0E1116' : 'var(--muted)',
-                        fontSize: 10,
-                        fontWeight: active ? 700 : 600,
-                        letterSpacing: '0.08em',
-                        textTransform: 'uppercase',
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {s.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            {/* Title input takes full width now that the stage segmented
+                control has moved into the header bar above. */}
+            <input
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value);
+              }}
+              style={{
+                width: '100%',
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                fontFamily: 'var(--font-display)',
+                fontSize: '2rem',
+                fontWeight: 700,
+                letterSpacing: '-0.02em',
+                color: 'var(--ink)',
+                lineHeight: 1.1,
+                padding: 0,
+              }}
+            />
 
             {/* Stage meta - queue position OR publish info. Pulled out of
                 the old progress block so it still sits near the top of the
@@ -662,7 +689,7 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
                 value={goal}
                 onChange={(e) => {
                   setGoal(e.target.value);
-                  // auto-save handled by debounced effect — no manual flag needed
+                  // auto-save handled by debounced effect - no manual flag needed
                 }}
                 placeholder="what's this video meant to do for the viewer? one line."
                 style={{
@@ -851,7 +878,7 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
                 <VdSectionHeading
                   eyebrow="step 3"
                   title="title + thumbnail"
-                  sub="generate 10 title options + 5 thumbnail phrases. click any to lock as liked, then regenerate to refresh only the non-liked."
+                  sub="generate 10 title options + 5 thumbnail phrases. click the lock to keep one as-is, or click the text to edit it (edits auto-lock and shape the direction of new titles). regenerate refills the rest."
                 />
                 <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'baseline', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
                   <button
@@ -875,46 +902,55 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
                 {suggestions && (
                   <>
                     <div className="stack" style={{ gap: 'var(--space-2)' }}>
-                      <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>audience called out (click to like)</span>
-                      {suggestions.titles_explicit.map((t, i) => (
-                        <TitleRow key={`e${i}-${t.title}`} title={t.title} tag={t.formula} liked={!!t.liked} onToggle={() => toggleLiked('titles_explicit', i)} />
+                      <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>audience called out</span>
+                      {suggestions.titles_explicit
+                        .map((t, i) => ({ t, i }))
+                        .filter(({ t }) => typeof t.title === 'string' && t.title.trim().length > 0)
+                        .map(({ t, i }) => (
+                          <TitleRow
+                            key={`e${i}`}
+                            title={t.title}
+                            tag={t.formula}
+                            liked={!!t.liked}
+                            edited={!!t.edited}
+                            onToggle={() => toggleLiked('titles_explicit', i)}
+                            onEdit={(next) => editTitle('titles_explicit', i, next)}
+                          />
                       ))}
                     </div>
                     <div className="stack" style={{ gap: 'var(--space-2)' }}>
                       <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>audience implied</span>
-                      {suggestions.titles_implied.map((t, i) => (
-                        <TitleRow key={`i${i}-${t.title}`} title={t.title} tag={t.formula} liked={!!t.liked} onToggle={() => toggleLiked('titles_implied', i)} />
+                      {suggestions.titles_implied
+                        .map((t, i) => ({ t, i }))
+                        .filter(({ t }) => typeof t.title === 'string' && t.title.trim().length > 0)
+                        .map(({ t, i }) => (
+                          <TitleRow
+                            key={`i${i}`}
+                            title={t.title}
+                            tag={t.formula}
+                            liked={!!t.liked}
+                            edited={!!t.edited}
+                            onToggle={() => toggleLiked('titles_implied', i)}
+                            onEdit={(next) => editTitle('titles_implied', i, next)}
+                          />
                       ))}
                     </div>
                     <div className="stack" style={{ gap: 'var(--space-2)' }}>
-                      <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>thumbnail phrases (click to like)</span>
+                      <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>thumbnail phrases</span>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
-                        {suggestions.thumbnail_phrases.map((p, i) => (
-                          <button
-                            key={`p${i}-${p.phrase}`}
-                            type="button"
-                            onClick={() => toggleLiked('thumbnail_phrases', i)}
-                            style={{
-                              background: p.liked ? 'rgba(22,201,126,0.15)' : 'var(--surface)',
-                              border: `1px solid ${p.liked ? 'var(--recovery)' : 'var(--hairline)'}`,
-                              borderRadius: 'var(--radius-md)',
-                              padding: '10px 14px',
-                              fontFamily: 'var(--font-display)',
-                              fontWeight: 600,
-                              fontSize: 'var(--body)',
-                              letterSpacing: '-0.01em',
-                              cursor: 'pointer',
-                              color: p.liked ? 'var(--recovery)' : 'var(--ink)',
-                              transition: 'background var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out)',
-                            }}
-                          >
-                            {p.phrase}
-                            {p.gap && (
-                              <span style={{ color: p.liked ? 'rgba(22,201,126,0.6)' : 'var(--muted-2)', fontSize: 10, marginLeft: 8, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                                {p.gap}
-                              </span>
-                            )}
-                          </button>
+                        {suggestions.thumbnail_phrases
+                          .map((p, i) => ({ p, i }))
+                          .filter(({ p }) => typeof p.phrase === 'string' && p.phrase.trim().length > 0)
+                          .map(({ p, i }) => (
+                            <PhrasePill
+                              key={`p${i}`}
+                              phrase={p.phrase}
+                              gap={p.gap}
+                              liked={!!p.liked}
+                              edited={!!p.edited}
+                              onToggle={() => toggleLiked('thumbnail_phrases', i)}
+                              onEdit={(next) => editPhrase(i, next)}
+                            />
                         ))}
                       </div>
                     </div>
@@ -1015,25 +1051,121 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
   );
 }
 
-function TitleRow({ title, tag, liked, onToggle }: { title: string; tag?: string; liked?: boolean; onToggle?: () => void }) {
+function TitleRow({ title, tag, liked, edited, onToggle, onEdit }: {
+  title: string;
+  tag?: string;
+  liked?: boolean;
+  edited?: boolean;
+  onToggle?: () => void;
+  onEdit?: (next: string) => void;
+}) {
+  const [draft, setDraft] = useState(title);
+  const [editing, setEditing] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!editing) setDraft(title);
+  }, [title, editing]);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
+  function commit() {
+    setEditing(false);
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== title) {
+      onEdit?.(trimmed);
+    } else {
+      setDraft(title);
+    }
+  }
+
   return (
     <div
-      onClick={onToggle}
-      onDoubleClick={() => navigator.clipboard?.writeText(title)}
       style={{
         display: 'flex',
         gap: 'var(--space-3)',
-        alignItems: 'flex-start',
+        alignItems: 'center',
         padding: 'var(--space-3) var(--space-4)',
         background: liked ? 'rgba(22,201,126,0.15)' : 'var(--surface)',
         border: `1px solid ${liked ? 'var(--recovery)' : 'var(--hairline)'}`,
         borderRadius: 'var(--radius-md)',
-        cursor: 'pointer',
         transition: 'background var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out)',
       }}
-      title={liked ? 'click to unlike, double-click to copy' : 'click to like, double-click to copy'}
     >
-      <span style={{ flex: 1, fontSize: 'var(--body)', lineHeight: 1.4, color: liked ? 'var(--recovery)' : 'var(--ink)' }}>{title}</span>
+      <button
+        type="button"
+        onClick={onToggle}
+        title={liked ? 'unlock - allow regenerate to replace this' : 'lock - keep this title verbatim on regenerate'}
+        aria-label={liked ? 'unlock' : 'lock'}
+        style={{
+          background: 'transparent',
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer',
+          color: liked ? 'var(--recovery)' : 'var(--muted-2)',
+          fontSize: 14,
+          lineHeight: 1,
+          flexShrink: 0,
+          width: 18,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {liked ? '✓' : '○'}
+      </button>
+      {editing ? (
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+            if (e.key === 'Escape') { setDraft(title); setEditing(false); }
+          }}
+          style={{
+            flex: 1,
+            background: 'transparent',
+            border: 'none',
+            outline: 'none',
+            fontSize: 'var(--body)',
+            lineHeight: 1.4,
+            color: 'var(--ink)',
+            fontFamily: 'inherit',
+          }}
+        />
+      ) : (
+        <span
+          onClick={() => setEditing(true)}
+          onDoubleClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(title); }}
+          title="click to edit, double-click to copy"
+          style={{
+            flex: 1,
+            fontSize: 'var(--body)',
+            lineHeight: 1.4,
+            color: liked ? 'var(--recovery)' : 'var(--ink)',
+            cursor: 'text',
+          }}
+        >
+          {title}
+        </span>
+      )}
+      {edited && (
+        <span style={{
+          fontSize: 9,
+          textTransform: 'uppercase',
+          letterSpacing: '0.12em',
+          color: 'var(--recovery)',
+          padding: '2px 6px',
+          background: 'rgba(22,201,126,0.12)',
+          borderRadius: 'var(--radius-pill)',
+          flexShrink: 0,
+          whiteSpace: 'nowrap',
+        }}>edited</span>
+      )}
       {tag && (
         <span style={{
           fontSize: 10,
@@ -1044,9 +1176,127 @@ function TitleRow({ title, tag, liked, onToggle }: { title: string; tag?: string
           background: liked ? 'rgba(22,201,126,0.08)' : 'rgba(255,255,255,0.04)',
           borderRadius: 'var(--radius-pill)',
           flexShrink: 0,
-          marginTop: 4,
           whiteSpace: 'nowrap',
         }}>{tag}</span>
+      )}
+    </div>
+  );
+}
+
+function PhrasePill({ phrase, gap, liked, edited, onToggle, onEdit }: {
+  phrase: string;
+  gap?: string;
+  liked?: boolean;
+  edited?: boolean;
+  onToggle?: () => void;
+  onEdit?: (next: string) => void;
+}) {
+  const [draft, setDraft] = useState(phrase);
+  const [editing, setEditing] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!editing) setDraft(phrase);
+  }, [phrase, editing]);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
+  function commit() {
+    setEditing(false);
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== phrase) {
+      onEdit?.(trimmed);
+    } else {
+      setDraft(phrase);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 'var(--space-2)',
+        background: liked ? 'rgba(22,201,126,0.15)' : 'var(--surface)',
+        border: `1px solid ${liked ? 'var(--recovery)' : 'var(--hairline)'}`,
+        borderRadius: 'var(--radius-md)',
+        padding: '8px 12px',
+        transition: 'background var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out)',
+      }}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        title={liked ? 'unlock' : 'lock'}
+        aria-label={liked ? 'unlock' : 'lock'}
+        style={{
+          background: 'transparent',
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer',
+          color: liked ? 'var(--recovery)' : 'var(--muted-2)',
+          fontSize: 12,
+          lineHeight: 1,
+          width: 14,
+        }}
+      >
+        {liked ? '✓' : '○'}
+      </button>
+      {editing ? (
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+            if (e.key === 'Escape') { setDraft(phrase); setEditing(false); }
+          }}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            outline: 'none',
+            fontFamily: 'var(--font-display)',
+            fontWeight: 600,
+            fontSize: 'var(--body)',
+            letterSpacing: '-0.01em',
+            color: 'var(--ink)',
+            width: Math.max(80, draft.length * 9),
+          }}
+        />
+      ) : (
+        <span
+          onClick={() => setEditing(true)}
+          title="click to edit"
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontWeight: 600,
+            fontSize: 'var(--body)',
+            letterSpacing: '-0.01em',
+            color: liked ? 'var(--recovery)' : 'var(--ink)',
+            cursor: 'text',
+          }}
+        >
+          {phrase}
+        </span>
+      )}
+      {edited && (
+        <span style={{
+          fontSize: 9,
+          textTransform: 'uppercase',
+          letterSpacing: '0.12em',
+          color: 'var(--recovery)',
+        }}>edited</span>
+      )}
+      {gap && (
+        <span style={{
+          color: liked ? 'rgba(22,201,126,0.6)' : 'var(--muted-2)',
+          fontSize: 10,
+          textTransform: 'uppercase',
+          letterSpacing: '0.1em',
+        }}>{gap}</span>
       )}
     </div>
   );

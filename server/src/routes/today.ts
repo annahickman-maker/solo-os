@@ -53,21 +53,28 @@ function localYmd(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-// Strain weighting - mirrors the Cloudflare worker's model so prod + local stay
-// consistent. Each completed task contributes base*energy with diminishing
-// returns; each completed deep-work block (not linked to a counted task)
-// contributes base*hours capped at 2x base.
-// Strain weights, ranked highest → lowest:
-// filming > calls (operations) > scripting > building > admin > other things.
+// Impact weighting. Each completed task contributes base*energy with mild
+// diminishing returns; each completed deep-work block (not linked to a
+// counted task) contributes base*hours capped at 2x base.
+//
+// Weights are calibrated against the creator's own read of recent days:
+//   - 2 filming tasks alone = high-impact day (~15 / 20)
+//   - 1 strategy/Q&A call + 1 video edit = solid day (~11 / 20)
+// Ranked highest → lowest: filming > calls (operations) > scripting >
+// building > admin > other.
 const CATEGORY_WEIGHT: Record<string, number> = {
-  filming: 4.5,
-  operations: 3.6,
-  scripting: 2.8,
-  building: 2.0,
-  admin: 0.7,
-  other: 0.5,
+  filming: 8.0,
+  operations: 7.0,
+  scripting: 5.5,
+  building: 4.5,
+  admin: 1.5,
+  other: 1.0,
 };
 const ENERGY_MULT: Record<string, number> = { high: 1.3, medium: 1.0, low: 0.7 };
+// Slower decay than the old 0.88 - a busy multi-task day shouldn't get
+// crushed by the 3rd or 4th completion.
+const TASK_DECAY = 0.92;
+const IMPACT_MAX = 20;
 
 type BlockRow = {
   id: string;
@@ -100,28 +107,29 @@ function computeStrain(
   completedTasks: Array<{ category?: string; energy?: string; id?: string }>,
   blocks: BlockRow[]
 ): number {
+  const FALLBACK_WEIGHT = CATEGORY_WEIGHT.other!;
   const sorted = [...completedTasks].sort(
     (a, b) =>
-      (CATEGORY_WEIGHT[b.category ?? 'other'] ?? 1.2) -
-      (CATEGORY_WEIGHT[a.category ?? 'other'] ?? 1.2)
+      (CATEGORY_WEIGHT[b.category ?? 'other'] ?? FALLBACK_WEIGHT) -
+      (CATEGORY_WEIGHT[a.category ?? 'other'] ?? FALLBACK_WEIGHT)
   );
   let strain = 0;
   let i = 0;
   for (const t of sorted) {
-    const base = CATEGORY_WEIGHT[t.category ?? 'other'] ?? 1.2;
+    const base = CATEGORY_WEIGHT[t.category ?? 'other'] ?? FALLBACK_WEIGHT;
     const energy = ENERGY_MULT[t.energy ?? ''] ?? 1.0;
-    const decay = Math.pow(0.88, i);
+    const decay = Math.pow(TASK_DECAY, i);
     strain += base * energy * decay;
     i++;
   }
   const countedIds = new Set(completedTasks.map((t) => t.id).filter(Boolean) as string[]);
   for (const b of blocks) {
     if (b.task_id && countedIds.has(b.task_id)) continue;
-    const base = CATEGORY_WEIGHT[b.category ?? 'other'] ?? 1.2;
+    const base = CATEGORY_WEIGHT[b.category ?? 'other'] ?? FALLBACK_WEIGHT;
     const hours = Math.max(0.1, (b.duration_sec ?? 0) / 3600);
     strain += base * Math.min(2, hours);
   }
-  return Math.min(21, Math.round(strain * 10) / 10);
+  return Math.min(IMPACT_MAX, Math.round(strain * 10) / 10);
 }
 
 app.get('/', async (c) => {
@@ -295,7 +303,7 @@ app.get('/', async (c) => {
     top_tasks: top,
     rings: {
       strain_score: strainScore,
-      strain_max: 21,
+      strain_max: IMPACT_MAX,
       tasks_done_today: tasksDoneToday,
       deep_work_blocks: dwBlocks,
       deep_work_seconds: dwSeconds,
