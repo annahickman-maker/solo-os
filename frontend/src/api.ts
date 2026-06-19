@@ -413,13 +413,6 @@ export interface ProductsResponse {
   items: Product[];
 }
 
-export interface SyncLogEntry {
-  source: string;
-  last_sync: number;
-  status?: string;
-  message?: string;
-}
-
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
 const PASSWORD_KEY = 'dashboard_password';
 
@@ -901,8 +894,11 @@ export const api = {
   updateInboxItem: (id: string, body: { status: InboxItem['status'] }) =>
     request<InboxItem>(`/api/inbox/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
-  syncLog: () => request<{ items: SyncLogEntry[] }>('/api/sync/log'),
-  triggerSync: () => request<{ ok: true }>('/api/sync/trigger', { method: 'POST' }),
+  updateSoloOs: () =>
+    request<{ ok: boolean; alreadyUpToDate: boolean; output: string; exitCode: number }>(
+      '/api/update-solo-os/pull',
+      { method: 'POST' }
+    ),
 
   brand: () =>
     request<{

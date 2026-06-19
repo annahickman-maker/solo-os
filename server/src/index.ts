@@ -50,6 +50,7 @@ import decks, { serveDeckFile, serveDeckAsset } from './routes/decks.js';
 import google, { callbackApp as googleCallback } from './routes/google.js';
 import calendar from './routes/calendar.js';
 import onboarding from './routes/onboarding.js';
+import updateSoloOs from './routes/updateSoloOs.js';
 
 const PORT = Number(process.env.PORT ?? 8790);
 
@@ -177,6 +178,7 @@ app.route('/api/decks', decks);
 app.route('/api/google', google);
 app.route('/api/calendar', calendar);
 app.route('/api/onboarding', onboarding);
+app.route('/api/update-solo-os', updateSoloOs);
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`solo-os-dashboard-server listening on http://localhost:${info.port}`);
