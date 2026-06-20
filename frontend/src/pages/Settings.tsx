@@ -85,13 +85,6 @@ function MembershipCard({ onChanged }: { onChanged: () => void }) {
     }
   }
 
-  async function clear() {
-    if (!confirm('clear the local key? you will need to paste it again to enable updates.')) return;
-    await api.clearMembership();
-    status.refetch();
-    onChanged();
-  }
-
   // Update Solo OS state
   const updateResult = updateSoloOs.data;
   const updateErrored = updateSoloOs.isError || (updateResult && updateResult.ok === false);
@@ -189,11 +182,6 @@ function MembershipCard({ onChanged }: { onChanged: () => void }) {
           <button className="btn btn--ghost" onClick={() => setShowInput(true)}>
             {membershipValid ? 'update key' : 'enter key'}
           </button>
-          {membershipValid && (
-            <button className="btn btn--ghost" onClick={clear}>
-              clear key
-            </button>
-          )}
         </div>
       )}
 
