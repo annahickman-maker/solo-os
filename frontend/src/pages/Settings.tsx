@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, clearStoredPassword, type MembershipStatus, type ZoomStatus } from '../api';
 import { Card } from '../components/Card';
@@ -8,34 +8,16 @@ const PROMPTS = {
   google: 'Connect my Google Calendar to the dashboard',
   zoom: 'Connect Zoom transcripts to my dashboard',
   youtube: 'Set up the YouTube API',
+  tracking: 'Set up conversion tracking',
 } as const;
 
 export function Settings() {
   const qc = useQueryClient();
-  const updateSoloOs = useMutation({ mutationFn: api.updateSoloOs });
 
   const logOut = () => {
     clearStoredPassword();
     window.location.reload();
   };
-
-  const result = updateSoloOs.data;
-  const errored = updateSoloOs.isError || (result && result.ok === false);
-  const errorMessage =
-    updateSoloOs.error instanceof Error ? updateSoloOs.error.message : null;
-  const blockedByMembership =
-    !!result && result.ok === false && result.membership_state && result.membership_state !== 'valid';
-
-  let statusLine: string | null = null;
-  if (updateSoloOs.isPending) {
-    statusLine = 'checking github';
-  } else if (errored) {
-    statusLine = errorMessage ?? result?.output ?? 'update failed';
-  } else if (result?.alreadyUpToDate) {
-    statusLine = 'already up to date';
-  } else if (result?.ok) {
-    statusLine = 'updated. restart solo OS to load the new code.';
-  }
 
   return (
     <div className="stack" style={{ gap: 'var(--space-7)' }}>
@@ -44,55 +26,15 @@ export function Settings() {
         <h1 className="h2">house keeping</h1>
       </header>
 
-      {/* 1. UPDATE SOLO OS - at the top */}
-      <Card eyebrow="updates" title="update solo OS">
-        <p className="muted" style={{ margin: 0 }}>
-          pulls any updates from GitHub to solo OS
-        </p>
-        <div className="row" style={{ gap: 'var(--space-3)' }}>
-          <button
-            className="btn"
-            onClick={() => updateSoloOs.mutate()}
-            disabled={updateSoloOs.isPending}
-          >
-            {updateSoloOs.isPending ? 'checking' : 'check for updates'}
-          </button>
-        </div>
-        {statusLine && (
-          <p
-            className="muted"
-            style={{
-              margin: 0,
-              fontSize: 'var(--body-sm)',
-              color: errored ? 'var(--danger)' : 'var(--muted)',
-            }}
-          >
-            {statusLine}
-          </p>
-        )}
-        {blockedByMembership && (
-          <p
-            className="muted"
-            style={{
-              margin: 0,
-              fontSize: 'var(--body-sm)',
-              color: 'var(--muted)',
-            }}
-          >
-            paste your current SS key in the membership card below to re-enable updates.
-          </p>
-        )}
-      </Card>
-
-      {/* 2. SOLOPRENEUR SYSTEMS KEY */}
+      {/* 1. SOLOPRENEUR SYSTEMS - merged: SS key + update solo OS */}
       <MembershipCard
         onChanged={() => qc.invalidateQueries({ queryKey: ['membership-status'] })}
       />
 
-      {/* 3. CONNECT YOUR APPS - unified integrations card */}
+      {/* 2. CONNECT YOUR APPS - unified integrations card */}
       <ConnectYourAppsCard />
 
-      {/* 4. PASSWORD / LOG OUT - at the bottom */}
+      {/* 3. PASSWORD / LOG OUT - at the bottom */}
       <Card eyebrow="auth" title="password">
         <p className="muted" style={{ margin: 0 }}>
           clears the cached password and reloads the gate
@@ -114,19 +56,12 @@ function MembershipCard({ onChanged }: { onChanged: () => void }) {
     queryKey: ['membership-status'],
     queryFn: api.membershipStatus,
   });
+  const updateSoloOs = useMutation({ mutationFn: api.updateSoloOs });
 
   const [showInput, setShowInput] = useState(false);
   const [value, setValue] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-
-  useEffect(() => {
-    if (!status.data) return;
-    const state = status.data.state;
-    if (state === 'unverified' || state === 'expired') {
-      setShowInput(true);
-    }
-  }, [status.data]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -157,10 +92,31 @@ function MembershipCard({ onChanged }: { onChanged: () => void }) {
     onChanged();
   }
 
+  // Update Solo OS state
+  const updateResult = updateSoloOs.data;
+  const updateErrored = updateSoloOs.isError || (updateResult && updateResult.ok === false);
+  const updateErrorMessage =
+    updateSoloOs.error instanceof Error ? updateSoloOs.error.message : null;
+  const blockedByMembership =
+    !!updateResult && updateResult.ok === false && updateResult.membership_state && updateResult.membership_state !== 'valid';
+
+  let updateStatusLine: string | null = null;
+  if (updateSoloOs.isPending) {
+    updateStatusLine = 'checking github';
+  } else if (updateErrored) {
+    updateStatusLine = updateErrorMessage ?? updateResult?.output ?? 'update failed';
+  } else if (updateResult?.alreadyUpToDate) {
+    updateStatusLine = 'already up to date';
+  } else if (updateResult?.ok) {
+    updateStatusLine = 'updated. restart solo OS to load the new code.';
+  }
+
+  const membershipValid = status.data?.state === 'valid';
+
   return (
-    <Card eyebrow="membership" title="solopreneur systems key">
+    <Card eyebrow="solopreneur systems" title="membership + updates">
       <p className="muted" style={{ margin: 0, lineHeight: 1.55 }}>
-        the current key is pinned in the{' '}
+        your SS key gates updates from github. the current key is pinned in the{' '}
         <a
           href="https://www.skool.com/mastermind-5724/about"
           target="_blank"
@@ -174,7 +130,7 @@ function MembershipCard({ onChanged }: { onChanged: () => void }) {
 
       <MembershipStatusLine status={status.data ?? null} loading={status.isLoading} />
 
-      {showInput ? (
+      {showInput && (
         <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
           <input
             type="text"
@@ -184,6 +140,7 @@ function MembershipCard({ onChanged }: { onChanged: () => void }) {
             value={value}
             onChange={(e) => setValue(e.target.value)}
             disabled={pending}
+            autoFocus
             style={{
               border: '1px solid var(--hairline)',
               background: 'var(--surface)',
@@ -204,32 +161,58 @@ function MembershipCard({ onChanged }: { onChanged: () => void }) {
             <button type="submit" className="btn" disabled={pending || !value.trim()}>
               {pending ? 'verifying' : 'save key'}
             </button>
-            {status.data?.state === 'valid' && (
-              <button
-                type="button"
-                className="btn btn--ghost"
-                onClick={() => {
-                  setShowInput(false);
-                  setValue('');
-                  setError(null);
-                }}
-              >
-                cancel
-              </button>
-            )}
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={() => {
+                setShowInput(false);
+                setValue('');
+                setError(null);
+              }}
+            >
+              cancel
+            </button>
           </div>
         </form>
-      ) : (
+      )}
+
+      {!showInput && (
         <div className="row" style={{ gap: 'var(--space-3)' }}>
-          <button className="btn" onClick={() => setShowInput(true)}>
-            update key
+          <button
+            className="btn"
+            onClick={() => updateSoloOs.mutate()}
+            disabled={updateSoloOs.isPending || !membershipValid}
+            title={!membershipValid ? 'enter a valid SS key first' : undefined}
+          >
+            {updateSoloOs.isPending ? 'checking…' : 'check for updates'}
           </button>
-          {status.data?.state === 'valid' && (
+          <button className="btn btn--ghost" onClick={() => setShowInput(true)}>
+            {membershipValid ? 'update key' : 'enter key'}
+          </button>
+          {membershipValid && (
             <button className="btn btn--ghost" onClick={clear}>
-              clear key (testing)
+              clear key
             </button>
           )}
         </div>
+      )}
+
+      {updateStatusLine && (
+        <p
+          className="muted"
+          style={{
+            margin: 0,
+            fontSize: 'var(--body-sm)',
+            color: updateErrored ? 'var(--danger)' : 'var(--muted)',
+          }}
+        >
+          {updateStatusLine}
+        </p>
+      )}
+      {blockedByMembership && (
+        <p className="muted" style={{ margin: 0, fontSize: 'var(--body-sm)' }}>
+          re-enter your current SS key above to re-enable updates.
+        </p>
       )}
     </Card>
   );
@@ -302,6 +285,11 @@ function ConnectYourAppsCard() {
     queryFn: api.youtubeStatus,
     refetchInterval: 60_000,
   });
+  const tracking = useQuery({
+    queryKey: ['tracking-setup-status'],
+    queryFn: api.getTrackingSetupStatus,
+    refetchInterval: 60_000,
+  });
 
   const zoomSync = useMutation({
     mutationFn: api.zoomSync,
@@ -329,6 +317,7 @@ function ConnectYourAppsCard() {
   const googleConfigured = !!google.data?.configured;
   const zoomConnected = !!zoom.data?.connected;
   const youtubeConnected = !!youtube.data?.configured;
+  const trackingConnected = !!tracking.data?.ok;
 
   return (
     <Card eyebrow="connections" title="connect your apps">
@@ -400,6 +389,21 @@ function ConnectYourAppsCard() {
             : null
         }
         prompt={PROMPTS.youtube}
+        primaryAction={null}
+      />
+
+      <ConnectRow
+        label="Conversion Tracking"
+        sub="/go/<slug> branded short links + click counts feeding the Offer page"
+        live={trackingConnected}
+        liveLabel={
+          trackingConnected
+            ? `live · worker deployed`
+            : tracking.data
+              ? `${tracking.data.manifest_exists ? 'manifest ready' : 'manifest missing'} · ${tracking.data.worker_exists ? 'worker ready' : 'worker missing'}`
+              : null
+        }
+        prompt={PROMPTS.tracking}
         primaryAction={null}
       />
     </Card>

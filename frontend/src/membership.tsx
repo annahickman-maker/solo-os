@@ -5,20 +5,39 @@ interface MembershipGateProps {
   children: ReactNode;
 }
 
+// Persisted once the user has successfully verified at least once. After that
+// the wall never shows again, even if a future status call hiccups - we trust
+// the local token. Members who go from valid -> expired keep the app running
+// (per the membership policy); the Update button handles the gating instead.
+const EVER_VERIFIED_KEY = 'dashboard.membership.ever-verified';
+
+function hasEverVerified(): boolean {
+  try {
+    return localStorage.getItem(EVER_VERIFIED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+function markEverVerified(): void {
+  try {
+    localStorage.setItem(EVER_VERIFIED_KEY, '1');
+  } catch {
+    // ignore - storage unavailable just means the wall might show again
+  }
+}
+
 /**
  * First-launch SS membership gate.
  *
- * Wraps the rest of the dashboard. If the user has NEVER entered a key
- * (status === 'unverified'), shows the key-entry screen. Otherwise renders
- * children - even if the cached key has expired. An expired key only
- * blocks the Update button, not access to the app.
- *
- * Why not re-wall on expiry: members who let SS lapse should keep their
- * dashboard. They just stop getting new code. Hard-walling would punish
- * them retroactively for past use.
+ * Walls the app ONLY on a brand-new install with no successful verification on
+ * record. Once verified, a localStorage flag prevents the wall from coming back
+ * - so transient network failures, server hiccups, or token rechecks never
+ * surprise the user with a re-wall. Expired tokens still don't wall (the
+ * Update button is what enforces the policy).
  */
 export function MembershipGate({ children }: MembershipGateProps) {
   const [status, setStatus] = useState<MembershipStatus | null>(null);
+  const [skipWall, setSkipWall] = useState<boolean>(() => hasEverVerified());
   const [value, setValue] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -28,12 +47,14 @@ export function MembershipGate({ children }: MembershipGateProps) {
     api
       .membershipStatus()
       .then((s) => {
-        if (alive) setStatus(s);
+        if (!alive) return;
+        setStatus(s);
+        if (s.state === 'valid' || s.state === 'expired') markEverVerified();
       })
       .catch(() => {
-        // If the server is unreachable, fall through to the gate so the user can try entering
-        // a key (which itself does a server call). Treating an offline server as "unverified"
-        // would lock them out of their dashboard for an unrelated reason.
+        // Offline / transient server error - never wall. If they've ever
+        // verified, render the app. Otherwise treat as unverified so the
+        // first-launch user CAN see the wall and enter their key.
         if (alive) setStatus({ state: 'unverified', reason: 'could not reach server' });
       });
     return () => {
@@ -42,6 +63,9 @@ export function MembershipGate({ children }: MembershipGateProps) {
   }, []);
 
   if (status === null) return null; // splash; loading server status
+
+  // Sticky bypass: once verified at any point, never wall again.
+  if (skipWall) return <>{children}</>;
 
   // If a key has ever been entered (valid OR expired), the app boots.
   if (status.state !== 'unverified') return <>{children}</>;
@@ -55,6 +79,8 @@ export function MembershipGate({ children }: MembershipGateProps) {
       const next = await api.verifyMembershipKey(value.trim());
       setPending(false);
       if (next.state === 'valid') {
+        markEverVerified();
+        setSkipWall(true);
         setStatus(next);
         return;
       }
