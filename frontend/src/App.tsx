@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider, MutationCache, QueryCache } from '@ta
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Agentation } from 'agentation';
 import { PasswordGate } from './auth';
+import { MembershipGate } from './membership';
 import { NavRail } from './components/NavRail';
 import { BottomNav } from './components/BottomNav';
 import { UnauthorizedError } from './api';
@@ -82,9 +83,11 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <PasswordGate>
-          <TeleprompterProvider>
-            <Shell />
-          </TeleprompterProvider>
+          <MembershipGate>
+            <TeleprompterProvider>
+              <Shell />
+            </TeleprompterProvider>
+          </MembershipGate>
         </PasswordGate>
       </BrowserRouter>
     </QueryClientProvider>

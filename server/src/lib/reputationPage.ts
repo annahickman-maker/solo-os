@@ -35,6 +35,7 @@
 import fs from 'node:fs';
 import { abs, loadCollection, loadFile } from '../vault.js';
 import { loadCachedAnalysis } from './contentAnalysis.js';
+import { loadCachedFoundationScores, ensureFoundationScoresFresh } from './foundationScoring.js';
 
 type Slots = Record<string, unknown>;
 
@@ -310,21 +311,94 @@ function scoreFromConsistency(consistencyPct: number): number {
   return Math.round(x * 5 * 10) / 10;
 }
 
+// Returns the Claude-generated score for this dimension if the cache is
+// present (fresh or stale). Null when no cache exists - caller falls back to
+// the numeric heuristic. We accept stale cache: any quality-rated score beats
+// the numeric heuristic; the next background run refreshes it.
+function foundationScoreOverride(id: keyof typeof DEFINITIONS): number | null {
+  const cached = loadCachedFoundationScores();
+  if (!cached) return null;
+  const dim = cached.dimensions.find((d) => d.id === id);
+  if (!dim || typeof dim.score !== 'number') return null;
+  return dim.score;
+}
+
+// Pulls only the user-facing "what to strengthen" hints out of the foundation
+// cache. Criteria breakdown and Claude's reasoning are deliberately NOT
+// surfaced - members shouldn't see the internals of how the score is computed.
+function foundationStrengthenHints(id: keyof typeof DEFINITIONS): string[] {
+  const cached = loadCachedFoundationScores();
+  if (!cached) return [];
+  const dim = cached.dimensions.find((d) => d.id === id);
+  return Array.isArray(dim?.what_to_strengthen) ? dim!.what_to_strengthen : [];
+}
+
+// Count the entries in the bank(s) that feed this dimension's score. Each
+// dimension's bank is a different source - authority pulls from wins + proof,
+// POV from POV files + transcript POVs, etc. We don't try to filter by status
+// here; the user owns curation.
+function countBankForDimension(id: keyof typeof DEFINITIONS): number {
+  if (id === 'authority') {
+    return loadWinsForDimension().length + normalizeApproved('proof-points').length;
+  }
+  if (id === 'value') {
+    return normalizeApproved('teaching-frameworks').length;
+  }
+  if (id === 'point_of_view') {
+    return loadPOVsForDimension().length + loadApprovedPovsFromTranscripts().length;
+  }
+  if (id === 'connection') {
+    return loadStoriesForDimension().length;
+  }
+  return 0;
+}
+
 function buildDimension(id: keyof typeof DEFINITIONS, slots: Slots, analysisDim: { consistency_pct?: number } | undefined) {
   const fields = DIMENSION_BUILD_FIELDS[id];
   const buildPct = buildCompletion(slots, fields);
   const ratingAvg = fields.reduce((acc, f) => acc + rating(slots, f, 0), 0) / Math.max(1, fields.length);
   const activationScore = ratingAvg > 0 ? ratingAvg / 5 : 0;
 
-  // Primary signal: how the dimension actually shows up in published videos.
-  // Without analysis yet, fall back to a small credit from slot completion
-  // (your brand being defined on paper, but unproven in content).
-  let score: number;
-  if (analysisDim && typeof analysisDim.consistency_pct === 'number') {
-    score = scoreFromConsistency(analysisDim.consistency_pct);
-  } else {
-    score = Math.round(buildPct * 1.5 * 10) / 10;
-  }
+  // Foundation-phase scoring combines two signals per dimension:
+  //   - Slot completion: are the core fields defined? (state.md frontmatter)
+  //   - Bank fullness:   is there material to draw from? (wins, POVs, stories, frameworks)
+  // Weights and targets reflect what dominates each dimension:
+  //   - Authority is bank-dominated. Wins ARE the authority signal; the slots
+  //     are summaries on top of those wins.
+  //   - Value is slot-dominated. Method + 5 steps are the spine; frameworks bank
+  //     adds depth but isn't the spine.
+  //   - POV and Connection split evenly.
+  // Targets are tuned so a fully-stocked bank reads as full and a single entry
+  // reads as a start. Targets are intentionally high - growing the banks is
+  // ongoing work; the score should reward continued investment.
+  const FOUNDATION_SCORING: Record<keyof typeof DEFINITIONS, { slotWeight: number; bankWeight: number; bankTarget: number }> = {
+    value: { slotWeight: 0.6, bankWeight: 0.4, bankTarget: 8 },
+    authority: { slotWeight: 0.2, bankWeight: 0.8, bankTarget: 8 },
+    point_of_view: { slotWeight: 0.5, bankWeight: 0.5, bankTarget: 12 },
+    connection: { slotWeight: 0.5, bankWeight: 0.5, bankTarget: 18 },
+  };
+  const bankCount = countBankForDimension(id);
+  const bankPct = Math.min(1, FOUNDATION_SCORING[id].bankTarget > 0 ? bankCount / FOUNDATION_SCORING[id].bankTarget : 0);
+  const foundationScore = Math.round(
+    (buildPct * FOUNDATION_SCORING[id].slotWeight + bankPct * FOUNDATION_SCORING[id].bankWeight) * 5 * 10
+  ) / 10;
+
+  // Content-phase scoring overrides foundation once real video transcripts have
+  // been analyzed. A cached analysis with sample_size 0 (run pre-content) returns
+  // consistency_pct=0 for every dimension - that's noise, not signal; fall through.
+  const usableContentSignal =
+    analysisDim &&
+    typeof analysisDim.consistency_pct === 'number' &&
+    analysisDim.consistency_pct > 0;
+  // Claude-driven foundation score (reads the actual content quality, not just
+  // presence). When the cache has a fresh score, it wins over the numeric
+  // heuristic - it knows the difference between a stub and a paragraph.
+  const claudeFoundationScore = foundationScoreOverride(id);
+  const effectiveFoundationScore =
+    claudeFoundationScore !== null ? claudeFoundationScore : foundationScore;
+  const score: number = usableContentSignal
+    ? scoreFromConsistency(analysisDim!.consistency_pct!)
+    : effectiveFoundationScore;
 
   const baseDim: any = {
     id,
@@ -346,6 +420,7 @@ function buildDimension(id: keyof typeof DEFINITIONS, slots: Slots, analysisDim:
     })),
     activate: [],
     anti_patterns: [],
+    what_to_strengthen: foundationStrengthenHints(id),
   };
 
   // Embed dimension-specific banks so the frontend renders them.
@@ -398,6 +473,12 @@ function volumeScoreFromHours(hours: number): number {
 }
 
 export function buildReputationResponse() {
+  // Fire-and-forget: if the foundation-score cache is stale (or missing),
+  // kick off a Claude run in the background. Returns immediately. Next page
+  // load picks up the fresh scores. Idempotent + debounced - safe to call on
+  // every reputation request.
+  ensureFoundationScoresFresh();
+
   const slots = getSlots();
   const cached = loadCachedAnalysis();
   const analysisById = new Map<string, { consistency_pct?: number }>();
@@ -416,18 +497,12 @@ export function buildReputationResponse() {
   // alignment_avg is 0-1 across the 4 dimensions
   const alignment_avg = dims.reduce((a, b) => a + b.score, 0) / (dims.length * 5);
   const alignment_score = Math.round(alignment_avg * 50);
-  // Hard floor: no published content, no reputation. A brand defined only on
-  // paper - no hours shipped - reads as 0, regardless of how filled in the
-  // brand profile is. Per-dimension scores also zero out (nothing to evidence
-  // them against) so the rings on the frontend read empty too.
+  // Hard floor on OVERALL: no published content, no reputation. A brand
+  // defined only on paper reads as 0 overall, because reputation requires
+  // meeting the world. Dimension scores are kept - they reflect clarity of
+  // definition on each pillar, which is real progress even pre-content.
   const hasContent = hours > 0;
   const overall = hasContent ? volume_score + alignment_score : 0;
-  if (!hasContent) {
-    for (const d of dims) {
-      d.score = 0;
-      d.activation_score = 0;
-    }
-  }
 
   const transformation_anchor = {
     positioning_statement: slot(slots, 'positioning_statement'),

@@ -30,10 +30,6 @@ export function ModuleDetail({ moduleId, onClose }: ModuleDetailProps) {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskCategory, setNewTaskCategory] = useState<TaskCategory>('other');
   const [dirty, setDirty] = useState(false);
-  // Tab inside the client panel: existing tasks view vs the new content
-  // (decks/funnels/links) view. Only meaningful when kind === 'client';
-  // projects always show tasks.
-  const [panelTab, setPanelTab] = useState<'tasks' | 'content'>('tasks');
 
   // Only initialize local form state from the server ONCE per moduleId. Stage
   // clicks and other mutations invalidate the module query, which would
@@ -356,39 +352,10 @@ export function ModuleDetail({ moduleId, onClose }: ModuleDetailProps) {
               }}
             />
 
-            {data?.kind === 'client' && (
-              <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--surface)', borderRadius: 'var(--radius-md)', alignSelf: 'flex-start' }}>
-                {(['tasks', 'content'] as const).map((t) => {
-                  const active = panelTab === t;
-                  return (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setPanelTab(t)}
-                      style={{
-                        padding: '8px 16px',
-                        borderRadius: 'var(--radius-sm)',
-                        border: 'none',
-                        background: active ? 'var(--bg)' : 'transparent',
-                        color: active ? 'var(--ink)' : 'var(--muted)',
-                        fontSize: 'var(--body-sm)',
-                        fontWeight: active ? 600 : 500,
-                        cursor: 'pointer',
-                        letterSpacing: '0.02em',
-                      }}
-                    >
-                      {t}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            {/* Client content tab (decks/funnels/links) is parked until ready
+                to ship; for now both clients and projects show only the tasks
+                view below. */}
 
-            {data?.kind === 'client' && panelTab === 'content' && (
-              <ClientContentPanel clientFolder={data.name} />
-            )}
-
-            {(data?.kind !== 'client' || panelTab === 'tasks') && (<>
             <div className="stack" style={{ gap: 'var(--space-3)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <span className="eyebrow">priority tasks</span>
@@ -586,7 +553,6 @@ export function ModuleDetail({ moduleId, onClose }: ModuleDetailProps) {
                 </button>
               </form>
             </div>
-            </>)}
 
             <div
               style={{

@@ -1,0 +1,51 @@
+{
+  "generated_at": 1781899084,
+  "sample_size": 0,
+  "model": "claude-code",
+  "dimensions": [
+    {
+      "id": "value",
+      "label": "Value",
+      "consistency_pct": 0,
+      "what_claude_noticed": "No transcripts exist yet - zero teaching moments to evaluate.",
+      "opportunities": [
+        "Record and publish your first video teaching one core belief from your IP.",
+        "Define your transformation in the onboarding flow so future videos can ladder to it.",
+        "Pick one audience pain point from your positioning and build a tutorial around it."
+      ]
+    },
+    {
+      "id": "authority",
+      "label": "Authority",
+      "consistency_pct": 0,
+      "what_claude_noticed": "Brag bank is empty and no videos contain proof points.",
+      "opportunities": [
+        "Add at least 5 specific wins with dates and numbers to your brag bank.",
+        "Script a proof moment into your next video using one real client result.",
+        "Record a case-study video walking through one measurable outcome you delivered."
+      ]
+    },
+    {
+      "id": "point_of_view",
+      "label": "Point of View",
+      "consistency_pct": 0,
+      "what_claude_noticed": "Only one example POV exists and no videos argue it.",
+      "opportunities": [
+        "Write 5 real contrarian stances you hold about your industry into the POV bank.",
+        "Build your next video around one POV - name the common belief then argue against it.",
+        "Add a 60-second POV rant segment as a repeatable block in every video script."
+      ]
+    },
+    {
+      "id": "connection",
+      "label": "Connection",
+      "consistency_pct": 0,
+      "what_claude_noticed": "No origin story or micro-stories recorded - nothing personal to retell.",
+      "opportunities": [
+        "Fill in your origin story via the onboarding flow on the Profile page.",
+        "Write 3 specific micro-stories from your journey into the confirmed stories bank.",
+        "Open your first video with a vulnerable 30-second moment from your own experience."
+      ]
+    }
+  ]
+}

@@ -1,8 +1,13 @@
 /**
  * Skills - read SKILL.md from skill folders.
  *
- * Skill roots are configurable via env. Set SKILL_ROOTS as a comma-separated
- * list of `path:pack` pairs. Defaults to the vault's own `.claude/skills`.
+ * Two default sources, read in order (first occurrence of a name wins):
+ *   1. BUNDLED: the dashboard repo's own `.claude/skills/` - ships with the
+ *      Solopreneur Systems skill pack. Always available to every member.
+ *   2. VAULT:   `<VAULT_ROOT>/.claude/skills/` - user's own additions.
+ *
+ * Set SKILL_ROOTS env var as a comma-separated list of `path:pack` pairs to
+ * override the defaults entirely.
  *
  * Each skill is a folder containing a SKILL.md with YAML frontmatter
  * (name, description). The "description" field is what triggers it.
@@ -11,8 +16,17 @@
 import { Hono } from 'hono';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import matter from 'gray-matter';
 import { VAULT_ROOT } from '../vault.js';
+
+// Dashboard repo root: server/src/routes/skills.ts -> server/src/routes -> server/src -> server -> repo
+const REPO_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '..'
+);
 
 function parseSkillRoots(): { path: string; pack: string }[] {
   const raw = process.env.SKILL_ROOTS?.trim();
@@ -27,6 +41,7 @@ function parseSkillRoots(): { path: string; pack: string }[] {
       });
   }
   return [
+    { path: path.join(REPO_ROOT, '.claude', 'skills'), pack: 'solo-os' },
     { path: path.join(VAULT_ROOT, '.claude', 'skills'), pack: 'vault' },
   ];
 }

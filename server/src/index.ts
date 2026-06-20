@@ -51,6 +51,8 @@ import google, { callbackApp as googleCallback } from './routes/google.js';
 import calendar from './routes/calendar.js';
 import onboarding from './routes/onboarding.js';
 import updateSoloOs from './routes/updateSoloOs.js';
+import membership from './routes/membership.js';
+import zoom from './routes/zoom.js';
 
 const PORT = Number(process.env.PORT ?? 8790);
 
@@ -179,8 +181,42 @@ app.route('/api/google', google);
 app.route('/api/calendar', calendar);
 app.route('/api/onboarding', onboarding);
 app.route('/api/update-solo-os', updateSoloOs);
+app.route('/api/membership', membership);
+app.route('/api/zoom', zoom);
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`solo-os-dashboard-server listening on http://localhost:${info.port}`);
   console.log(`  reads/writes vault files directly from VAULT_ROOT`);
+  startZoomBackgroundSync();
 });
+
+// ─── Zoom background sync ─────────────────────────────────────────────────
+// Polls Zoom every 15 minutes while the dashboard server is running. Idempotent
+// (skips when no credentials are present) and debounced (won't fire while a
+// previous run is still in flight). Logged to the server's stdout.
+import { loadConfig as loadZoomConfig, runZoomSync } from './lib/zoom.js';
+const ZOOM_SYNC_INTERVAL_MS = 15 * 60 * 1000;
+let zoomSyncRunning = false;
+async function maybeRunZoomSync(): Promise<void> {
+  if (zoomSyncRunning) return;
+  if (!loadZoomConfig()) return;
+  zoomSyncRunning = true;
+  try {
+    const result = await runZoomSync();
+    if (result.saved.length > 0) {
+      console.log(`[zoom-sync] saved ${result.saved.length} new transcript(s)`);
+    } else if (result.error) {
+      console.error(`[zoom-sync] ${result.error}`);
+    }
+  } catch (err) {
+    console.error('[zoom-sync] crashed:', (err as Error).message);
+  } finally {
+    zoomSyncRunning = false;
+  }
+}
+function startZoomBackgroundSync(): void {
+  // Kick off one sync ~5s after boot so an active connection picks up new
+  // recordings without waiting a full 15 minutes.
+  setTimeout(maybeRunZoomSync, 5_000);
+  setInterval(maybeRunZoomSync, ZOOM_SYNC_INTERVAL_MS);
+}

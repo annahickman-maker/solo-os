@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as path from 'node:path';
+import { silentRecheck, getCurrentState } from '../lib/membership.js';
 
 const app = new Hono();
 
@@ -58,9 +59,34 @@ function runGitPull(cwd: string): Promise<PullResult> {
 }
 
 app.post('/pull', async (c) => {
+  // Membership-gate the pull. A cached token that needs re-checking gets
+  // silently refreshed; an expired or missing token aborts before we touch git.
+  let state = getCurrentState();
+  if (state.state === 'valid' && state.needs_recheck) {
+    state = await silentRecheck();
+  }
+  if (state.state !== 'valid') {
+    return c.json(
+      {
+        ok: false,
+        alreadyUpToDate: false,
+        output:
+          state.state === 'unverified'
+            ? 'enter your solopreneur systems key in settings to enable updates.'
+            : state.state === 'expired'
+            ? 'your ss key has expired. open settings and paste the current key to keep updating.'
+            : 'reason' in state
+            ? state.reason
+            : 'membership check failed',
+        exitCode: -1,
+        membership_state: state.state,
+      },
+      403
+    );
+  }
   const cwd = repoRoot();
   const result = await runGitPull(cwd);
-  return c.json(result, result.ok ? 200 : 500);
+  return c.json({ ...result, membership_state: 'valid' }, result.ok ? 200 : 500);
 });
 
 export default app;

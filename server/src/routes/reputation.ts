@@ -23,6 +23,11 @@ import {
   currentSampleSize,
 } from '../lib/contentAnalysis.js';
 import { buildReputationResponse } from '../lib/reputationPage.js';
+import {
+  loadCachedFoundationScores,
+  runFoundationScoring,
+  isCacheFresh,
+} from '../lib/foundationScoring.js';
 
 const app = new Hono();
 
@@ -46,6 +51,29 @@ app.post('/content-analysis/refresh', async (c) => {
   } catch (err: any) {
     console.error('content analysis failed:', err);
     return c.json({ error: err?.message ?? 'content analysis failed' }, 500);
+  }
+});
+
+// ─── Foundation scoring (claude-driven quality scoring) ────────────────────
+// Reads the actual slot + bank content and rates each dimension on 5
+// criteria: clarity, depth, distinctness, transformation alignment, relevance.
+// Overrides the numeric heuristic in buildReputationResponse when cached.
+
+app.get('/foundation-scores', (c) => {
+  const cached = loadCachedFoundationScores();
+  return c.json({
+    scores: cached,
+    fresh: cached ? isCacheFresh() : false,
+  });
+});
+
+app.post('/foundation-scores/refresh', async (c) => {
+  try {
+    const result = await runFoundationScoring();
+    return c.json({ scores: result, fresh: true });
+  } catch (err: any) {
+    console.error('foundation scoring failed:', err);
+    return c.json({ error: err?.message ?? 'foundation scoring failed' }, 500);
   }
 });
 

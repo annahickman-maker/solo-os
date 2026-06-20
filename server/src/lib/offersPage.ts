@@ -881,13 +881,17 @@ export function buildOffersResponse() {
   );
 
   // Hormozi-style: (clarity * likelihood) / (time * effort) with floor 1.
+  // BUT: if the user has scored literally nothing, return 0 instead of letting
+  // the floor produce a phantom ~20% strength on an empty offer.
+  const rawScores = levers.map((lv) => lv.score);
+  const anyScored = rawScores.some((s) => s > 0);
   const c = Math.max(1, levers[0]!.score);
   const l = Math.max(1, levers[1]!.score);
   const t = Math.max(1, levers[2]!.score);
   const e = Math.max(1, levers[3]!.score);
   const raw = (c * l) / (t * e);
   const normalized = clampPct((raw / 5) * 100);
-  const offerStrengthScore = normalized;
+  const offerStrengthScore = anyScored ? normalized : 0;
 
   const avatars = loadAvatars();
   const pricingRungs = loadPricingRungs();

@@ -6,25 +6,58 @@ yt_subs: 0
 yt_total_views: 0
 yt_channel_handle: ''
 deep_work_target_seconds: 14400
-updated: ''
-slot_positioning_statement: ''
-slot_who_you_help: ''
-slot_before_state: ''
-slot_after_state: ''
-slot_transformation_result: ''
-slot_value_method: ''
-slot_value_step_1: ''
-slot_value_step_2: ''
-slot_value_step_3: ''
-slot_value_step_4: ''
-slot_value_step_5: ''
-slot_common_enemy: ''
-slot_core_named_mechanism: ''
-slot_pov_1_flip: ''
-slot_pov_2_flip: ''
-slot_pov_3_flip: ''
-slot_compressed_story: ''
-slot_transformation_statement: ''
+updated: '2026-06-19T21:13:50.911Z'
+slot_positioning_statement: >-
+  Systems to help creative freelancers build lean, one-person businesses that
+  fit their brain - not someone else's playbook.
+slot_who_you_help: >-
+  Experienced creative freelancers running real service businesses with some
+  audience and some traction.
+slot_before_state: >-
+  Scattered and overworked, running a post-content, get-clients, drop-content
+  treadmill with income flatlining despite audience growth.
+slot_after_state: >-
+  Running a lean two-hour day with premium clients, a content engine that
+  doubles as a sales engine, and growing income without growing hours.
+slot_transformation_result: >-
+  The waterfall model - premium client work feeds documented expertise,
+  expertise feeds content, content sells products and community access.
+slot_value_method: Solopreneur OS
+slot_value_step_1: >-
+  Positioning - position around a transformation and build a personal brand
+  around it, not a topic.
+slot_value_step_2: >-
+  Offer - take an offer-first approach, sell the result first, then figure out
+  delivery.
+slot_value_step_3: >-
+  Content - build seven hours of trust-building long-form content around one
+  specific transformation.
+slot_value_step_4: >-
+  Launch - build trust marble by marble, then spend it in a focused launch
+  sprint.
+slot_value_step_5: >-
+  Scaling - install three systems in order: content ecosystem, email system,
+  product suite.
+slot_common_enemy: >-
+  The content-and-client treadmill and other people's playbooks that demand more
+  consistency instead of better systems.
+slot_core_named_mechanism: Solopreneur OS
+slot_pov_1_flip: >-
+  Not more consistency and discipline, but systems that fit your actual energy,
+  brain, and life.
+slot_pov_2_flip: >-
+  Not information and tutorials, but insight that shifts beliefs and builds
+  trust over hours.
+slot_pov_3_flip: >-
+  Not a bigger audience, but converting the audience you already have with the
+  right offer and system.
+slot_compressed_story: >-
+  Started freelancing in 2020, grew an audience but capped at 10K/month and
+  burnt out. Quit, rebuilt from scratch, went broke for six months, then hit
+  41K/month and 320K first year on YouTube with no team - just the right system.
+slot_transformation_statement: >-
+  Go from scattered freelancer on the content treadmill to confident expert
+  running a lean two-hour day with a system that sells while you're offline.
 slot_story_published: '0'
 instagram_target_per_week: 5
 instagram_cta_text: ''

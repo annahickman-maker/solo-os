@@ -193,10 +193,13 @@ function TranscriptDropZone() {
 // ─── List ──────────────────────────────────────────────────────────────────
 
 const CATEGORY_ORDER: Array<{ key: string; label: string; color: string }> = [
+  // Untagged is first so freshly-synced zoom recordings the user needs to
+  // classify surface at the top of the page where they're seen.
+  { key: 'untagged', label: 'Untagged (needs sorting)', color: 'var(--muted)' },
   { key: 'qa', label: 'Q&A calls', color: 'var(--recovery)' },
   { key: 'workshop', label: 'Live workshops', color: '#E6A52F' },
-  { key: 'video', label: 'YouTube videos', color: 'var(--sleep)' },
   { key: 'client', label: 'Client calls', color: 'var(--strain)' },
+  { key: 'video', label: 'YouTube videos', color: 'var(--sleep)' },
 ];
 
 type TranscriptItem = {
@@ -215,6 +218,10 @@ function TranscriptList({ onSelect }: { onSelect: (id: string) => void }) {
   const { data, isLoading } = useQuery({
     queryKey: ['archive-transcripts'],
     queryFn: api.archiveTranscripts,
+    // Poll while the page is open so newly-synced Zoom transcripts surface
+    // without requiring the user to refocus the tab. The Zoom background
+    // sync runs every 15 min - a 60s refetch interval is plenty.
+    refetchInterval: 60_000,
   });
 
   const grouped = useMemo(() => {
@@ -264,18 +271,49 @@ function TranscriptList({ onSelect }: { onSelect: (id: string) => void }) {
 function TranscriptRow({ item, onSelect }: { item: TranscriptItem; onSelect: () => void }) {
   const cleanName = item.title ?? item.filename.replace(/\.(md|txt)$/, '');
   const isVerbatim = item.type === 'video' || item.has_raw === true;
+  const qc = useQueryClient();
+  // YouTube transcripts come from a different code path (per-video file) and
+  // shouldn't be re-categorized - hide the picker for them.
+  const canRecategorize = item.type !== 'video';
+  const recategorize = useMutation({
+    mutationFn: (newType: string) =>
+      api.recategorizeTranscript(item.id, newType),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['archive-transcripts'] }),
+  });
   return (
-    <button type="button" onClick={onSelect} className="tx-row">
-      <span className="tx-row__name">{cleanName}</span>
-      <span className={`tx-badge ${isVerbatim ? 'tx-badge--ok' : 'tx-badge--muted'}`}>
-        {isVerbatim ? 'verbatim' : 'summary'}
-      </span>
+    <div className="tx-row">
+      <button
+        type="button"
+        onClick={onSelect}
+        className="tx-row__main"
+        style={{ all: 'unset', cursor: 'pointer', display: 'contents' }}
+      >
+        <span className="tx-row__name">{cleanName}</span>
+        <span className={`tx-badge ${isVerbatim ? 'tx-badge--ok' : 'tx-badge--muted'}`}>
+          {isVerbatim ? 'verbatim' : 'summary'}
+        </span>
+      </button>
+      {canRecategorize && (
+        <select
+          aria-label="change category"
+          value={item.type}
+          onChange={(e) => recategorize.mutate(e.target.value)}
+          disabled={recategorize.isPending}
+          onClick={(e) => e.stopPropagation()}
+          className="tx-row__cat-picker"
+        >
+          <option value="untagged">Untagged</option>
+          <option value="qa">Q&amp;A call</option>
+          <option value="workshop">Live workshop</option>
+          <option value="client">Client call</option>
+        </select>
+      )}
       {item.date ? (
         <span className="tx-row__date">
           {new Date(item.date * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
         </span>
       ) : null}
-    </button>
+    </div>
   );
 }
 
@@ -1462,6 +1500,17 @@ const TX_CSS = `
 .tx-row:hover { background: rgba(255,255,255,0.03); border-left-color: var(--ink); }
 .tx-row__name { flex: 1; font-size: var(--body); word-break: break-word; }
 .tx-row__date { font-size: var(--body-sm); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tx-row__cat-picker {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 11px;
+  padding: 3px 6px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.tx-row__cat-picker:hover { color: var(--ink); border-color: var(--ink); }
 .tx-badge {
   font-size: 10px;
   text-transform: uppercase;

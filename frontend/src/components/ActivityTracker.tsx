@@ -494,12 +494,33 @@ function CategoryDot({
 // =========================================================================
 const CONNECT_PROMPT = 'Connect my Google Calendar to the dashboard';
 
+const CALENDAR_PROMPT_DISMISS_KEY = 'dashboard.calendar-prompt.dismissed';
+
 function ConnectCalendarPrompt({ configured }: { configured: boolean }) {
-  if (!configured) return <ConnectViaClaudePanel />;
-  return <ConnectViaOAuthButton />;
+  const [dismissed, setDismissed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(CALENDAR_PROMPT_DISMISS_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  if (configured) return <ConnectViaOAuthButton />;
+  if (dismissed) return null;
+  return (
+    <ConnectViaClaudePanel
+      onDismiss={() => {
+        try {
+          localStorage.setItem(CALENDAR_PROMPT_DISMISS_KEY, '1');
+        } catch {
+          // ignore - dismissal won't persist but the UI still hides
+        }
+        setDismissed(true);
+      }}
+    />
+  );
 }
 
-function ConnectViaClaudePanel() {
+function ConnectViaClaudePanel({ onDismiss }: { onDismiss: () => void }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
     try {
@@ -513,7 +534,9 @@ function ConnectViaClaudePanel() {
   return (
     <div
       style={{
+        position: 'relative',
         padding: 'var(--space-3)',
+        paddingRight: 32,
         border: '1px dashed var(--hairline)',
         borderRadius: 'var(--radius-md)',
         marginBottom: 'var(--space-3)',
@@ -522,6 +545,29 @@ function ConnectViaClaudePanel() {
         gap: 'var(--space-2)',
       }}
     >
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="dismiss"
+        title="dismiss"
+        style={{
+          position: 'absolute',
+          top: 6,
+          right: 6,
+          width: 22,
+          height: 22,
+          padding: 0,
+          background: 'transparent',
+          border: 'none',
+          color: 'var(--muted)',
+          fontSize: 16,
+          lineHeight: '22px',
+          cursor: 'pointer',
+          borderRadius: 4,
+        }}
+      >
+        ×
+      </button>
       <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
         connect google calendar so today's meetings show up here. run this prompt in claude inside this vault:
       </span>

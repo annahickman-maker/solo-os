@@ -29,10 +29,11 @@ The foundation is the part to understand: 6 prose files in `01_Core/` describe w
 
 ## Install (Mac, ~10 minutes)
 
-You need three things first:
+You need four things first:
 1. **Node 20+** (download from https://nodejs.org)
 2. **A Claude subscription** - Pro ($20/mo) or Max ($100/mo). The dashboard uses YOUR subscription for all AI features. No API key, no metered billing.
 3. **The Claude Code CLI** from https://claude.com/code. After installing, run `claude auth login` once - browser opens, sign in to your Claude account.
+4. **An active [Solopreneur Systems](https://www.skool.com/mastermind-5724/about) membership.** Solo OS is built for SS members - the current access key is pinned at the top of the community. You paste it once on first launch; the dashboard re-checks it when you click "update" inside Settings. If your SS membership lapses the dashboard keeps running with whatever version you have, but updates stop until you rejoin and paste the current key.
 
 Then:
 

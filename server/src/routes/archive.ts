@@ -83,6 +83,10 @@ const TRANSCRIPT_DIRS: Array<{ rel: string; type: string }> = [
   { rel: path.join('05_Assets', 'Transcripts', 'Live-Workshops'), type: 'workshop' },
   { rel: path.join('05_Assets', 'Transcripts', 'YouTube-Videos'), type: 'video' },
   { rel: path.join('05_Assets', 'Transcripts', 'Client-Calls'), type: 'client' },
+  // Holding bin for zoom recordings whose topic didn't match any auto-classifier.
+  // The user picks the right category from the Vault page, which moves the file
+  // into the matching folder above.
+  { rel: path.join('05_Assets', 'Transcripts', 'Untagged'), type: 'untagged' },
 ];
 
 function detectClient(filename: string): string | null {
@@ -94,7 +98,10 @@ function detectClient(filename: string): string | null {
 function dateFromFilename(filename: string): number | null {
   const m = filename.match(/(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return null;
-  const t = Date.parse(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`);
+  // Pin to local midnight so the frontend's toLocaleDateString renders the
+  // same calendar day the filename names, not the previous day in negative-UTC
+  // timezones. Using (year, monthIdx, day) builds a local-time Date.
+  const t = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
   return Number.isNaN(t) ? null : Math.floor(t / 1000);
 }
 
@@ -111,6 +118,10 @@ function scanTranscripts(): TranscriptInfo[] {
       if (!e.isFile()) continue;
       if (!e.name.endsWith('.md') && !e.name.endsWith('.txt')) continue;
       if (e.name.startsWith('.') || e.name.startsWith('_')) continue;
+      // Skip Claude-generated summaries - they live next to their source
+      // transcript in the same folder, but the Vault page should show only
+      // the transcript, not both. Summaries are accessible from the inbox.
+      if (e.name.endsWith('_summary.md')) continue;
       const full = path.join(abs(rel), e.name);
       let stat: fs.Stats;
       try {
@@ -277,6 +288,60 @@ app.post('/transcripts/upload', async (c) => {
     rel_path: `${dirEntry.rel}/${finalName}`,
     auto_detected_type: !explicitType,
   });
+});
+
+/**
+ * POST /api/archive/transcripts/:id/recategorize
+ *
+ * Body: { type: 'qa' | 'workshop' | 'client' | 'video' | 'untagged' }
+ *
+ * Moves a transcript file from its current category folder into the new
+ * category's folder. Used by the Vault page when the user changes a call's
+ * category from the inline picker (especially for zoom transcripts that
+ * landed in Untagged because the topic regex didn't catch them).
+ */
+app.post('/transcripts/:id/recategorize', async (c) => {
+  const id = c.req.param('id');
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ ok: false, error: 'body must be JSON' }, 400);
+  }
+  const newType = typeof body?.type === 'string' ? body.type : '';
+  const dest = TRANSCRIPT_DIRS.find((d) => d.type === newType);
+  if (!dest) return c.json({ ok: false, error: `invalid type: ${newType}` }, 400);
+
+  const all = allTranscripts();
+  const item = all.find((t) => t.id === id);
+  if (!item) return c.json({ ok: false, error: 'transcript not found' }, 404);
+  if (item.type === newType) return c.json({ ok: true, moved: false });
+
+  const currentDir = TRANSCRIPT_DIRS.find((d) => d.type === item.type);
+  if (!currentDir) return c.json({ ok: false, error: 'unmovable transcript (no source folder)' }, 400);
+
+  const fromPath = path.join(abs(currentDir.rel), item.filename);
+  const toDirAbs = abs(dest.rel);
+  fs.mkdirSync(toDirAbs, { recursive: true });
+  // Collision-safe rename: same suffixing rule as upload.
+  let finalName = item.filename;
+  let counter = 2;
+  while (fs.existsSync(path.join(toDirAbs, finalName))) {
+    const dot = item.filename.lastIndexOf('.');
+    const base = dot > 0 ? item.filename.slice(0, dot) : item.filename;
+    const ext = dot > 0 ? item.filename.slice(dot) : '';
+    finalName = `${base}-${counter}${ext}`;
+    counter++;
+    if (counter > 99) return c.json({ ok: false, error: 'could not find unique filename' }, 500);
+  }
+  const toPath = path.join(toDirAbs, finalName);
+
+  try {
+    fs.renameSync(fromPath, toPath);
+  } catch (err) {
+    return c.json({ ok: false, error: (err as Error).message }, 500);
+  }
+  return c.json({ ok: true, moved: true, from_type: item.type, to_type: newType, new_filename: finalName });
 });
 
 app.get('/transcripts/:id', (c) => {

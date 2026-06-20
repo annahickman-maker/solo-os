@@ -645,6 +645,14 @@ export const api = {
       auto_detected_type: boolean;
     };
   },
+  // Move a transcript between category folders. Used by the Vault page's
+  // inline category picker - especially for re-classifying zoom recordings
+  // that landed in Untagged because the topic regex didn't catch them.
+  recategorizeTranscript: (id: string, newType: string) =>
+    request<{ ok: boolean; moved?: boolean; from_type?: string; to_type?: string; new_filename?: string; error?: string }>(
+      `/api/archive/transcripts/${id}/recategorize`,
+      { method: 'POST', body: JSON.stringify({ type: newType }) },
+    ),
   runExtraction: (transcriptId: string) =>
     request<{ quotes: ExtractedQuote[]; total: number }>(
       `/api/extracts/${transcriptId}/run`,
@@ -895,10 +903,36 @@ export const api = {
     request<InboxItem>(`/api/inbox/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   updateSoloOs: () =>
-    request<{ ok: boolean; alreadyUpToDate: boolean; output: string; exitCode: number }>(
-      '/api/update-solo-os/pull',
-      { method: 'POST' }
-    ),
+    request<{
+      ok: boolean;
+      alreadyUpToDate: boolean;
+      output: string;
+      exitCode: number;
+      membership_state?: 'valid' | 'unverified' | 'expired' | 'rejected';
+    }>('/api/update-solo-os/pull', { method: 'POST' }),
+
+  // SS membership-key gate. The key validates the user against the SS
+  // community for as long as their membership is active. The local token
+  // is cached at ~/.solo-os/membership.json.
+  membershipStatus: () =>
+    request<MembershipStatus>('/api/membership/status'),
+  verifyMembershipKey: (key: string) =>
+    request<MembershipStatus>('/api/membership/verify', {
+      method: 'POST',
+      body: JSON.stringify({ key }),
+    }),
+  recheckMembership: () =>
+    request<MembershipStatus>('/api/membership/recheck', { method: 'POST' }),
+  clearMembership: () =>
+    request<MembershipStatus>('/api/membership/clear', { method: 'POST' }),
+
+  // Zoom transcript sync. Credentials live on the user's machine in
+  // ~/.solo-os/zoom-config.json. The dashboard auto-syncs every 15 min while
+  // running; sync-now lets the user force a pass from the Settings card.
+  zoomStatus: () => request<ZoomStatus>('/api/zoom/status'),
+  zoomSync: () => request<ZoomSyncResult>('/api/zoom/sync', { method: 'POST' }),
+  zoomDisconnect: () =>
+    request<{ ok: boolean }>('/api/zoom/credentials', { method: 'DELETE' }),
 
   brand: () =>
     request<{
@@ -1778,6 +1812,10 @@ export interface ReputationDimension {
   story_compressed?: string | null;
   story_actions?: ReputationStoryAction[];
   micro_stories?: ReputationMicroStory[];
+  // Per-dimension "what to strengthen" hints from the foundation scoring
+  // backend. Surfaced inline inside each dimension card. Empty array when
+  // the foundation scoring cache hasn't been populated yet.
+  what_to_strengthen?: string[];
 }
 
 export interface ApprovedBankEntry {
@@ -1887,6 +1925,40 @@ export interface ReputationResponse {
     label: string;
     description: string;
   };
+}
+
+// Mirrors the server's MembershipState union (see server/src/lib/membership.ts).
+// 'unverified' = no key has been entered yet (first install).
+// 'valid'      = a key is cached and within its TTL.
+// 'expired'    = a key was once valid but its TTL has elapsed.
+// 'rejected'   = the key was just submitted and the worker rejected it.
+export interface MembershipToken {
+  key: string;
+  valid_until: number;
+  last_checked: number;
+  last_response_was_previous: boolean;
+}
+export type MembershipStatus =
+  | { state: 'unverified'; reason: string }
+  | { state: 'valid'; token: MembershipToken; needs_recheck: boolean; rotation_warning: boolean }
+  | { state: 'expired'; token: MembershipToken; reason: string }
+  | { state: 'rejected'; reason: string };
+
+export interface ZoomStatus {
+  connected: boolean;
+  connected_at: number | null;
+  account_id_preview: string | null;
+  last_sync_at: number | null;
+  last_sync_count: number;
+  last_sync_error: string | null;
+  last_processed_end_time: string | null;
+}
+export interface ZoomSyncResult {
+  ok: boolean;
+  saved: Array<{ filename: string; topic: string; call_type: 'qa' | 'workshop' | 'client' | 'untagged' }>;
+  skipped_no_transcript: number;
+  skipped_already_processed: number;
+  error: string | null;
 }
 
 export async function verifyPassword(password: string): Promise<boolean> {

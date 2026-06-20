@@ -2041,10 +2041,14 @@ function ShowingUpSection({
         </p>
       )}
 
-      {!analysis && !isLoading && !refresh.isPending && (
+      {!analysis && !isLoading && !refresh.isPending && totalHours > 0 && (
         <p className="rep-empty">
           no analysis yet. click run to see how consistently each dimension shows up across your videos.
         </p>
+      )}
+
+      {totalHours <= 0 && !refresh.isPending && (
+        <NoContentExplainer hasStaleAnalysis={!!analysis} />
       )}
 
       {analysis && (
@@ -2059,6 +2063,104 @@ function ShowingUpSection({
         </div>
       )}
     </section>
+  );
+}
+
+// Shown when the reputation analysis has nothing to analyze yet (no published
+// content totals). Explains the two paths to wiring real content into this
+// surface so the empty state isn't read as a bug.
+const RUN_YOUTUBE_API_PROMPT = '/youtube-setup-api';
+const RUN_YOUTUBE_ANALYTICS_PROMPT = '/youtube-analytics';
+
+function NoContentExplainer({ hasStaleAnalysis }: { hasStaleAnalysis: boolean }) {
+  const [copied, setCopied] = useState<string | null>(null);
+  async function copy(label: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(label);
+      setTimeout(() => setCopied(null), 2000);
+    } catch {
+      window.prompt('copy this:', text);
+    }
+  }
+  return (
+    <div
+      style={{
+        marginTop: 'var(--space-3)',
+        padding: 'var(--space-4)',
+        border: '1px dashed var(--hairline)',
+        borderRadius: 'var(--radius-md)',
+        background: 'rgba(255,255,255,0.02)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-3)',
+        maxWidth: '72ch',
+      }}
+    >
+      <div>
+        <strong style={{ fontSize: 'var(--body)', fontWeight: 600 }}>
+          this analysis needs your real content to mean anything.
+        </strong>
+        <p className="muted" style={{ margin: '6px 0 0', fontSize: 'var(--body-sm)', lineHeight: 1.5 }}>
+          right now your vault has no published video transcripts, so claude has nothing to score
+          against. you can run analysis on the sample anytime, but the dimensions won't reflect
+          your actual body of work. two ways to fix that:
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+        <span className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          option 1 · connect youtube
+        </span>
+        <span className="muted" style={{ fontSize: 'var(--body-sm)', lineHeight: 1.5 }}>
+          run this prompt in claude inside this vault. it walks you through wiring up the youtube
+          data api so transcripts pull in automatically.
+        </span>
+        <PromptRow
+          prompt={RUN_YOUTUBE_API_PROMPT}
+          copied={copied === 'api'}
+          onCopy={() => copy('api', RUN_YOUTUBE_API_PROMPT)}
+        />
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+        <span className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          option 2 · drop transcripts manually
+        </span>
+        <span className="muted" style={{ fontSize: 'var(--body-sm)', lineHeight: 1.5 }}>
+          paste video transcripts (one .md file per video) into <code>05_Assets/Transcripts/</code>
+          in your vault. the analysis reads anything in that folder.
+        </span>
+      </div>
+
+      {hasStaleAnalysis && (
+        <span className="muted" style={{ fontSize: 11 }}>
+          (the analysis shown is from your last run - it's stale until new content lands.)
+        </span>
+      )}
+    </div>
+  );
+}
+
+function PromptRow({ prompt, copied, onCopy }: { prompt: string; copied: boolean; onCopy: () => void }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--space-2)',
+        padding: 'var(--space-2) var(--space-3)',
+        background: 'rgba(255,255,255,0.04)',
+        borderRadius: 'var(--radius-sm)',
+        fontFamily: 'var(--font-mono, monospace)',
+        fontSize: 'var(--body-sm)',
+      }}
+    >
+      <span style={{ flex: 1, color: 'var(--ink)' }}>{prompt}</span>
+      <button type="button" className="btn btn--ghost" onClick={onCopy}>
+        {copied ? 'copied' : 'copy'}
+      </button>
+    </div>
   );
 }
 

@@ -1,6 +1,0 @@
-{
-  "_meta": {
-    "description": "Source of truth for branded short links. Maps slug -> destination URL. Add entries for any tracked links you want the dashboard to know about.",
-    "_format": "Each entry: { destination: URL, source: 'where this slug came from', created: 'YYYY-MM-DD' }"
-  }
-}

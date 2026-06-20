@@ -7,7 +7,7 @@ import { formatRelative } from '../lib/format';
 
 const SOURCE_LABEL: Record<string, string> = {
   skool_reply: 'skool reply',
-  zoom_transcript: 'skool qa post',
+  zoom_transcript: 'zoom transcript',
   flagged_review: 'flagged review',
   manual: 'from claude',
 };
@@ -27,6 +27,9 @@ export function Inbox() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['inbox'],
     queryFn: api.inbox,
+    // Poll while the page is open so Zoom transcripts the background sync
+    // dropped just now show up without forcing a manual refresh.
+    refetchInterval: 60_000,
   });
 
   const mark = useMutation({

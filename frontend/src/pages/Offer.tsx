@@ -2133,6 +2133,14 @@ function PerOfferContentPanel({
   onClose: () => void;
   onSave: (body: Partial<OfferPricingRung>) => void;
 }) {
+  // Hits the same tracking-setup-status endpoint the per-block setup prompt
+  // uses. Banner is shown until ok=true (manifest + worker both exist). Hides
+  // itself permanently after that.
+  const setupStatus = useQuery({
+    queryKey: ['tracking-setup-status'],
+    queryFn: api.getTrackingSetupStatus,
+  });
+  const trackingReady = !!setupStatus.data?.ok;
   return (
     <PanelShell
       eyebrow="conversions"
@@ -2141,6 +2149,13 @@ function PerOfferContentPanel({
       color="var(--recovery)"
       onClose={onClose}
     >
+      {/* ─── 0. Setup banner (shown until tracking is configured) ─── */}
+      {!setupStatus.isLoading && !trackingReady && (
+        <ConversionsSetupBanner
+          prompt={setupStatus.data?.setup_prompt ?? '/setup-conversion-tracking'}
+        />
+      )}
+
       {/* ─── 1. Sales page (the destination, top of the stack) ─── */}
       <SalesPageBlock
         url={rung.sales_page_url}
@@ -3148,6 +3163,72 @@ function TrackingSetupPrompt({ prompt }: { prompt: string }) {
       >
         {prompt}
       </pre>
+    </div>
+  );
+}
+
+// Top-of-panel banner shown on the Conversions view until the user has set
+// up the Cloudflare worker tracking system. Reuses the same setup_prompt the
+// per-block fallback uses. Auto-hides once tracking-setup-status.ok = true.
+function ConversionsSetupBanner({ prompt }: { prompt: string }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard.writeText(prompt).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+  const promptLabel = prompt.split('\n')[0]!.slice(0, 90);
+  return (
+    <div
+      style={{
+        padding: 'var(--space-4)',
+        border: '1px dashed color-mix(in srgb, var(--strain) 50%, var(--hairline))',
+        background: 'color-mix(in srgb, var(--strain) 5%, transparent)',
+        borderRadius: 'var(--radius-md)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-3)',
+        marginBottom: 'var(--space-3)',
+      }}
+    >
+      <div>
+        <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--strain)', fontWeight: 700 }}>
+          one-time setup · tracking system not configured
+        </span>
+        <p className="muted" style={{ margin: '6px 0 0', fontSize: 'var(--body-sm)', lineHeight: 1.5 }}>
+          conversion data on this page is wired up by a tiny cloudflare worker that handles
+          your <code>/go/&lt;slug&gt;</code> tracking links and counts clicks. paste the prompt
+          below into claude inside this vault - it deploys the worker, wires up the manifest,
+          and unlocks the "generate tracking link" buttons throughout this panel. this banner
+          disappears once setup completes.
+        </p>
+      </div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-2)',
+          padding: 'var(--space-2) var(--space-3)',
+          background: 'rgba(0,0,0,0.18)',
+          border: '1px solid var(--hairline)',
+          borderRadius: 'var(--radius-sm)',
+          fontFamily: 'ui-monospace, SF Mono, Menlo, monospace',
+          fontSize: 'var(--body-sm)',
+        }}
+      >
+        <span style={{ flex: 1, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {promptLabel}
+        </span>
+        <button
+          type="button"
+          className="off-btn off-btn--primary"
+          style={{ fontSize: 11 }}
+          onClick={copy}
+        >
+          {copied ? '✓ copied full prompt' : 'copy prompt'}
+        </button>
+      </div>
     </div>
   );
 }
