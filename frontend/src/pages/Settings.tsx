@@ -109,7 +109,7 @@ function MembershipCard({ onChanged }: { onChanged: () => void }) {
   return (
     <Card eyebrow="solopreneur systems" title="membership + updates">
       <p className="muted" style={{ margin: 0, lineHeight: 1.55 }}>
-        your SS key gates updates from github. the current key is pinned in the{' '}
+        the current key is pinned in the{' '}
         <a
           href="https://www.skool.com/mastermind-5724/about"
           target="_blank"
