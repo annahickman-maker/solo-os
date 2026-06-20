@@ -107,11 +107,11 @@ function MembershipCard({ onChanged }: { onChanged: () => void }) {
   const membershipValid = status.data?.state === 'valid';
 
   return (
-    <Card eyebrow="solopreneur systems" title="membership + updates">
+    <Card eyebrow="the offer" title="membership + updates">
       <p className="muted" style={{ margin: 0, lineHeight: 1.55 }}>
         the current key is pinned in the{' '}
         <a
-          href="https://www.skool.com/mastermind-5724/about"
+          href=""
           target="_blank"
           rel="noreferrer"
           style={{ color: 'var(--accent)' }}

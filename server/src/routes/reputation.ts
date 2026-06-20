@@ -606,6 +606,62 @@ app.post('/banks/move', async (c) => {
   return c.json({ ok: true, new_id: target.id, new_path: target.path });
 });
 
+// POST /api/reputation/banks/:kind - add a new entry to a bank from the
+// Reputation page. Lets the creator type a quote / framework / proof point directly
+// into the value, authority, or pov bank without having to approve one from
+// a transcript first. Registered AFTER /banks/move so the literal route wins.
+// body: { text: string, title?: string, context?: string, tags?: string[] }
+// For pov, this writes a new POV markdown file in 05_Assets/POVs/.
+app.post('/banks/:kind', async (c) => {
+  const kind = c.req.param('kind') as DimKind;
+  const validKinds: DimKind[] = ['value', 'authority', 'connection', 'pov'];
+  if (!validKinds.includes(kind)) return c.json({ error: 'invalid kind' }, 400);
+  const body = (await c.req.json().catch(() => null)) as
+    | { text?: string; title?: string; context?: string; tags?: string[] }
+    | null;
+  if (!body?.text?.trim()) return c.json({ error: 'text required' }, 400);
+  const cleanedTags = Array.from(
+    new Set((body.tags ?? []).map((t) => t.trim()).filter(Boolean))
+  );
+  const entry: AnyBankEntry = {
+    id: '',
+    text: body.text.trim(),
+    title: body.title?.trim() || undefined,
+    context: body.context?.trim() || undefined,
+    source_moments: [],
+  };
+  if (kind === 'pov') {
+    const filePath = writePovFile(entry);
+    return c.json({ ok: true, id: path.basename(filePath, '.md'), path: filePath });
+  }
+  const now = nowSec();
+  const newId = `${KIND_PREFIX[kind]}-${now}-${Math.random().toString(36).slice(2, 6)}`;
+  const name = KIND_TO_BANK[kind as Exclude<DimKind, 'pov'>];
+  const items = loadBank<AnyBankEntry>(name);
+  items.push({
+    ...entry,
+    id: newId,
+    tags: cleanedTags,
+    status: 'confirmed',
+    created_at: now,
+    updated_at: now,
+  });
+  saveBank(name, items);
+  return c.json({ ok: true, id: newId });
+});
+
+// DELETE /api/reputation/banks/:kind/:entry_id - remove an entry from a bank.
+// For pov, deletes the markdown file. For others, removes from the JSON.
+app.delete('/banks/:kind/:entry_id', (c) => {
+  const kind = c.req.param('kind') as DimKind;
+  const entry_id = c.req.param('entry_id');
+  const validKinds: DimKind[] = ['value', 'authority', 'connection', 'pov'];
+  if (!validKinds.includes(kind)) return c.json({ error: 'invalid kind' }, 400);
+  const ok = removeFromSource(kind, entry_id);
+  if (!ok) return c.json({ error: 'not found' }, 404);
+  return c.json({ ok: true });
+});
+
 void getStateFm;
 
 export default app;

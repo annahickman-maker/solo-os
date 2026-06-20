@@ -98,23 +98,63 @@ function parseSkoolReplyDrafts(): InboxItem[] {
   return items;
 }
 
-// Parse a YYYY-MM-DD string as midnight in LOCAL time, not UTC. The default
-// `new Date('2026-06-18')` parses as 2026-06-18T00:00:00Z, which for a
-// Pacific-time user is 2026-06-17 17:00:00, so .toLocaleDateString renders
-// the wrong day. Splitting and using the (year, monthIdx, day) constructor
-// pins it to local midnight.
+// ─── source 2: Q&A transcripts ────────────────────────────────────────────
+function parseQaTranscripts(): InboxItem[] {
+  const dir = abs('05_Assets', 'Transcripts', 'QA-Calls');
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
+  const items: InboxItem[] = [];
+  for (const filename of entries) {
+    if (!filename.endsWith('.md')) continue;
+    if (filename.startsWith('_') || filename.startsWith('.')) continue;
+    const full = path.join(dir, filename);
+    let raw: string;
+    try {
+      raw = fs.readFileSync(full, 'utf8');
+    } catch {
+      continue;
+    }
+    // Date from filename: skool-qa_YYYY-MM-DD.md or skool-qa-post_YYYY-MM-DD.md
+    const dateMatch = filename.match(/(\d{4}-\d{2}-\d{2})/);
+    const dateStr = dateMatch ? dateMatch[1]! : null;
+    // The "post" body lives between '## Community Post' / '## Post' heading and the next ##
+    let body = raw;
+    const postMatch = raw.match(/##\s+(Community Post|Post)\s*\n([\s\S]*?)(?=\n##\s|$)/i);
+    if (postMatch) body = postMatch[2]!.trim();
+    const titleSuffix = dateStr
+      ? new Date(dateStr).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+      : filename.replace(/\.md$/, '');
+    const id = `inbox-qa-${slugify(filename.replace(/\.md$/, ''))}`;
+    items.push({
+      id,
+      source: 'zoom_transcript',
+      title: `Skool Q&A - ${titleSuffix}`,
+      body: body.slice(0, 4000),
+      status: 'pending',
+      link: null,
+      source_file: path.join('05_Assets', 'Transcripts', 'QA-Calls', filename),
+      created_at: dateStr ? Math.floor(new Date(dateStr).getTime() / 1000) : 0,
+    });
+  }
+  return items;
+}
+
+// Parse a YYYY-MM-DD string as midnight in local time, not UTC. Fixes the
+// off-by-one in Pacific timezones.
 function parseYmdLocal(ymd: string): Date | null {
   const m = ymd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return null;
   return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
 }
 
-// ─── source 2: Zoom transcripts ───────────────────────────────────────────
-// Surfaces every transcript dropped by the dashboard's Zoom sync. One inbox
-// item per transcript file across all four category folders. Dismissing an
-// item writes the standard archive marker - the transcript file itself stays
-// in the vault and shows up on the Vault page; only the inbox notification
-// is suppressed.
+// ─── source 3: Zoom transcript summaries ──────────────────────────────────
+// Reads ONLY *_summary.md files (the AI-generated digest the auto-sync
+// produces). Raw transcripts stay in the vault; only the summary is the
+// inbox notification.
 const ZOOM_TRANSCRIPT_DIRS: Array<{ rel: string[]; category_label: string }> = [
   { rel: ['05_Assets', 'Transcripts', 'Untagged'], category_label: 'Zoom call' },
   { rel: ['05_Assets', 'Transcripts', 'QA-Calls'], category_label: 'Q&A call' },
@@ -133,9 +173,6 @@ function parseZoomTranscripts(): InboxItem[] {
       continue;
     }
     for (const filename of entries) {
-      // Inbox only surfaces SUMMARY files, never raw transcripts. Raw transcripts
-      // sit in the same folder for the Vault page to surface; the inbox is for
-      // the digest of the call, not the verbatim text.
       if (!filename.endsWith('_summary.md')) continue;
       if (filename.startsWith('_') || filename.startsWith('.')) continue;
       const full = path.join(dir, filename);
@@ -145,16 +182,11 @@ function parseZoomTranscripts(): InboxItem[] {
       } catch {
         continue;
       }
-      // Strip the YAML frontmatter from the body preview - the user sees the
-      // overview + key points, not the metadata block.
       let body = raw;
       const fmEnd = raw.indexOf('\n---\n', 4);
       if (raw.startsWith('---\n') && fmEnd > 0) body = raw.slice(fmEnd + 5);
-      // Pull topic out of frontmatter for a richer title than the filename.
       const topicMatch = raw.match(/^topic:\s*"?([^"\n]+)"?\s*$/m);
       const topic = topicMatch?.[1]?.trim() ?? null;
-      // Date: prefer the source-transcript's filename (which has the recording
-      // date), fall back to any YYYY-MM-DD slug embedded in the summary file.
       const filenameDateMatch = filename.match(/(\d{4}-\d{2}-\d{2})/);
       const dateStr = filenameDateMatch?.[1] ?? null;
       const dateAsLocal = dateStr ? parseYmdLocal(dateStr) : null;
@@ -180,7 +212,10 @@ function parseZoomTranscripts(): InboxItem[] {
 
 function listInbox(): InboxItem[] {
   const dismissed = dismissedIds();
-  const all = [...parseSkoolReplyDrafts(), ...parseZoomTranscripts()];
+  // Preserve the existing Skool QA-Calls parser (your manual workflow files)
+  // AND add the new zoom-summary parser (output of the auto-sync). Both can
+  // coexist - they read different filename patterns in the same folders.
+  const all = [...parseSkoolReplyDrafts(), ...parseQaTranscripts(), ...parseZoomTranscripts()];
   return all
     .filter((it) => !dismissed.has(it.id))
     .sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));

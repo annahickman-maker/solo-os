@@ -1692,13 +1692,85 @@ function ApprovedBankSection({
   // pin-to-promise toggle.
   pinnedSet?: Set<string>;
 }) {
+  const qc = useQueryClient();
+  const add = useMutation({
+    mutationFn: (body: { text: string; title?: string; context?: string }) =>
+      api.addBankEntry(currentKind, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['reputation'] }),
+  });
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState({ text: '', title: '', context: '' });
+  const reset = () => {
+    setAdding(false);
+    setDraft({ text: '', title: '', context: '' });
+  };
   return (
     <Section title={title} subtitle={subtitle}>
-      {entries.length === 0 ? (
-        <p className="rep-empty" style={{ margin: 0 }}>{emptyHint}</p>
-      ) : (
-        <div className="rep-list">
-          {entries.map((e) => (
+      <div className="rep-list">
+        {adding ? (
+          <div
+            className="rep-card rep-card--inline"
+            style={{ borderColor: `color-mix(in srgb, ${color} 35%, var(--hairline))` }}
+          >
+            <input
+              className="rep-text-input"
+              placeholder="Title (optional - e.g. 'Micro-transformations and the binge effect')"
+              value={draft.title}
+              onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+            />
+            <textarea
+              className="rep-textarea rep-textarea--large"
+              autoFocus
+              rows={5}
+              placeholder="The quote, framework, or proof point - in your words."
+              value={draft.text}
+              onChange={(e) => setDraft({ ...draft, text: e.target.value })}
+            />
+            <textarea
+              className="rep-textarea"
+              rows={2}
+              placeholder="Context (optional - what was happening when you said this)"
+              value={draft.context}
+              onChange={(e) => setDraft({ ...draft, context: e.target.value })}
+            />
+            <div className="rep-actions">
+              <button type="button" className="rep-btn rep-btn--ghost" onClick={reset}>
+                cancel
+              </button>
+              <button
+                type="button"
+                className="rep-btn rep-btn--primary"
+                disabled={!draft.text.trim() || add.isPending}
+                onClick={() => {
+                  add.mutate(
+                    {
+                      text: draft.text.trim(),
+                      title: draft.title.trim() || undefined,
+                      context: draft.context.trim() || undefined,
+                    },
+                    { onSuccess: reset }
+                  );
+                }}
+              >
+                {add.isPending ? 'adding…' : 'add to bank'}
+              </button>
+            </div>
+            {add.isError && (
+              <p style={{ fontSize: 11, color: '#ff6b6b', margin: 0 }}>
+                {(add.error as Error)?.message ?? 'add failed'}
+              </p>
+            )}
+          </div>
+        ) : (
+          <button type="button" className="rep-add" onClick={() => setAdding(true)}>
+            + add to {title.toLowerCase()}
+          </button>
+        )}
+
+        {entries.length === 0 ? (
+          <p className="rep-empty" style={{ margin: 0 }}>{emptyHint}</p>
+        ) : (
+          entries.map((e) => (
             <ApprovedBankCard
               key={e.id}
               entry={e}
@@ -1707,9 +1779,9 @@ function ApprovedBankSection({
               pinned={pinnedSet?.has(e.id) ?? false}
               showPin={pinnedSet !== undefined}
             />
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </div>
     </Section>
   );
 }
@@ -1767,6 +1839,10 @@ function ApprovedBankCard({
   });
   const togglePin = useMutation({
     mutationFn: () => api.toggleProofPin(entry.id, !pinned),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['reputation'] }),
+  });
+  const del = useMutation({
+    mutationFn: () => api.deleteBankEntry(currentKind, entry.id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['reputation'] }),
   });
   return (
@@ -1935,6 +2011,18 @@ function ApprovedBankCard({
             {(move.error as Error)?.message ?? 'move failed'}
           </span>
         )}
+        <button
+          type="button"
+          className="rep-btn rep-btn--danger-ghost"
+          style={{ marginLeft: 'auto' }}
+          disabled={del.isPending}
+          onClick={() => {
+            const label = entry.title || (entry.text ?? '').slice(0, 60);
+            if (confirm(`delete "${label}"?`)) del.mutate();
+          }}
+        >
+          delete
+        </button>
       </div>
     </article>
   );

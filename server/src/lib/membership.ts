@@ -1,7 +1,7 @@
 /**
  * SS membership-key gate for Solo OS updates.
  *
- * The dashboard talks to the membership-key worker on annahickman.com to
+ * The dashboard talks to the membership-key worker on yourdomain.com to
  * validate a key the user pastes in. Once validated, we cache a tiny
  * token at ~/.solo-os/membership.json so we don't hit the network on
  * every launch. The token re-checks on every Update click and once per
@@ -15,7 +15,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-const VERIFY_URL = 'https://annahickman.com/verify-key';
+const VERIFY_URL = 'https://yourdomain.com/verify-key';
 const TOKEN_FILE = path.join(os.homedir(), '.solo-os', 'membership.json');
 const RECHECK_AFTER_SECONDS = 30 * 24 * 60 * 60; // 30 days. Token TTL from the worker is 32 days so a same-key re-check refreshes before expiry.
 

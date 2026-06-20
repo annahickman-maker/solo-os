@@ -1092,6 +1092,18 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ tags }),
     }),
+  addBankEntry: (
+    kind: DimKind,
+    body: { text: string; title?: string; context?: string; tags?: string[] }
+  ) =>
+    request<{ ok: true; id: string }>(`/api/reputation/banks/${kind}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  deleteBankEntry: (kind: DimKind, entryId: string) =>
+    request<{ ok: true }>(`/api/reputation/banks/${kind}/${entryId}`, {
+      method: 'DELETE',
+    }),
   setStoryAction: (id: string, done: boolean) =>
     request<{ ok: true }>(`/api/reputation/story-actions/${id}`, {
       method: 'PATCH',

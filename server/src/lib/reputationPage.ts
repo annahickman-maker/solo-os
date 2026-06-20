@@ -97,8 +97,14 @@ type ApprovedBankEntry = {
   created_at: number | null;
 };
 
+// Newest first, nulls last. Used for all bank surfaces so the most recently
+// added entry shows at the top of the list.
+function sortNewestFirst<T extends { created_at: number | null }>(items: T[]): T[] {
+  return items.slice().sort((a, b) => (b.created_at ?? -Infinity) - (a.created_at ?? -Infinity));
+}
+
 function normalizeApproved(name: 'proof-points' | 'teaching-frameworks'): ApprovedBankEntry[] {
-  return loadJsonBank<ApprovedBankRaw & { tags?: string[] }>(name).map((e) => ({
+  const items = loadJsonBank<ApprovedBankRaw & { tags?: string[] }>(name).map((e) => ({
     id: e.id,
     text: e.text ?? '',
     title: e.title ?? null,
@@ -109,6 +115,7 @@ function normalizeApproved(name: 'proof-points' | 'teaching-frameworks'): Approv
     tags: Array.isArray(e.tags) ? e.tags : [],
     created_at: e.created_at ?? null,
   })).filter((e) => e.text);
+  return sortNewestFirst(items);
 }
 
 function loadWinsForDimension(): Array<{ id: string; title: string; body?: string | null; kind: 'own' | 'student' | 'client'; status: 'candidate' | 'confirmed' | 'rejected'; date?: number | null; tags?: string[] }> {
@@ -123,10 +130,10 @@ function loadWinsForDimension(): Array<{ id: string; title: string; body?: strin
   }));
 }
 
-function loadStoriesForDimension(): Array<{ id: string; text: string; source_episode?: string | null; source_transcript?: string | null; source_timestamp?: string | null; title?: string | null; source_moments?: Array<{ text: string; timestamp: string }>; status: 'candidate' | 'confirmed' | 'rejected'; tags?: string[] }> {
+function loadStoriesForDimension(): Array<{ id: string; text: string; source_episode?: string | null; source_transcript?: string | null; source_timestamp?: string | null; title?: string | null; source_moments?: Array<{ text: string; timestamp: string }>; status: 'candidate' | 'confirmed' | 'rejected'; tags?: string[]; created_at: number | null }> {
   // Now reads ONLY the verbatim approved-from-transcripts micro-stories. The
   // file gets reset on the creator's request - paraphrased entries are archived.
-  return loadJsonBank<StoryRaw & ApprovedBankRaw>('micro-stories').map((s) => ({
+  const items = loadJsonBank<StoryRaw & ApprovedBankRaw & { created_at?: number }>('micro-stories').map((s) => ({
     id: s.id,
     text: s.text,
     source_episode: s.source_episode ?? null,
@@ -136,7 +143,9 @@ function loadStoriesForDimension(): Array<{ id: string; text: string; source_epi
     source_moments: Array.isArray(s.source_moments) ? s.source_moments : [],
     status: (s.status === 'confirmed' || s.status === 'rejected') ? s.status : 'candidate',
     tags: s.tags ?? [],
+    created_at: typeof s.created_at === 'number' ? s.created_at : null,
   }));
+  return sortNewestFirst(items);
 }
 
 // ─── Story actions checklist (Connection dimension) ──────────────────────
@@ -212,7 +221,7 @@ function loadApprovedPovsFromTranscripts(): ApprovedBankEntry[] {
         : null,
     });
   }
-  return out;
+  return sortNewestFirst(out);
 }
 
 function loadPOVsForDimension() {

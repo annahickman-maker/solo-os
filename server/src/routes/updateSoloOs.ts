@@ -1,6 +1,6 @@
 /**
  * Update Solo OS - runs `git pull` in the dashboard repo root so members
- * (and Anna's live install) can pull the latest code from GitHub straight
+ * (and the creator's live install) can pull the latest code from GitHub straight
  * from the Settings page. No database; reports stdout/stderr back to the
  * UI so the user sees what happened.
  */
@@ -72,7 +72,7 @@ app.post('/pull', async (c) => {
         alreadyUpToDate: false,
         output:
           state.state === 'unverified'
-            ? 'enter your solopreneur systems key in settings to enable updates.'
+            ? 'enter your the offer key in settings to enable updates.'
             : state.state === 'expired'
             ? 'your ss key has expired. open settings and paste the current key to keep updating.'
             : 'reason' in state

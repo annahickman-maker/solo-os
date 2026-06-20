@@ -148,7 +148,7 @@ export function MembershipGate({ children }: MembershipGateProps) {
               letterSpacing: '-0.01em',
             }}
           >
-            enter your solopreneur systems key
+            enter your the offer key
           </h2>
           <p
             className="muted"
@@ -156,12 +156,12 @@ export function MembershipGate({ children }: MembershipGateProps) {
           >
             solo os is built for members of the{' '}
             <a
-              href="https://www.skool.com/mastermind-5724/about"
+              href=""
               target="_blank"
               rel="noreferrer"
               style={{ color: 'var(--accent)' }}
             >
-              solopreneur systems community
+              the offer community
             </a>
             . the current key is pinned at the top of the community. paste it once - it stays
             saved on this machine and only re-checks when you click update.

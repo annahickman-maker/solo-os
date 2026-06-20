@@ -271,15 +271,6 @@ function TranscriptList({ onSelect }: { onSelect: (id: string) => void }) {
 function TranscriptRow({ item, onSelect }: { item: TranscriptItem; onSelect: () => void }) {
   const cleanName = item.title ?? item.filename.replace(/\.(md|txt)$/, '');
   const isVerbatim = item.type === 'video' || item.has_raw === true;
-  const qc = useQueryClient();
-  // YouTube transcripts come from a different code path (per-video file) and
-  // shouldn't be re-categorized - hide the picker for them.
-  const canRecategorize = item.type !== 'video';
-  const recategorize = useMutation({
-    mutationFn: (newType: string) =>
-      api.recategorizeTranscript(item.id, newType),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['archive-transcripts'] }),
-  });
   return (
     <div className="tx-row">
       <button
@@ -293,21 +284,6 @@ function TranscriptRow({ item, onSelect }: { item: TranscriptItem; onSelect: () 
           {isVerbatim ? 'verbatim' : 'summary'}
         </span>
       </button>
-      {canRecategorize && (
-        <select
-          aria-label="change category"
-          value={item.type}
-          onChange={(e) => recategorize.mutate(e.target.value)}
-          disabled={recategorize.isPending}
-          onClick={(e) => e.stopPropagation()}
-          className="tx-row__cat-picker"
-        >
-          <option value="untagged">Untagged</option>
-          <option value="qa">Q&amp;A call</option>
-          <option value="workshop">Live workshop</option>
-          <option value="client">Client call</option>
-        </select>
-      )}
       {item.date ? (
         <span className="tx-row__date">
           {new Date(item.date * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
@@ -1500,17 +1476,6 @@ const TX_CSS = `
 .tx-row:hover { background: rgba(255,255,255,0.03); border-left-color: var(--ink); }
 .tx-row__name { flex: 1; font-size: var(--body); word-break: break-word; }
 .tx-row__date { font-size: var(--body-sm); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.tx-row__cat-picker {
-  background: var(--surface);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-sm);
-  color: var(--muted);
-  font-size: 11px;
-  padding: 3px 6px;
-  cursor: pointer;
-  font-family: inherit;
-}
-.tx-row__cat-picker:hover { color: var(--ink); border-color: var(--ink); }
 .tx-badge {
   font-size: 10px;
   text-transform: uppercase;
