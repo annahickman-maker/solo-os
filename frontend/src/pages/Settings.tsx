@@ -118,7 +118,7 @@ function MembershipCard({ onChanged }: { onChanged: () => void }) {
         >
           SS community
         </a>
-        . if your membership lapses the dashboard keeps running but updates stop until you re-enter a valid key.
+        {' '}under the solo os classroom module. if your membership lapses the dashboard keeps running but updates stop until you re-enter a valid key.
       </p>
 
       <MembershipStatusLine status={status.data ?? null} loading={status.isLoading} />
