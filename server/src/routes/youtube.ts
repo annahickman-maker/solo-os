@@ -364,12 +364,18 @@ app.get('/video-stats', async (c) => {
 });
 
 // GET /api/youtube/status - return latest sync state from state.md
+// Also reports whether the API key is configured (env var present) so the
+// Settings "Connect your apps" card can show "live" vs "needs setup".
 app.get('/status', (c) => {
+  const configured = !!(process.env.YOUTUBE_API_KEY && process.env.YOUTUBE_API_KEY.trim());
   const entry = loadFile(abs(STATE_FILE_REL));
-  if (!entry) return c.json({ ok: true, last_sync: null, yt_subs: null });
+  if (!entry) {
+    return c.json({ ok: true, configured, last_sync: null, yt_subs: null });
+  }
   const fm = entry.frontmatter as Record<string, unknown>;
   return c.json({
     ok: true,
+    configured,
     last_sync: (fm.yt_last_sync as string) ?? null,
     yt_subs: (fm.yt_subs as number) ?? null,
     yt_total_views: (fm.yt_total_views as number) ?? null,

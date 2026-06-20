@@ -825,6 +825,18 @@ export const api = {
   googleStatus: () => request<{ configured: boolean; connected: boolean; email: string | null }>('/api/google/status'),
   googleConnectUrl: () => request<{ url: string }>('/api/google/connect-url'),
   googleDisconnect: () => request<{ ok: true }>('/api/google/disconnect', { method: 'POST' }),
+
+  // YouTube Data API + analytics. `configured` means YOUTUBE_API_KEY env var
+  // is set (the /youtube-setup-api skill ran). `last_sync` and `yt_subs` come
+  // from the last channel-stats sync.
+  youtubeStatus: () => request<{
+    ok: boolean;
+    configured: boolean;
+    last_sync: string | null;
+    yt_subs: number | null;
+    yt_total_views?: number | null;
+    yt_channel_handle?: string | null;
+  }>('/api/youtube/status'),
   pickableTasks: () => request<{ items: PickableTask[] }>('/api/deep-work/pickable-tasks'),
   startDeepWork: (input?: string | { label?: string; task_id?: string; category?: string }) => {
     const body =

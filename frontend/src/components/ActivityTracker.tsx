@@ -588,9 +588,6 @@ function ConnectViaClaudePanel({ onDismiss }: { onDismiss: () => void }) {
           {copied ? 'copied' : 'copy'}
         </button>
       </div>
-      <span className="muted" style={{ fontSize: 11 }}>
-        claude will guide you through a one-time google cloud console setup (~10 min) and wire up your own credentials. your tokens stay on this machine.
-      </span>
     </div>
   );
 }
