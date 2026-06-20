@@ -99,11 +99,6 @@ export function FocusTargetEditor({
     }
   }
 
-  function commitRevenue() {
-    const v = revenue === '' ? null : Number(revenue);
-    if (v === (targets?.mrr_target_usd ?? null)) return;
-    void commit({ goalPatch: { mrr_target_usd: v } });
-  }
   function commitPrice() {
     const v = price === '' ? null : Number(price);
     if (v === (targets?.avg_member_price_usd ?? null)) return;

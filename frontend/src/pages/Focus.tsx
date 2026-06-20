@@ -79,19 +79,6 @@ export function Focus() {
     queryKey: ['ig-output'],
     queryFn: api.igOutput,
   });
-  const setIgTarget = useMutation({
-    mutationFn: (n: number) => api.setIgTarget(n),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['ig-output'] }),
-  });
-  function editIgTarget() {
-    const cur = igOutput?.target_per_week ?? 3;
-    const v = window.prompt('how many reels per week do you want to publish?', String(cur));
-    if (!v) return;
-    const n = parseFloat(v);
-    if (!Number.isFinite(n) || n <= 0) return;
-    setIgTarget.mutate(Math.round(n));
-  }
-
   const [filter, setFilter] = useState<TaskCategory | 'all'>('all');
   const [showCompleted, setShowCompleted] = useState(false);
 

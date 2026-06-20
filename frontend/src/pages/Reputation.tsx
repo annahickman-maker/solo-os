@@ -2070,7 +2070,6 @@ function ShowingUpSection({
 // content totals). Explains the two paths to wiring real content into this
 // surface so the empty state isn't read as a bug.
 const RUN_YOUTUBE_API_PROMPT = '/youtube-setup-api';
-const RUN_YOUTUBE_ANALYTICS_PROMPT = '/youtube-analytics';
 
 function NoContentExplainer({ hasStaleAnalysis }: { hasStaleAnalysis: boolean }) {
   const [copied, setCopied] = useState<string | null>(null);
