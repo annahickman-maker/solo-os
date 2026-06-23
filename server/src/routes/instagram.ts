@@ -63,6 +63,10 @@ type IgItem = {
   thumbnail_path?: string;    // absolute path to a .jpg frame for dashboard preview
   hook_variants?: string[];   // 3 short on-screen text hooks (3-7 words each)
   chosen_hook?: string;       // the one the creator picked - burned into video at post time
+  hook_pos_x?: number;        // % of frame width, center coord (default 50)
+  hook_pos_y?: number;        // % of frame height, center coord (default 50)
+  titled_video_path?: string; // absolute path to the rendered-with-title .mp4
+  titled_at?: number;         // unix seconds - when titled video was last rendered
   scheduled_for?: number;     // unix seconds - when the poster cron will publish
 };
 
@@ -204,6 +208,12 @@ app.patch('/queue/:id', async (c) => {
   }
   if (typeof body.chosen_hook === 'string') {
     it.chosen_hook = stripEmDashes(body.chosen_hook).trim();
+  }
+  if (typeof body.hook_pos_x === 'number' && Number.isFinite(body.hook_pos_x)) {
+    it.hook_pos_x = Math.max(5, Math.min(95, body.hook_pos_x));
+  }
+  if (typeof body.hook_pos_y === 'number' && Number.isFinite(body.hook_pos_y)) {
+    it.hook_pos_y = Math.max(5, Math.min(95, body.hook_pos_y));
   }
   writeQueue(items);
   return c.json({ ok: true, item: it });
@@ -632,6 +642,59 @@ app.get('/queue/:id/video', (c) => {
   }
   const buf = fs.readFileSync(it.video_path);
   return new Response(buf, { headers: { 'Content-Type': 'video/mp4', 'Cache-Control': 'private, max-age=60' } });
+});
+
+// Stream the title-baked version. Distinct from /video so the dashboard can
+// toggle between raw and titled previews. Returns 404 until /render-title has
+// been called for this item.
+app.get('/queue/:id/titled-video', (c) => {
+  const id = c.req.param('id');
+  const items = readQueue();
+  const it = items.find((i) => i.id === id);
+  if (!it?.titled_video_path || !fs.existsSync(it.titled_video_path)) {
+    return c.json({ error: 'no titled video' }, 404);
+  }
+  const buf = fs.readFileSync(it.titled_video_path);
+  return new Response(buf, {
+    headers: {
+      'Content-Type': 'video/mp4',
+      // No cache - rendered file gets overwritten on each render-title call.
+      'Cache-Control': 'no-store',
+    },
+  });
+});
+
+/**
+ * POST /api/instagram/queue/:id/render-title
+ * Bake item.chosen_hook onto item.video_path at item.hook_pos_x/_y via ffmpeg.
+ * Writes to 00_System/instagram-queue/titled/<filename>.mp4 and sets
+ * item.titled_video_path so the dashboard can stream it back.
+ */
+app.post('/queue/:id/render-title', async (c) => {
+  const id = c.req.param('id');
+  const items = readQueue();
+  const idx = items.findIndex((i) => i.id === id);
+  if (idx === -1) return c.json({ error: 'not found' }, 404);
+  const it = items[idx]!;
+  if (!it.video_path) return c.json({ error: 'no video attached' }, 400);
+  const hook = (it.chosen_hook ?? '').trim();
+  if (!hook) return c.json({ error: 'no hook text - pick or write a hook first' }, 400);
+  const { renderReelWithHook } = await import('../lib/reelRender.js');
+  try {
+    const { titled_video_path } = await renderReelWithHook({
+      inputVideoPath: it.video_path,
+      hookText: hook,
+      posXPct: typeof it.hook_pos_x === 'number' ? it.hook_pos_x : 50,
+      posYPct: typeof it.hook_pos_y === 'number' ? it.hook_pos_y : 50,
+    });
+    it.titled_video_path = titled_video_path;
+    it.titled_at = Math.floor(Date.now() / 1000);
+    writeQueue(items);
+    return c.json({ ok: true, item: it });
+  } catch (err: any) {
+    console.error('render-title failed:', err);
+    return c.json({ error: err?.message ?? 'render failed' }, 500);
+  }
 });
 
 // ─── Hook generation (3 on-screen text variants) ──────────────────────────

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, type BankItem, type BankKind, type IgItemStatus, type IgQueueItem, type QuoteTag } from '../api';
+import { api, mediaUrl, type BankItem, type BankKind, type IgItemStatus, type IgQueueItem, type QuoteTag } from '../api';
 import { Voice } from './Voice';
 import { MonthGrid } from '../components/MonthGrid';
 import { FocusCtaEditor } from '../components/FocusCtaEditor';
@@ -1633,9 +1633,31 @@ function ReelProductionSection({ item }: { item: IgQueueItem }) {
   }, [hookDraft, item.chosen_hook]);
 
   // Hook overlay position on the video preview (% of frame, center coords).
-  // Just for visualizing where the hook would sit - she recreates the text
-  // overlay in her actual editing tool.
-  const [hookPos, setHookPos] = useState<{ x: number; y: number }>({ x: 50, y: 50 });
+  // Persisted per item so the bake-to-video render uses the same coords she
+  // dragged the preview to. Mutates on drag-end via savePos.
+  const [hookPos, setHookPos] = useState<{ x: number; y: number }>({
+    x: typeof item.hook_pos_x === 'number' ? item.hook_pos_x : 50,
+    y: typeof item.hook_pos_y === 'number' ? item.hook_pos_y : 50,
+  });
+  useEffect(() => {
+    setHookPos({
+      x: typeof item.hook_pos_x === 'number' ? item.hook_pos_x : 50,
+      y: typeof item.hook_pos_y === 'number' ? item.hook_pos_y : 50,
+    });
+  }, [item.hook_pos_x, item.hook_pos_y]);
+  const savePos = useMutation({
+    mutationFn: (v: { x: number; y: number }) =>
+      api.updateIgItem(item.id, { hook_pos_x: v.x, hook_pos_y: v.y }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ig-queue'] }),
+  });
+
+  // Bake the hook + position onto the video via ffmpeg. After success the
+  // dashboard auto-swaps to the titled preview.
+  const renderTitle = useMutation({
+    mutationFn: () => api.renderReelTitle(item.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ig-queue'] }),
+  });
+  const [showTitled, setShowTitled] = useState(true);
 
   const [copyMsg, setCopyMsg] = useState<string>('');
 
@@ -1655,14 +1677,30 @@ function ReelProductionSection({ item }: { item: IgQueueItem }) {
     const wrap = (e.currentTarget.parentElement as HTMLDivElement | null);
     if (!wrap) return;
     const rect = wrap.getBoundingClientRect();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let moved = false;
+    let last = hookPos;
     const onMove = (ev: MouseEvent) => {
+      // Only treat as a real drag after the cursor has moved >5px in either
+      // axis. Without this, a stray click on the overlay snaps it to where
+      // the cursor landed and saves that position. Tiny accidental drags
+      // were quietly resetting the saved position.
+      if (!moved && Math.abs(ev.clientX - startX) < 5 && Math.abs(ev.clientY - startY) < 5) {
+        return;
+      }
+      moved = true;
       const x = Math.max(5, Math.min(95, ((ev.clientX - rect.left) / rect.width) * 100));
       const y = Math.max(5, Math.min(95, ((ev.clientY - rect.top) / rect.height) * 100));
-      setHookPos({ x, y });
+      last = { x, y };
+      setHookPos(last);
     };
     const onUp = () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      // Only persist if the user actually dragged. A click-without-drag is a
+      // no-op and leaves the prior saved position intact.
+      if (moved) savePos.mutate(last);
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
@@ -1684,7 +1722,17 @@ function ReelProductionSection({ item }: { item: IgQueueItem }) {
     saveHook.mutate(text);
   }
 
-  const videoUrl = `/api/instagram/queue/${item.id}/video`;
+  const hasTitled = !!item.titled_video_path;
+  const showingTitled = hasTitled && showTitled;
+  // mediaUrl() appends ?pw=... so the <video> / <img> tags pass auth without
+  // a custom header. Cache-bust the titled URL on `titled_at` so a freshly
+  // baked render shows up immediately.
+  const videoUrl = showingTitled
+    ? mediaUrl(`/api/instagram/queue/${item.id}/titled-video`, { t: item.titled_at ?? 0 })
+    : mediaUrl(`/api/instagram/queue/${item.id}/video`);
+  const posterUrl = item.thumbnail_path
+    ? mediaUrl(`/api/instagram/queue/${item.id}/thumbnail`)
+    : undefined;
   const ideas = item.hook_variants ?? [];
 
   return (
@@ -1700,8 +1748,19 @@ function ReelProductionSection({ item }: { item: IgQueueItem }) {
         {/* Left: video preview with draggable hook overlay */}
         <div className="ig-prod__preview">
           <div className="ig-prod__video-wrap">
-            <video src={videoUrl} controls playsInline muted className="ig-prod__video" />
-            {hookDraft && (
+            <video
+              key={videoUrl}
+              src={videoUrl}
+              poster={posterUrl}
+              controls
+              playsInline
+              muted
+              preload="metadata"
+              className="ig-prod__video"
+            />
+            {/* Only show the CSS overlay on the RAW video. The titled version
+                already has the text baked in, so the overlay would double up. */}
+            {hookDraft && !showingTitled && (
               <div
                 className="ig-prod__hook"
                 style={{ left: `${hookPos.x}%`, top: `${hookPos.y}%` }}
@@ -1712,7 +1771,49 @@ function ReelProductionSection({ item }: { item: IgQueueItem }) {
               </div>
             )}
           </div>
-          <p className="muted ig-prod__hint">drag the hook to reposition. preview only - recreate in your editing tool.</p>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-2)',
+              marginTop: 'var(--space-2)',
+              flexWrap: 'wrap',
+            }}
+          >
+            <button
+              type="button"
+              className="rep-btn rep-btn--primary"
+              onClick={() => renderTitle.mutate()}
+              disabled={renderTitle.isPending || !hookDraft.trim()}
+              title={!hookDraft.trim() ? 'write or pick a hook first' : 'bake the hook onto the video at the dragged position'}
+            >
+              {renderTitle.isPending
+                ? 'rendering…'
+                : hasTitled
+                  ? 're-render title onto video'
+                  : 'render title onto video'}
+            </button>
+            {hasTitled && (
+              <button
+                type="button"
+                className="rep-btn rep-btn--ghost"
+                onClick={() => setShowTitled((s) => !s)}
+                title="toggle between the raw drop and the rendered version"
+              >
+                {showingTitled ? 'show raw video' : 'show titled video'}
+              </button>
+            )}
+            {renderTitle.isError && (
+              <span style={{ fontSize: 11, color: '#ff6b6b' }}>
+                {(renderTitle.error as Error)?.message ?? 'render failed'}
+              </span>
+            )}
+          </div>
+          <p className="muted ig-prod__hint">
+            {showingTitled
+              ? 'showing the rendered version. switch to raw video to drag and re-render.'
+              : 'drag the hook to position it, then render to bake it into the video.'}
+          </p>
         </div>
 
         {/* Right: hook generator + the hook */}

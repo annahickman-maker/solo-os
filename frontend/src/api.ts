@@ -117,6 +117,10 @@ export interface IgQueueItem {
   thumbnail_path?: string;
   hook_variants?: string[];
   chosen_hook?: string;
+  hook_pos_x?: number;
+  hook_pos_y?: number;
+  titled_video_path?: string;
+  titled_at?: number;
   scheduled_for?: number;
 }
 
@@ -435,6 +439,20 @@ export function clearStoredPassword(): void {
   localStorage.removeItem(PASSWORD_KEY);
 }
 
+// Build a URL for an auth-protected media endpoint that can be passed straight
+// to <video src> / <img src> / <video poster>. Browsers can't attach custom
+// auth headers to these tags, so the server's auth middleware accepts a `?pw=`
+// query param fallback. Caller may pass extra query params (e.g. cache-bust).
+export function mediaUrl(path: string, extraParams?: Record<string, string | number>): string {
+  const pw = getStoredPassword() ?? '';
+  const params = new URLSearchParams({ pw });
+  if (extraParams) {
+    for (const [k, v] of Object.entries(extraParams)) params.set(k, String(v));
+  }
+  const sep = path.includes('?') ? '&' : '?';
+  return `${API_URL}${path}${sep}${params.toString()}`;
+}
+
 async function request<T>(
   path: string,
   init: RequestInit = {}
@@ -730,7 +748,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  updateIgItem: (id: string, body: Partial<Pick<IgQueueItem, 'status' | 'text' | 'title' | 'posted_url' | 'queue_order' | 'tag' | 'caption' | 'caption_hashtags' | 'posted_at' | 'view_count' | 'share_count' | 'comment_count' | 'chosen_hook'>>) =>
+  updateIgItem: (id: string, body: Partial<Pick<IgQueueItem, 'status' | 'text' | 'title' | 'posted_url' | 'queue_order' | 'tag' | 'caption' | 'caption_hashtags' | 'posted_at' | 'view_count' | 'share_count' | 'comment_count' | 'chosen_hook' | 'hook_pos_x' | 'hook_pos_y'>>) =>
     request<{ ok: true; item: IgQueueItem }>(`/api/instagram/queue/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
@@ -741,6 +759,8 @@ export const api = {
     request<{ ok: true; item: IgQueueItem }>(`/api/instagram/queue/${id}/caption`, { method: 'POST' }),
   generateIgHooks: (id: string) =>
     request<{ ok: true; hooks: string[] }>(`/api/instagram/queue/${id}/hooks`, { method: 'POST' }),
+  renderReelTitle: (id: string) =>
+    request<{ ok: true; item: IgQueueItem }>(`/api/instagram/queue/${id}/render-title`, { method: 'POST' }),
   markIgEditing: (id: string) =>
     request<{ ok: true; expected_filename: string; dropbox_path: string; item: IgQueueItem }>(
       `/api/instagram/queue/${id}/mark-editing`,

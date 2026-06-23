@@ -188,6 +188,8 @@ serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`solo-os-dashboard-server listening on http://localhost:${info.port}`);
   console.log(`  reads/writes vault files directly from VAULT_ROOT`);
   startZoomBackgroundSync();
+  // Sweep any leftover .partial-*.mp4 from prior interrupted reel renders.
+  void import('./lib/reelRender.js').then(({ cleanupStalePartials }) => cleanupStalePartials());
 });
 
 // ─── Zoom background sync ─────────────────────────────────────────────────
