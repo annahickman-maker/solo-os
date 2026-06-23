@@ -923,41 +923,14 @@ export function buildOffersResponse() {
     pricing.pricing_rungs = pricingRungs.map((r) => {
       const v = loadValidationPhasesForRung(slots, r.id);
       const p = loadRungProofState(slots, r.id);
-      // The validation section score is computed DIRECTLY from the
-      // checklist (ticked / total). Claude no longer rates validation;
-      // the checklist is the source of truth. We still expose it as a
-      // 5-entry array so the existing frontend math (sum/n/5 → fraction)
-      // returns the right %. Five identical entries of (pct * 5) gives
-      // the exact pct back when averaged.
-      const totalChecks = v.phases.reduce(
-        (acc: number, ph: any) => acc + (ph.checks?.length ?? 0),
-        0
-      );
-      const tickedChecks = v.phases.reduce(
-        (acc: number, ph: any) =>
-          acc + (ph.checks?.filter((c: any) => c.done).length ?? 0),
-        0
-      );
-      const validationPct = totalChecks > 0 ? tickedChecks / totalChecks : 0;
-      const entry = validationPct * 5;
-      const derivedValidation = [entry, entry, entry, entry, entry];
-      const validationReasoning = [
-        `${tickedChecks} of ${totalChecks} validation-checklist items ticked.`,
-        'Score is computed directly from the checklist - not from Claude.',
-        'To raise this, tick more items on the Validation panel.',
-        '',
-        '',
-      ];
+      // Validation is now scored like every other section: manual 1-5 per
+      // question or Claude-analysed. The validation-phases checklist still
+      // lives on the rung for the separate Validation panel UI, but it no
+      // longer drives the score. Previous version overwrote r.scores.validation
+      // and r.reasoning.validation here, which silently swallowed every manual
+      // click and every Claude analysis result for the validation tab.
       return {
         ...r,
-        scores: {
-          ...r.scores,
-          validation: derivedValidation,
-        },
-        reasoning: {
-          ...r.reasoning,
-          validation: validationReasoning,
-        },
         validation_phases: v.phases,
         current_validation_phase: v.currentPhase,
         proof_section: p,
