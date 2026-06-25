@@ -1,5 +1,87 @@
 {
-  "generated_at": 0,
-  "model": "",
-  "dimensions": []
+  "generated_at": 1782408601,
+  "model": "claude-code",
+  "dimensions": [
+    {
+      "id": "value",
+      "label": "Value",
+      "baseline": 0,
+      "score": 0,
+      "adjustments": {
+        "clarity": 0,
+        "depth": 0,
+        "distinctness": 0,
+        "transformation_alignment": 0,
+        "relevance": 0
+      },
+      "total_adjustment": 0,
+      "what_claude_noticed": "All slots and banks are empty - nothing to adjust.",
+      "what_to_strengthen": [
+        "Fill the transformation statement first - everything else ladders from it",
+        "Define the 5-step method with named steps, not just labels",
+        "Add at least one teaching framework with WHY/WHAT/HOW structure"
+      ]
+    },
+    {
+      "id": "authority",
+      "label": "Authority",
+      "baseline": 0,
+      "score": 0,
+      "adjustments": {
+        "clarity": 0,
+        "depth": 0,
+        "distinctness": 0,
+        "transformation_alignment": 0,
+        "relevance": 0
+      },
+      "total_adjustment": 0,
+      "what_claude_noticed": "All slots and banks are empty - nothing to adjust.",
+      "what_to_strengthen": [
+        "Add own_proof_intro with a single sentence framing your credibility",
+        "Add 3-5 wins with dollar amounts, dates, or specific outcomes",
+        "Add proof points that connect wins to the transformation you deliver"
+      ]
+    },
+    {
+      "id": "point_of_view",
+      "label": "Point of View",
+      "baseline": 0.2,
+      "score": 0,
+      "adjustments": {
+        "clarity": 0,
+        "depth": 0,
+        "distinctness": 0,
+        "transformation_alignment": 0,
+        "relevance": -0.2
+      },
+      "total_adjustment": -0.2,
+      "what_claude_noticed": "The single POV bank entry is an explicit template placeholder, not real content - deducting relevance.",
+      "what_to_strengthen": [
+        "Replace the example POV with a real belief flip: name the common belief, your counter-belief, and why",
+        "Fill the common_enemy slot - what broken advice or system are you against",
+        "Write 3 POV flips that would make someone in your industry uncomfortable"
+      ]
+    },
+    {
+      "id": "connection",
+      "label": "Connection",
+      "baseline": 0,
+      "score": 0,
+      "adjustments": {
+        "clarity": 0,
+        "depth": 0,
+        "distinctness": 0,
+        "transformation_alignment": 0,
+        "relevance": 0
+      },
+      "total_adjustment": 0,
+      "what_claude_noticed": "All slots and banks are empty - nothing to adjust.",
+      "what_to_strengthen": [
+        "Write my_story_text first - the full origin story with sensory detail",
+        "Add 5-10 micro-stories with specific moments, places, and emotions",
+        "Fill compressed_story as the 2-sentence version of the origin story"
+      ]
+    }
+  ],
+  "input_hash": "9de81d1d"
 }

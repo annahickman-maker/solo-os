@@ -33,6 +33,12 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Local-only isolated test runner + its scratch vault. Never ship. Testing
+# happens against ~/.solo-os-testvault (outside this repo) so the tracked
+# sample-vault can never be dirtied by a test run.
+test-run.sh
+test-vault/
+
 # Lock-file hygiene: keep them. They pin dep versions for every install.
 # !package-lock.json
 
