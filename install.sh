@@ -9,12 +9,15 @@
 #   2. Checks for Node 20+, installs via brew if missing
 #   3. Checks for the Claude Code CLI, installs via npm if missing
 #   4. Prompts the user to sign into Claude (opens browser)
-#   5. Clones the solo-os repo to ~/Desktop/solo-os
+#   5. Downloads a FRESH copy of the solo-os repo to ~/Desktop/solo-os
 #   6. Runs ./setup.sh (npm install + builds Solo OS.app into /Applications)
 #   7. Opens Solo OS.app so the dashboard lands in the browser
 #
-# The script is non-destructive. If something is already installed
-# or already cloned, it skips that step and moves on.
+# Safe to run anytime - it is also the REINSTALL command. If a copy already
+# exists, the script stops any running services, moves the old folder to the
+# Trash (recoverable), and downloads a clean copy. This guarantees a reinstall
+# always picks up the latest code AND rebuilds the app launcher, which is the
+# only reliable way to clear a broken install.
 
 set -e
 
@@ -123,14 +126,34 @@ fi
 
 # ─── 5. Clone the repo ────────────────────────────────────────────────────
 
-step "Downloading the dashboard"
+# If a copy already exists, this is a reinstall. Stop anything still running
+# from the old copy first (otherwise its supervisor keeps the ports busy and
+# can respawn services mid-swap), then move the old folder to the Trash so
+# nothing is permanently lost, then download a clean copy.
 if [ -d "$INSTALL_DIR" ]; then
-  warn "$INSTALL_DIR already exists. Using the existing folder."
-  info "If you want a fresh copy, delete it first and re-run this script."
-else
-  git clone "$REPO_URL" "$INSTALL_DIR" || fail "Clone failed. Check your internet connection."
-  ok "Downloaded to $INSTALL_DIR"
+  step "Replacing your existing copy"
+  info "Stopping any running dashboard."
+  for p in 5174 8791 8789; do
+    pids=$(lsof -ti:"$p" 2>/dev/null || true)
+    if [ -n "$pids" ]; then kill -9 $pids 2>/dev/null || true; fi
+  done
+  # Kill any process whose command references the old install dir (services
+  # and supervisors). Scoped to this folder so nothing else is touched.
+  pkill -f "$INSTALL_DIR/" 2>/dev/null || true
+  sleep 1
+
+  TRASH_DIR="$HOME/.Trash/solo-os-old-$(date +%Y%m%d-%H%M%S)"
+  if mv "$INSTALL_DIR" "$TRASH_DIR" 2>/dev/null; then
+    ok "Old copy moved to the Trash ($TRASH_DIR). Recover it from there if you need anything."
+  else
+    rm -rf "$INSTALL_DIR"
+    ok "Old copy removed."
+  fi
 fi
+
+step "Downloading the dashboard"
+git clone "$REPO_URL" "$INSTALL_DIR" || fail "Clone failed. Check your internet connection."
+ok "Downloaded a fresh copy to $INSTALL_DIR"
 
 # ─── 6. setup.sh ──────────────────────────────────────────────────────────
 

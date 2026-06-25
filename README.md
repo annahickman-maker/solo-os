@@ -35,7 +35,15 @@ You need four things first:
 3. **The Claude Code CLI** from https://claude.com/code. After installing, run `claude auth login` once - browser opens, sign in to your Claude account.
 4. **An active [Solopreneur Systems](https://www.skool.com/mastermind-5724/about) membership.** Solo OS is built for SS members - the current access key is pinned at the top of the community. You paste it once on first launch; the dashboard re-checks it when you click "update" inside Settings. If your SS membership lapses the dashboard keeps running with whatever version you have, but updates stop until you rejoin and paste the current key.
 
-Then:
+**The easy way (one command does everything):** open Terminal, paste this, press Enter.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/annahickman-maker/solo-os/main/install.sh | bash
+```
+
+This installs Node and the Claude CLI if you don't have them, downloads the dashboard, builds the app, and opens it. It is also the **reinstall** command - run it again anytime to get a clean, up-to-date copy (your old copy goes to the Trash, recoverable).
+
+**The manual way**, if you'd rather do each step yourself:
 
 ```bash
 git clone https://github.com/annahickman-maker/solo-os.git ~/Desktop/solo-os
@@ -96,7 +104,13 @@ Your vault (outside this repo) is never touched.
 
 **Dashboard opens but AI features do not work.** You haven't run `claude auth login` yet. Open a terminal: `claude auth login`. Browser flow. Done.
 
-**Solo OS will not launch.** First launch takes ~10 seconds to boot three services. If it still won't open, double-click `start-local.sh` directly from the cloned repo to see the logs in Terminal.
+**Solo OS will not launch.** First launch takes ~10 seconds to boot three services. If it still won't open, the reliable fix is a clean reinstall - open Terminal, paste this, press Enter:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/annahickman-maker/solo-os/main/install.sh | bash
+```
+
+It stops the old copy, moves it to the Trash, downloads a fresh one, and rebuilds the app. To see the raw logs instead, double-click `start-local.sh` in the cloned repo.
 
 **Extraction never finishes.** Check `/tmp/solo-os-server.log` and `/tmp/solo-os-claude-bridge.log` for errors. Almost always: `claude auth login` hasn't been run.
 
