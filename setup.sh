@@ -119,8 +119,14 @@ cat > "$APP_BUNDLE/Contents/MacOS/launcher" <<LAUNCHER
 DASH_DIR="$DASH_DIR"
 LOG_DIR="/tmp"
 
-# Ensure node is findable when launched via Finder (no shell init)
-export PATH="\$HOME/.nvm/versions/node/v20.20.2/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:\$PATH"
+# Ensure node is findable when launched via Finder (no shell init).
+# Pick the newest installed nvm version dynamically + cover both Homebrew
+# prefixes (Apple Silicon /opt/homebrew, Intel /usr/local).
+NVM_BIN=""
+if [ -d "\$HOME/.nvm/versions/node" ]; then
+  NVM_BIN=\$(ls -d "\$HOME"/.nvm/versions/node/v*/bin 2>/dev/null | sort -V | tail -1)
+fi
+export PATH="\${NVM_BIN:+\$NVM_BIN:}/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:\$PATH"
 
 # Check if the dashboard is already running. If yes, just open the browser.
 if lsof -ti:5174 >/dev/null 2>&1; then
@@ -129,8 +135,10 @@ if lsof -ti:5174 >/dev/null 2>&1; then
 fi
 
 # Start the services in the background via the supervised launcher.
+# Invoke through /bin/bash explicitly so macOS provenance (com.apple.provenance
+# xattr on cloned/downloaded files) doesn't block exec from the .app bundle.
 # Detach via nohup so the .app process can exit cleanly.
-nohup "\$DASH_DIR/start-local.sh" > "\$LOG_DIR/solo-os-launcher.log" 2>&1 &
+nohup /bin/bash "\$DASH_DIR/start-local.sh" > "\$LOG_DIR/solo-os-launcher.log" 2>&1 &
 
 # Wait up to 30 seconds for the frontend to come up, then open browser.
 for i in {1..30}; do
