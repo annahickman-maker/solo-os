@@ -7,8 +7,8 @@ this_week: false
 section: ''
 project: null
 created: '2026-06-08'
-updated: '2026-06-25'
-scheduled_weekday: null
+updated: '2026-06-19'
+scheduled_weekday: fri
 ---
 # Explore the dashboard
 
