@@ -1,5 +1,5 @@
 /**
- * YouTube description generator — calls the local claude-bridge with the
+ * YouTube description generator - calls the local claude-bridge with the
  * youtube-description skill's structure: CTA + 2-sentence hook + 4-6
  * timestamped chapters from the transcript.
  *
@@ -30,7 +30,7 @@ export type GeneratedDescription = {
 };
 
 function stripEmDashes(s: string): string {
-  return s.replace(/—/g, ' - ').replace(/–/g, '-');
+  return s.replace(/-/g, ' - ').replace(/–/g, '-');
 }
 
 function getVoiceSummary(): string {
@@ -48,7 +48,7 @@ function getVoiceSummary(): string {
 const DESCRIPTION_SYSTEM = `You write YouTube descriptions in the creator's voice for the channel.
 
 NON-NEGOTIABLES:
-- NEVER use the em dash character (—). Use a plain hyphen with spaces ( - ) instead. Zero exceptions.
+- NEVER use the em dash character (-). Use a plain hyphen with spaces ( - ) instead. Zero exceptions.
 - No emojis anywhere.
 - No hashtags. Never. YouTube descriptions don't use hashtags.
 - No guru language. No hype. No "here's the truth nobody talks about."
@@ -75,7 +75,7 @@ STRUCTURE (in this exact order):
 
 If timestamps are not present in the transcript, write chapter titles only (no timestamps) and at the very end append a single italics line: "_note: add timestamps manually before publishing._"
 
-OUTPUT FORMAT — return a JSON object only, no commentary, no markdown fences:
+OUTPUT FORMAT - return a JSON object only, no commentary, no markdown fences:
 {
   "description": "the FULL description ready to paste, including CTA line, blank line, hook sentence 1, blank line, hook sentence 2, blank line, the 'What we cover:' line, then each chapter on its own line"
 }`;

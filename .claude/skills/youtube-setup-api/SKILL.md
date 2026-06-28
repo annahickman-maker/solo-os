@@ -1,6 +1,8 @@
 ---
 name: youtube-setup-api
-description: One-time setup that connects the dashboard to YouTube. Walks the user through getting a free YouTube Data API key, configuring channels to monitor and keywords for the Title Radar, and saving everything so the dashboard's title generator, channel stats, Title Radar, and analytics surfaces all work. Use when the user says "set up the YouTube API", "connect YouTube", "set up title radar", "set up YouTube analytics", or when /youtube-title detects the API isn't connected.
+description: 'One-time setup that connects the dashboard to YouTube. Walks the user through getting a free YouTube Data API key, configuring channels to monitor and keywords for the Title Radar, and saving everything so the dashboard''s title generator, channel stats, Title Radar, and analytics surfaces all work. Use when the user says "set up the YouTube API", "connect YouTube", "set up title radar", "set up YouTube analytics", or when /youtube-title detects the API isn''t connected.'
+category: Research
+hidden: true
 ---
 
 # YouTube Setup - API Connection
@@ -20,7 +22,7 @@ After this skill finishes, all YouTube features in the dashboard work: Title Rad
 
 ## Preflight
 
-1. Read `04_YouTube/core_channel-positioning.md`. If missing, STOP: "Run /youtube-onboarding first to set up your channel positioning - then come back here."
+1. This is infrastructure setup - it connects the dashboard to YouTube and doesn't depend on channel positioning. Your foundation comes from Solo OS onboarding (the `01_Core/` files). If your core files aren't set up yet, stop and say: run /solopreneur-onboarding first - then come back here.
 2. Check whether this is already set up by looking for `scripts/title_radar_config.py` AND a `YOUTUBE_API_KEY=` line in `dashboard/server/.env`. If both exist, ask: "YouTube API is already connected. Want to reconfigure (change API key, channels, or keywords), or quit?"
 
 ---

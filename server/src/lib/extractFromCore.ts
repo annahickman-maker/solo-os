@@ -5,7 +5,7 @@
  *
  * Called by /api/seed/from-core (POST). Idempotent in the sense that it
  * writes to state.md / wins.json / micro-stories.json with merged values
- * — anything already present in those files is preserved.
+ * - anything already present in those files is preserved.
  */
 
 import fs from 'node:fs';
@@ -86,7 +86,7 @@ export async function extractBrandSlots(): Promise<Record<string, string | null>
   const parsed = parseJson(raw);
   const out: Record<string, string | null> = {};
   for (const [k, v] of Object.entries(parsed)) {
-    out[k] = typeof v === 'string' && v.trim().length > 0 ? v.trim().replace(/—/g, '-').replace(/–/g, '-') : null;
+    out[k] = typeof v === 'string' && v.trim().length > 0 ? v.trim().replace(/-/g, '-').replace(/–/g, '-') : null;
   }
   return out;
 }
@@ -157,8 +157,8 @@ export async function extractWins(): Promise<Array<{ title: string; body?: strin
   return items
     .filter((w: any) => w && typeof w.title === 'string' && w.title.trim().length > 0)
     .map((w: any) => ({
-      title: w.title.trim().replace(/—/g, '-').replace(/–/g, '-'),
-      body: typeof w.body === 'string' ? w.body.trim().replace(/—/g, '-').replace(/–/g, '-') : undefined,
+      title: w.title.trim().replace(/-/g, '-').replace(/–/g, '-'),
+      body: typeof w.body === 'string' ? w.body.trim().replace(/-/g, '-').replace(/–/g, '-') : undefined,
       kind: w.kind === 'client' ? 'client' : 'own',
       metric: typeof w.metric === 'string' ? w.metric.trim() : undefined,
     }));
@@ -195,7 +195,7 @@ export async function extractMicroStories(): Promise<Array<{ text: string; sourc
   return items
     .filter((s: any) => s && typeof s.text === 'string' && s.text.trim().length > 20)
     .map((s: any) => ({
-      text: s.text.trim().replace(/—/g, '-').replace(/–/g, '-'),
+      text: s.text.trim().replace(/-/g, '-').replace(/–/g, '-'),
       source_episode: typeof s.source_episode === 'string' ? s.source_episode.trim() : undefined,
     }));
 }
@@ -261,7 +261,7 @@ export async function extractVerbatimMicroStories(): Promise<
   return items
     .filter((s: any) => s && typeof s.text === 'string' && s.text.trim().length > 30)
     .map((s: any) => ({
-      text: s.text.trim().replace(/—/g, '-').replace(/–/g, '-'),
+      text: s.text.trim().replace(/-/g, '-').replace(/–/g, '-'),
       video_title: typeof s.video_title === 'string' ? s.video_title.trim() : undefined,
       video_id: typeof s.video_id === 'string' ? s.video_id.trim() : undefined,
     }));
@@ -307,7 +307,7 @@ function uuid(): string {
 }
 
 function clean(s: string): string {
-  return s.replace(/—/g, '-').replace(/–/g, '-').trim();
+  return s.replace(/-/g, '-').replace(/–/g, '-').trim();
 }
 
 // ─── Avatars ───────────────────────────────────────────────────────────────

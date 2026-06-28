@@ -1,6 +1,8 @@
 ---
 name: setup-conversion-tracking
-description: One-time setup that turns on the conversion tracking system for the dashboard's offer pages. Deploys a free Cloudflare Worker that handles /go/<slug> short links, counts clicks, and feeds real conversion data back into each offer's Conversions section. Use when the user says "set up conversion tracking", "set up tracking links", "set up the tracking system", or when the dashboard shows "tracking system not set up" on an offer.
+description: 'One-time setup that turns on the conversion tracking system for the dashboard''s offer pages. Deploys a free Cloudflare Worker that handles /go/<slug> short links, counts clicks, and feeds real conversion data back into each offer''s Conversions section. Use when the user says "set up conversion tracking", "set up tracking links", "set up the tracking system", or when the dashboard shows "tracking system not set up" on an offer.'
+category: Research
+hidden: true
 ---
 
 # Setup - Conversion Tracking

@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{TITLE}}</title>
+
+<!-- Brand font imports + @font-face -->
+{{BRAND_FONTS_CSS}}
+
+<style>
+  /* Brand tokens compiled from design-system.json */
+  :root {
+    {{BRAND_TOKENS_CSS}}
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: #1f1f1f;
+    color: #fff;
+    font-family: var(--font-body, system-ui, sans-serif);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Top toolbar ------------------------------------------------ */
+  .toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    background: rgba(0,0,0,0.85);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .toolbar .brand {
+    font-family: var(--font-mono, ui-monospace);
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    opacity: 0.7;
+  }
+  .toolbar .controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .toolbar button {
+    appearance: none;
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.18);
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-family: var(--font-mono, ui-monospace);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .toolbar button:hover:not(:disabled) {
+    background: rgba(255,255,255,0.16);
+  }
+  .toolbar button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* Stage ----------------------------------------------------- */
+  .stage {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px 96px;
+    gap: 24px;
+  }
+
+  .slide-frame {
+    position: relative;
+    width: min(1080px, calc(100vw - 32px));
+    aspect-ratio: 1080 / 1350;
+    background: #fff;
+    box-shadow: 0 12px 48px rgba(0,0,0,0.4);
+    overflow: hidden;
+    border-radius: 4px;
+  }
+
+  /* Slides render at native 1080x1350; transform scales to viewport */
+  .slide-frame .slide {
+    transform-origin: top left;
+    width: 1080px;
+    height: 1350px;
+  }
+
+  .slide-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .slide-actions button {
+    appearance: none;
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.18);
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-family: var(--font-mono, ui-monospace);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .slide-actions button:hover:not(:disabled) {
+    background: rgba(255,255,255,0.14);
+  }
+
+  .slide-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .slide-label {
+    font-family: var(--font-mono, ui-monospace);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    opacity: 0.5;
+    margin-bottom: 8px;
+  }
+
+  /* --- Carousel (single-slide click-through) - the DEFAULT ---- */
+  /* Slides stack on top of each other; only .active is shown.    */
+  /* The whole carousel (card + arrows + dots + counter + download)
+     fits the viewport with NO scroll - so it sits cleanly inside a
+     dashboard iframe at any height. */
+  body.carousel { overflow: hidden; }
+  body.carousel .stage {
+    padding-top: 16px;
+    padding-bottom: 16px;
+    gap: 14px;
+  }
+  body.carousel .slide-wrap { display: none; }
+  body.carousel .slide-wrap.active {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  /* Card size: capped by width AND by available height, so the entire
+     carousel is visible without scrolling. 0.8 = the 1080/1350 aspect
+     (card width = card height * 0.8); the ~210px reserve covers the
+     toolbar + dots + counter + download row + padding. */
+  body.carousel .slide-frame {
+    width: min(420px, 86vw, calc((100vh - 210px) * 0.8));
+  }
+  /* The deck wraps the stage and overlays arrows on the card edges.
+     It stays visible in both modes; only the arrows are carousel-only. */
+  .deck {
+    width: 100%;
+    display: flex;
+    position: relative;
+    justify-content: center;
+  }
+  .arrow {
+    appearance: none;
+    display: none;            /* arrows are carousel-mode only */
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 10;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(20,20,20,0.55);
+    border: 1px solid rgba(255,255,255,0.30);
+    color: #fff;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    transition: background 0.15s, opacity 0.15s;
+  }
+  body.carousel .arrow { display: flex; }
+  #prev { left: 6px; }
+  #next { right: 6px; }
+  .arrow:hover:not(:disabled) { background: rgba(255,255,255,0.20); }
+  .arrow:disabled { opacity: 0.25; cursor: not-allowed; }
+
+  /* Dot indicators */
+  .dots {
+    display: none;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 18px;
+  }
+  body.carousel .dots { display: flex; }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.28);
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+  }
+  .dot.active {
+    background: #fff;
+    transform: scale(1.25);
+  }
+
+  /* In carousel mode, hide the per-slide label + per-slide download
+     (the carousel has its own counter + download below the deck). */
+  body.carousel .slide-wrap .slide-label,
+  body.carousel .slide-wrap .slide-actions { display: none; }
+  .carousel-meta {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin-top: 18px;
+  }
+  body.carousel .carousel-meta { display: flex; }
+  .carousel-meta .counter {
+    font-family: var(--font-mono, ui-monospace);
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    opacity: 0.7;
+  }
+
+  .status {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.9);
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: 999px;
+    font-family: var(--font-mono, ui-monospace);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    z-index: 100;
+  }
+  .status.show { opacity: 1; }
+
+  @media (max-width: 720px) {
+    .toolbar { flex-wrap: wrap; gap: 8px; }
+    .toolbar button { padding: 6px 10px; font-size: 10px; }
+    .arrow { width: 40px; height: 40px; font-size: 17px; }
+  }
+</style>
+</head>
+<body class="carousel">
+
+<div class="toolbar">
+  <span class="brand">{{BRAND_NAME}} · Carousel</span>
+  <div class="controls">
+    <button id="modeToggle" title="Toggle view">All Slides</button>
+    <button id="downloadAll">⬇ Download ZIP</button>
+  </div>
+</div>
+
+<!-- Carousel deck: arrows flank the active slide (carousel mode only) -->
+<div class="deck" id="deck">
+  <button class="arrow" id="prev" aria-label="Previous slide">◀</button>
+  <div class="stage" id="stage">
+    {{SLIDES}}
+  </div>
+  <button class="arrow" id="next" aria-label="Next slide">▶</button>
+</div>
+
+<!-- Dots + counter + download (carousel mode only) -->
+<div class="dots" id="dots"></div>
+<div class="carousel-meta" id="carouselMeta">
+  <span class="counter" id="counter">01 / 01</span>
+  <div class="slide-actions">
+    <button id="downloadCurrent">⬇ Download this slide</button>
+  </div>
+</div>
+
+<div class="status" id="status">Ready</div>
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+(function(){
+  const stage = document.getElementById('stage');
+  const slides = [...document.querySelectorAll('.slide')];
+  const counter = document.getElementById('counter');
+  const prevBtn = document.getElementById('prev');
+  const nextBtn = document.getElementById('next');
+  const modeBtn = document.getElementById('modeToggle');
+  const dlAllBtn = document.getElementById('downloadAll');
+  const dlCurrentBtn = document.getElementById('downloadCurrent');
+  const dotsEl = document.getElementById('dots');
+  const statusEl = document.getElementById('status');
+
+  // Wrap every slide in a .slide-wrap with its own download button + label
+  const wraps = [];
+  slides.forEach((slide, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'slide-wrap';
+    wrap.dataset.index = i;
+
+    const label = document.createElement('div');
+    label.className = 'slide-label';
+    label.textContent = `Slide ${String(i+1).padStart(2,'0')} of ${String(slides.length).padStart(2,'0')}`;
+
+    const frame = document.createElement('div');
+    frame.className = 'slide-frame';
+    slide.parentNode.insertBefore(wrap, slide);
+    frame.appendChild(slide);
+    wrap.appendChild(label);
+    wrap.appendChild(frame);
+
+    // Per-slide download (used in All Slides mode)
+    const actions = document.createElement('div');
+    actions.className = 'slide-actions';
+    const dlBtn = document.createElement('button');
+    dlBtn.textContent = '⬇ Download PNG';
+    dlBtn.onclick = () => downloadSlide(i);
+    actions.appendChild(dlBtn);
+    wrap.appendChild(actions);
+
+    wraps.push(wrap);
+  });
+
+  // Build dot indicators
+  const dots = slides.map((_, i) => {
+    const d = document.createElement('button');
+    d.className = 'dot';
+    d.setAttribute('aria-label', `Go to slide ${i+1}`);
+    d.onclick = () => showSlide(i);
+    dotsEl.appendChild(d);
+    return d;
+  });
+
+  // Scale slides to fit their frame width
+  function rescale() {
+    document.querySelectorAll('.slide-frame').forEach(frame => {
+      const slide = frame.querySelector('.slide');
+      if (!slide) return;
+      const scale = frame.clientWidth / 1080;
+      slide.style.transform = `scale(${scale})`;
+    });
+  }
+
+  // carousel (click-through, default) | all (vertical scroll)
+  let mode = 'carousel';
+  let current = 0;
+
+  function setMode(m) {
+    mode = m;
+    document.body.classList.toggle('carousel', m === 'carousel');
+    modeBtn.textContent = m === 'carousel' ? 'All Slides' : 'Carousel';
+    if (m === 'carousel') showSlide(current);
+    rescale();
+  }
+
+  function showSlide(i) {
+    current = Math.max(0, Math.min(slides.length - 1, i));
+    wraps.forEach((w, idx) => w.classList.toggle('active', idx === current));
+    dots.forEach((d, idx) => d.classList.toggle('active', idx === current));
+    counter.textContent = `${String(current+1).padStart(2,'0')} / ${String(slides.length).padStart(2,'0')}`;
+    prevBtn.disabled = current === 0;
+    nextBtn.disabled = current === slides.length - 1;
+    rescale();
+  }
+
+  modeBtn.onclick = () => setMode(mode === 'carousel' ? 'all' : 'carousel');
+  prevBtn.onclick = () => showSlide(current - 1);
+  nextBtn.onclick = () => showSlide(current + 1);
+  dlCurrentBtn.onclick = () => downloadSlide(current);
+
+  // Keyboard navigation (carousel mode)
+  document.addEventListener('keydown', e => {
+    if (mode !== 'carousel') return;
+    if (e.key === 'ArrowLeft') showSlide(current - 1);
+    if (e.key === 'ArrowRight') showSlide(current + 1);
+  });
+
+  // Touch swipe (carousel mode)
+  let touchX = null;
+  stage.addEventListener('touchstart', e => { touchX = e.changedTouches[0].clientX; }, { passive: true });
+  stage.addEventListener('touchend', e => {
+    if (mode !== 'carousel' || touchX === null) return;
+    const dx = e.changedTouches[0].clientX - touchX;
+    if (Math.abs(dx) > 40) showSlide(current + (dx < 0 ? 1 : -1));
+    touchX = null;
+  }, { passive: true });
+
+  window.addEventListener('resize', rescale);
+
+  function flash(msg, ms = 1500) {
+    statusEl.textContent = msg;
+    statusEl.classList.add('show');
+    clearTimeout(flash._t);
+    flash._t = setTimeout(() => statusEl.classList.remove('show'), ms);
+  }
+
+  // Capture a slide as PNG blob at native 1080x1350
+  async function captureSlide(slideEl) {
+    // Temporarily reset transform so html2canvas captures at native size
+    const prevTransform = slideEl.style.transform;
+    slideEl.style.transform = 'none';
+    await document.fonts.ready;
+    const canvas = await html2canvas(slideEl, {
+      width: 1080,
+      height: 1350,
+      windowWidth: 1080,
+      windowHeight: 1350,
+      scale: 1,
+      backgroundColor: null,
+      useCORS: true,
+      allowTaint: false,
+      logging: false
+    });
+    slideEl.style.transform = prevTransform;
+    return new Promise(res => canvas.toBlob(res, 'image/png'));
+  }
+
+  async function downloadSlide(i) {
+    flash(`Rendering slide ${i+1}…`);
+    const blob = await captureSlide(slides[i]);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `slide-${String(i+1).padStart(2,'0')}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    flash(`Slide ${i+1} downloaded`);
+  }
+
+  dlAllBtn.onclick = async () => {
+    dlAllBtn.disabled = true;
+    flash('Building ZIP…', 60000);
+    const zip = new JSZip();
+    for (let i = 0; i < slides.length; i++) {
+      flash(`Rendering ${i+1} / ${slides.length}…`, 60000);
+      const blob = await captureSlide(slides[i]);
+      zip.file(`slide-${String(i+1).padStart(2,'0')}.png`, blob);
+    }
+    flash('Compressing…', 60000);
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '{{ZIP_FILENAME}}';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    dlAllBtn.disabled = false;
+    flash('ZIP ready', 2000);
+  };
+
+  // Boot in carousel mode on slide 1
+  setMode('carousel');
+  document.fonts.ready.then(() => { rescale(); flash('Ready', 1200); });
+})();
+</script>
+
+</body>
+</html>

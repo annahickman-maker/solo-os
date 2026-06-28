@@ -36,25 +36,33 @@ app.get('/', (c) => {
   return c.json({ quotes });
 });
 
+// Run audience-quote extraction for a transcript and merge into the bank.
+// Exported so it can fire automatically on upload, not just from the button.
+export async function runAudienceExtraction(transcriptId: string): Promise<AudienceQuote[]> {
+  const loaded = loadTranscriptContent(transcriptId);
+  if (!loaded) throw new Error('transcript not found');
+  const fresh = await extractAudienceQuotesFromTranscript({
+    transcriptId,
+    transcriptFilename: loaded.filename,
+    transcriptText: loaded.content,
+  });
+  const bank = readBank();
+  // Replace pending quotes for this transcript - keep approved-to-proof ones.
+  const others = bank.quotes.filter(
+    (q) => !(q.source_transcript_id === transcriptId && q.status === 'pending' && !q.approved_proof_id),
+  );
+  bank.quotes = [...others, ...fresh];
+  writeBank(bank);
+  return fresh;
+}
+
 app.post('/:transcriptId/extract', async (c) => {
   const transcriptId = c.req.param('transcriptId');
-  const loaded = loadTranscriptContent(transcriptId);
-  if (!loaded) return c.json({ error: 'transcript not found' }, 404);
   try {
-    const fresh = await extractAudienceQuotesFromTranscript({
-      transcriptId,
-      transcriptFilename: loaded.filename,
-      transcriptText: loaded.content,
-    });
-    const bank = readBank();
-    // Replace pending quotes for this transcript - keep approved-to-proof ones.
-    const others = bank.quotes.filter(
-      (q) => !(q.source_transcript_id === transcriptId && q.status === 'pending' && !q.approved_proof_id),
-    );
-    bank.quotes = [...others, ...fresh];
-    writeBank(bank);
+    const fresh = await runAudienceExtraction(transcriptId);
     return c.json({ quotes: fresh, total: fresh.length });
   } catch (err: any) {
+    if (err?.message === 'transcript not found') return c.json({ error: 'transcript not found' }, 404);
     console.error('audience-extract failed:', err);
     return c.json({ error: err?.message ?? 'extract failed' }, 500);
   }

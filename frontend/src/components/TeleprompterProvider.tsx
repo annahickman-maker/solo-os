@@ -107,6 +107,22 @@ interface TeleprompterCtx {
   isOpenFor: (videoId: string) => boolean;
 }
 
+// The teleprompter is a plain textarea, so markdown symbols render literally
+// (`## Intro`, `**bold**`) and clutter the read. Scripts are meant to be read
+// aloud, so strip the formatting to clean spoken text before it ever reaches
+// the teleprompter - this also cleans up older scripts that still have it.
+function cleanScript(s: string): string {
+  return (s || '')
+    .replace(/^﻿/, '')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')        // # headings -> plain line
+    .replace(/\*\*\*([^*]+)\*\*\*/g, '$1')      // ***bold italic***
+    .replace(/\*\*([^*]+)\*\*/g, '$1')          // **bold**
+    .replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '$1') // *italic*
+    .replace(/^\s{0,3}[-*+]\s+/gm, '')          // -, * bullet markers
+    .replace(/`([^`]+)`/g, '$1')                // `inline code`
+    .replace(/^\s{0,3}>\s?/gm, '');             // > blockquote
+}
+
 const Ctx = createContext<TeleprompterCtx | null>(null);
 
 export function useTeleprompter(): TeleprompterCtx {
@@ -193,7 +209,8 @@ export function TeleprompterProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(id);
   }, [openVideoId]);
 
-  const openFor = useCallback((videoId: string, script: string) => {
+  const openFor = useCallback((videoId: string, scriptRaw: string) => {
+    const script = cleanScript(scriptRaw);
     scriptByVideoRef.current.set(videoId, script);
     const existing = winRef.current;
     if (existing && !existing.closed) {
@@ -211,7 +228,8 @@ export function TeleprompterProvider({ children }: { children: ReactNode }) {
     setOpenVideoId(videoId);
   }, []);
 
-  const pushScript = useCallback((videoId: string, script: string) => {
+  const pushScript = useCallback((videoId: string, scriptRaw: string) => {
+    const script = cleanScript(scriptRaw);
     scriptByVideoRef.current.set(videoId, script);
     const win = winRef.current;
     if (!win || win.closed) return;

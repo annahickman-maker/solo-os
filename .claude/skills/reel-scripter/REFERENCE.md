@@ -1,6 +1,6 @@
 # reel-scripter reference
 
-## reel-script.md format (exact sections, in this order)
+## reel-script.md format (Direction 1: clip as is)
 
 ```md
 # <hook line, verbatim from transcript>
@@ -14,40 +14,47 @@ Pillar: <IG content pillar>
 
 ---
 
-## Hook (0-3s)
+## Script (verbatim - locked, do not paraphrase)
 
-**Spoken (verbatim):** "<exact line from transcript>"
-**On-screen text:** <punchy overlay, ≤ 8 words>
-**Visual:** <e.g. "close-up, hold on eye contact" or "cut from B-roll to the creator talking">
+[0:00-0:03] "<exact spoken line>"
 
----
+[0:03-0:18] "<exact spoken line>"
 
-## Beats
+[0:18-0:35] "<exact spoken line>"
 
-| Location | Spoken (verbatim) | On-screen text | B-roll / shot |
-|---|---|---|---|
-| 0:00-0:03 | "..." | <overlay> | <suggestion> |
-| 0:03-0:12 | "..." | <overlay> | <suggestion> |
-| 0:12-0:25 | "..." | <overlay> | <suggestion> |
-| 0:25-0:35 | "..." | <overlay> | <suggestion> |
+(Write the whole clip out this way: rough timecode in brackets, then the verbatim line. Trim only filler, mark any cut with [...].)
 
 ---
 
-## CTA / payoff
+## On-screen text (added in edit)
 
-**Closing spoken line (verbatim, if any):** "<line>"
-**On-screen CTA card (added in edit):** <e.g. "More systems on @yourhandle">
-**Card duration:** <e.g. "Last 2s, hold on freeze frame">
+- Around 0:00 - <overlay, <= 8 words>
+- Around 0:18 - <overlay>
+
+---
+
+## B-roll / shots (optional)
+
+- <shot suggestion>
+- <shot suggestion>
+
+---
+
+## CTA card (added in edit)
+
+- Closing spoken line (verbatim, if any): "<line>"
+- On-screen CTA card: <main CTA from instagram-context.md>
+- Duration: <e.g. last 2s, hold on freeze frame>
 
 ---
 
 ## Specs
 
-- **Target length:** <Xs> (default 30-60s)
-- **Pacing:** <e.g. "Quick cuts every 2-3s on body beats, hold the hook for 3s">
-- **Audio:** <e.g. "Original audio (the creator's voice is the value)">
-- **Aspect ratio:** 9:16
-- **Captions burned in?** <yes/no - usually yes for reach>
+- Target length: <Xs> (default 30-60s)
+- Pacing: <e.g. quick cuts every 2-3s, hold the hook 3s>
+- Audio: original audio (the voice is the value)
+- Aspect ratio: 9:16
+- Captions burned in? <yes/no - usually yes for reach>
 
 ---
 
@@ -66,20 +73,53 @@ Pillar: <IG content pillar>
 <#tag1 #tag2 #tag3 ...>
 ```
 
+## reel-seed.md format (Direction 2: seed idea)
+
+```md
+# <new hook line - written for IG, not necessarily verbatim>
+
+Source: <transcript path> (seed only - this is a rewrite)
+Slug: <slug>
+Created: <date>
+Pillar: <IG content pillar>
+
+---
+
+## The piece
+
+<the rewritten, cohesive Instagram-ready script or post - start to finish, in the user's voice, ready to record or publish>
+
+---
+
+## Caption
+
+<hook line>
+
+<body>
+
+<main CTA from instagram-context.md>
+
+---
+
+## Hashtags
+
+<#tag1 #tag2 #tag3 ...>
+```
+
 ## Clip scoring heuristic
 
-For each candidate, score 1-5 on each dimension. Surface clips with total ≥ 12.
+For each candidate, score 1-5 on each dimension. Surface clips with total >= 12.
 
 - **Hook strength** - does the opening line stop a scroll on its own?
 - **Standalone clarity** - can a stranger get value from this clip without watching the full video?
-- **Verbatim quality** - is the language the creator's voice at its best, or does it ramble?
+- **Verbatim quality** - is the language the user's voice at its best, or does it ramble?
 - **Pillar alignment** - does it map to one of the IG content pillars?
 
-Bias toward fewer, stronger clips. A 4-candidate list of strong clips beats a 7-candidate list with filler.
+Bias toward fewer, stronger clips. A 4-clip list of strong clips beats a 7-clip list with filler.
 
 ## On-screen text patterns
 
-- **Hook overlay** mirrors but doesn't duplicate the spoken hook. If she says "you don't have a niche problem", the overlay might be "NICHE ≠ THE PROBLEM" or "wrong diagnosis".
+- **Hook overlay** mirrors but doesn't duplicate the spoken hook. If she says "you don't have a niche problem", the overlay might be "NICHE != THE PROBLEM" or "wrong diagnosis".
 - **Body overlays** call out the load-bearing word from the spoken beat. Often a number, a name, a noun.
 - **Last-beat overlay** sets up the CTA card without spoiling it.
 - Cap at 8 words. Most should be 2-5 words.
@@ -87,8 +127,7 @@ Bias toward fewer, stronger clips. A 4-candidate list of strong clips beats a 7-
 
 ## Anti-patterns
 
-- Inventing a spoken line because the existing one feels weak. Pick a different clip instead.
-- Padding the beats table to hit 6 rows when the clip is genuinely 3 beats.
+- Inventing a spoken line for a clip-as-is because the existing one feels weak. Pick a different clip instead.
 - Restating the spoken line on the overlay. Overlays earn their pixels by adding info.
 - Generic CTAs ("link in bio for more"). Use the specific main CTA from instagram-context.md.
 - Listing hashtags inside the caption body.

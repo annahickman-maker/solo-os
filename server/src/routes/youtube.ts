@@ -363,6 +363,134 @@ app.get('/video-stats', async (c) => {
   }
 });
 
+// ─── Studio analytics CSV import ────────────────────────────────────────
+//
+// CTR and impressions are exclusive to YouTube Studio - no YouTube API exposes
+// them. So the creator exports Studio -> Analytics -> Content -> "Table data.csv"
+// (columns: Content[=video id], Video title, ..., Views, Subscribers,
+// Impressions, Impressions click-through rate (%)) and drops it here. We match
+// each row to a video file by its youtube_id and fill the per-video method
+// metrics the analytics skill reads:
+//   - view_count   = Views
+//   - ctr_pct      = Impressions click-through rate (%)   (Studio-only metric)
+//   - sub_rate_pct = Subscribers / Views * 100
+//   - impressions / subscribers_gained kept as supporting context
+// Conversion is NOT here - it comes from the dashboard's own /go/ link tracking.
+// Everything else in each file (title, status, body, etc.) is preserved.
+
+// Minimal RFC-4180-ish CSV parser: handles quoted fields with embedded commas,
+// quotes, and newlines (video titles contain commas).
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false;
+      } else field += ch;
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      row.push(field); field = '';
+    } else if (ch === '\n') {
+      row.push(field); rows.push(row); row = []; field = '';
+    } else if (ch !== '\r') {
+      field += ch;
+    }
+  }
+  if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+app.post('/import-analytics-csv', async (c) => {
+  let body: { csv?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'JSON body with a "csv" field is required' }, 400);
+  }
+  const csv = (body.csv ?? '').trim();
+  if (!csv) return c.json({ error: 'csv field is empty' }, 400);
+
+  const rows = parseCsv(csv);
+  if (rows.length < 2) return c.json({ error: 'no data rows found in the CSV' }, 400);
+
+  const header = rows[0]!.map((h) => h.trim().toLowerCase());
+  const idIdx = header.indexOf('content');
+  const titleIdx = header.indexOf('video title');
+  const viewsIdx = header.indexOf('views');
+  const subsIdx = header.indexOf('subscribers');
+  const imprIdx = header.indexOf('impressions');
+  const ctrIdx = header.findIndex((h) => h.startsWith('impressions click-through rate'));
+  if (idIdx < 0 || ctrIdx < 0) {
+    return c.json(
+      { error: 'this does not look like a YouTube Studio "Table data" export - expected "Content" and "Impressions click-through rate (%)" columns' },
+      400,
+    );
+  }
+
+  const num = (s: string | undefined): number | null => {
+    const n = parseFloat((s ?? '').replace(/,/g, '').trim());
+    return Number.isFinite(n) ? n : null;
+  };
+
+  let dataRows = 0;
+  let matched = 0;
+  let updated = 0;
+  const unmatched: Array<{ id: string; title: string }> = [];
+  const sample: Array<{ id: string; views: number | null; ctr_pct: number | null; sub_rate_pct: number | null }> = [];
+
+  for (let r = 1; r < rows.length; r++) {
+    const cells = rows[r]!;
+    const id = (cells[idIdx] ?? '').trim();
+    // Skip the "Total" summary row and anything that isn't an 11-char video id.
+    if (!/^[A-Za-z0-9_-]{11}$/.test(id)) continue;
+    dataRows++;
+
+    const views = num(cells[viewsIdx]);
+    const subs = subsIdx >= 0 ? num(cells[subsIdx]) : null;
+    const impressions = imprIdx >= 0 ? num(cells[imprIdx]) : null;
+    const ctr = num(cells[ctrIdx]);
+
+    const filePath = findVideoFileByYoutubeId(id);
+    if (!filePath) {
+      unmatched.push({ id, title: ((cells[titleIdx] ?? '') as string).slice(0, 70) });
+      continue;
+    }
+    matched++;
+    const entry = loadFile(filePath);
+    if (!entry) continue;
+
+    const next: Record<string, unknown> = { ...entry.frontmatter };
+    if (views != null) next.view_count = Math.round(views);
+    if (ctr != null) next.ctr_pct = ctr;
+    if (subs != null) next.subscribers_gained = Math.round(subs);
+    if (impressions != null) next.impressions = Math.round(impressions);
+    if (views != null && views > 0 && subs != null) {
+      next.sub_rate_pct = Math.round((subs / views) * 10000) / 100;
+    }
+    next.analytics_imported_at = new Date().toISOString();
+    saveFile(filePath, next, entry.body);
+    updated++;
+    if (sample.length < 5) {
+      sample.push({ id, views: (next.view_count as number) ?? null, ctr_pct: (next.ctr_pct as number) ?? null, sub_rate_pct: (next.sub_rate_pct as number) ?? null });
+    }
+  }
+
+  return c.json({
+    ok: true,
+    data_rows: dataRows,
+    matched,
+    updated,
+    unmatched_count: unmatched.length,
+    unmatched: unmatched.slice(0, 25),
+    sample,
+  });
+});
+
 // GET /api/youtube/status - return latest sync state from state.md
 // Also reports whether the API key is configured (env var present) so the
 // Settings "Connect your apps" card can show "live" vs "needs setup".

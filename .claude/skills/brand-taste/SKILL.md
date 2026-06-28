@@ -1,7 +1,8 @@
 ---
 name: brand-taste
-description: Use when the user wants to design or build a brand website, marketing site, landing page, portfolio site, studio site, founder/coach site, product brand site, or any web page where brand expression and visual quality are the point. Trigger phrases include "design a brand site", "build a marketing page", "make this look editorial", "give this taste", "design the brand", "make a landing page that doesn't look generic", "I want it to feel premium / editorial / photography-led / not SaaS-y", or any request where the answer needs visual conviction beyond a component library. Also use when critiquing or redesigning an existing brand site for taste. Do NOT use for dashboards, admin UIs, internal tooling, design-system-only work, or backend tasks where brand expression is irrelevant.
-version: 1.0.0
+description: 'Use when the user wants to design or build a brand website, marketing site, landing page, portfolio site, studio site, founder/coach site, product brand site, or any web page where brand expression and visual quality are the point. Trigger phrases include "design a brand site", "build a marketing page", "make this look editorial", "give this taste", "design the brand", "make a landing page that doesn''t look generic", "I want it to feel premium / editorial / photography-led / not SaaS-y", or any request where the answer needs visual conviction beyond a component library. Also use when critiquing or redesigning an existing brand site for taste. Do NOT use for dashboards, admin UIs, internal tooling, design-system-only work, or backend tasks where brand expression is irrelevant.'
+category: Create
+hidden: true
 ---
 
 # brand-taste

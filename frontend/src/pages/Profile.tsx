@@ -5,6 +5,19 @@ import { Ring } from '../components/Ring';
 import { Reputation } from './Reputation';
 import { Offer } from './Offer';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { SkillRow } from './Skills';
+import { PageTabs } from '../components/PageTabs';
+
+// The Personal Brand Strategy skill, shown as its exact Skills-page row (icon,
+// title + built-in badge, card line, run skill) minus the schedule button - a
+// direct way to open a conversation with Claude to sharpen the foundation.
+function StrategyLaunchCard() {
+  const navigate = useNavigate();
+  const { data: skills } = useQuery({ queryKey: ['skills'], queryFn: api.skills });
+  const item = skills?.items.find((s) => s.name === 'solopreneur-onboarding');
+  if (!item) return null;
+  return <SkillRow skill={item} onOpen={() => navigate(`/skills/${item.id}`)} hideSchedule />;
+}
 
 // One-sentence "what this onboarding phase will help you do" copy per phase.
 // Falls back to the section's existing summary if a phase id isn't here.
@@ -38,7 +51,7 @@ function gradualPhaseColor(completion: number): string {
 type Tab = 'overview' | 'reputation' | 'offer';
 
 const TABS: { id: Tab; label: string; path: string }[] = [
-  { id: 'overview', label: 'overview', path: '/profile' },
+  { id: 'overview', label: 'foundation', path: '/profile' },
   { id: 'reputation', label: 'reputation', path: '/profile/reputation' },
   { id: 'offer', label: 'offer', path: '/profile/offer' },
 ];
@@ -55,45 +68,17 @@ export function Profile() {
 
   return (
     <div className="stack" style={{ gap: 'var(--space-7)' }}>
-      <header className="page-header">
-        <span className="eyebrow">profile</span>
-        <h1 className="h2">who you are + what you stand for</h1>
-      </header>
-
-      <div
-        style={{
-          display: 'inline-flex',
-          border: '1px solid var(--hairline)',
-          borderRadius: 'var(--radius-pill)',
-          padding: 4,
-          alignSelf: 'flex-start',
-          overflowX: 'auto',
-          maxWidth: '100%',
+      {/* Foundation / Reputation / Offer file-folder page-tabs. Navigation-based:
+          each tab maps to a /profile route. No page title - the tabs are the header. */}
+      <PageTabs
+        value={activeTab}
+        onChange={(v) => {
+          const t = TABS.find((x) => x.id === v);
+          if (t) navigate(t.path);
         }}
-      >
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => navigate(t.path)}
-            style={{
-              border: 'none',
-              padding: '8px 18px',
-              borderRadius: 'var(--radius-pill)',
-              cursor: 'pointer',
-              background: activeTab === t.id ? 'var(--ink)' : 'transparent',
-              color: activeTab === t.id ? 'var(--bg)' : 'var(--muted)',
-              fontSize: 'var(--body-sm)',
-              fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: '0.12em',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+        ariaLabel="profile section"
+        options={TABS.map((t) => ({ value: t.id, label: t.label }))}
+      />
 
       {activeTab === 'overview' && <ProfileOverview />}
       {activeTab === 'reputation' && <Reputation />}
@@ -130,7 +115,6 @@ function ProfileOverview() {
   return (
     <div className="stack" style={{ gap: 'var(--space-7)' }}>
       <style>{PHASE_CARD_CSS}</style>
-      <div />
 
       {showBridgeBanner && (
         <div
@@ -189,6 +173,8 @@ function ProfileOverview() {
         slotsTotal={data?.slots_total ?? 18}
         extractionStatus={data?.extraction_status ?? 'idle'}
       />
+
+      <StrategyLaunchCard />
 
       {isLoading ? (
         <div className="empty">loading</div>
@@ -689,8 +675,8 @@ const PHASE_CARD_CSS = `
   gap: var(--space-5);
   align-items: center;
   padding: var(--space-5);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--recovery) 6%, transparent), var(--surface));
-  border: 1px solid color-mix(in srgb, var(--recovery) 18%, transparent);
+  background: var(--surface);
+  border: 2px solid var(--recovery);
   border-radius: var(--radius-lg);
 }
 .profile-hero__ring { display: flex; justify-content: center; }
@@ -734,6 +720,8 @@ const PHASE_CARD_CSS = `
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  /* Resting soft lift (SURFACE_LIFT / Rule 2); hover swaps to the colored lift. */
+  box-shadow: 0 1px 3px rgba(15, 15, 15, 0.06), 0 4px 12px -2px rgba(15, 15, 15, 0.07);
   transition: all 0.18s;
   color: inherit;
   font-family: inherit;
@@ -869,7 +857,7 @@ const PHASE_CARD_CSS = `
 .md__h-2 { font-size: 1.25rem; font-weight: 700; margin-top: var(--space-3); color: var(--ink); }
 .md__h-3 { font-size: 1.05rem; font-weight: 600; margin-top: var(--space-2); color: var(--ink); }
 .md__h-4 { font-size: 0.95rem; font-weight: 600; margin-top: var(--space-2); color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
-.md__p { margin: 0; font-size: var(--body); line-height: 1.65; color: rgba(255,255,255,0.85); }
+.md__p { margin: 0; font-size: var(--body); line-height: 1.65; color: var(--ink); opacity: 0.85; }
 .md__ul, .md__ol {
   margin: 0;
   padding-left: 1.25rem;
@@ -878,7 +866,8 @@ const PHASE_CARD_CSS = `
   gap: 6px;
   font-size: var(--body);
   line-height: 1.55;
-  color: rgba(255,255,255,0.85);
+  color: var(--ink);
+  opacity: 0.85;
 }
 .md__ul li::marker { color: var(--dim-c); }
 .md__ol li::marker { color: var(--dim-c); font-weight: 700; }

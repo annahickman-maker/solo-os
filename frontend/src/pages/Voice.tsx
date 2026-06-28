@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import type { BrainstormBucket, BrainstormQuestion, BrainstormResponse } from '../api';
+import { FilterTabs } from '../components/FilterTabs';
 
 const BUCKET_ORDER: BrainstormBucket[] = ['EDUCATE', 'RELATE', 'INSPIRE', 'SELL'];
 
@@ -67,7 +68,7 @@ export function Voice({ embedded = false }: { embedded?: boolean } = {}) {
   const overallPct = counts.all.total > 0 ? Math.round((counts.all.done / counts.all.total) * 100) : 0;
 
   return (
-    <div className="stack" style={{ gap: 'var(--space-7)' }}>
+    <div className="stack" style={{ gap: 'var(--space-6)' }}>
       {!embedded && (
         <header className="page-header">
           <span className="eyebrow">voice</span>
@@ -132,38 +133,16 @@ export function Voice({ embedded = false }: { embedded?: boolean } = {}) {
             }}
           />
         </div>
-        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-          {(['all', ...BUCKET_ORDER] as const).map((b) => {
-            const c = counts[b];
-            const active = bucketFilter === b;
-            return (
-              <button
-                key={b}
-                type="button"
-                onClick={() => setBucketFilter(b)}
-                className="btn"
-                style={{
-                  background: active ? 'var(--ink)' : 'transparent',
-                  color: active ? 'var(--bg)' : 'var(--muted)',
-                  borderColor: active ? 'var(--ink)' : 'var(--hairline)',
-                  fontSize: 'var(--body-sm)',
-                  gap: 8,
-                }}
-              >
-                {b === 'all' ? 'all' : b.toLowerCase()}
-                <span
-                  style={{
-                    fontVariantNumeric: 'tabular-nums',
-                    opacity: 0.7,
-                    fontSize: '0.75rem',
-                  }}
-                >
-                  {c.done}/{c.total}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <FilterTabs
+          value={bucketFilter}
+          onChange={(v) => setBucketFilter(v as typeof bucketFilter)}
+          ariaLabel="brainstorm buckets"
+          options={(['all', ...BUCKET_ORDER] as const).map((b) => ({
+            value: b,
+            label: b === 'all' ? 'all' : b.toLowerCase(),
+            count: `${counts[b].done}/${counts[b].total}`,
+          }))}
+        />
       </div>
 
       {isLoading ? (

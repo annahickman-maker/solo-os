@@ -42,7 +42,7 @@ export type SuggestIntroInput = {
 };
 
 function stripEmDashes(s: string): string {
-  return s.replace(/—/g, ' - ').replace(/–/g, '-');
+  return s.replace(/-/g, ' - ').replace(/–/g, '-');
 }
 
 function getVoiceSummary(): string {

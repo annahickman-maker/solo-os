@@ -4,12 +4,14 @@ import { api } from '../api';
 import type { InboxItem, InboxResponse } from '../api';
 import { StatusPill } from '../components/StatusPill';
 import { formatRelative } from '../lib/format';
+import { TranscriptPanel, TX_CSS } from './Archive';
 
 const SOURCE_LABEL: Record<string, string> = {
   skool_reply: 'skool reply',
   zoom_transcript: 'zoom transcript',
   flagged_review: 'flagged review',
   manual: 'from claude',
+  transcript: 'new transcript',
 };
 
 const SOURCE_TONE: Record<string, 'default' | 'success' | 'warning' | 'accent'> = {
@@ -17,12 +19,15 @@ const SOURCE_TONE: Record<string, 'default' | 'success' | 'warning' | 'accent'> 
   zoom_transcript: 'warning',
   flagged_review: 'default',
   manual: 'success',
+  transcript: 'accent',
 };
 
 export function Inbox() {
   const qc = useQueryClient();
   const [openId, setOpenId] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  // Transcript inbox items open the same vault view (TranscriptPanel) by id.
+  const [openTranscript, setOpenTranscript] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['inbox'],
@@ -65,7 +70,7 @@ export function Inbox() {
   const items = (data?.items ?? []).filter((i) => i.status === 'pending');
 
   return (
-    <div className="stack" style={{ gap: 'var(--space-7)' }}>
+    <div className="stack" style={{ gap: 'var(--space-6)' }}>
       <header className="page-header">
         <span className="eyebrow">inbox</span>
         <h1 className="h2">things waiting on you</h1>
@@ -87,9 +92,19 @@ export function Inbox() {
               copied={copied === it.id}
               onDone={() => mark.mutate({ id: it.id, status: 'done' })}
               onDismiss={() => mark.mutate({ id: it.id, status: 'dismissed' })}
+              onOpenTranscript={() => it.transcript_id && setOpenTranscript(it.transcript_id)}
             />
           ))}
         </div>
+      )}
+
+      {openTranscript && (
+        <>
+          {/* The panel's styles live in a page-scoped <style> on Archive; inject
+              them here so the same vault view renders correctly from the Inbox. */}
+          <style>{TX_CSS}</style>
+          <TranscriptPanel id={openTranscript} onClose={() => setOpenTranscript(null)} />
+        </>
       )}
     </div>
   );
@@ -103,6 +118,7 @@ function InboxRow({
   copied,
   onDone,
   onDismiss,
+  onOpenTranscript,
 }: {
   item: InboxItem;
   open: boolean;
@@ -111,8 +127,10 @@ function InboxRow({
   copied: boolean;
   onDone: () => void;
   onDismiss: () => void;
+  onOpenTranscript: () => void;
 }) {
-  const hasBody = !!item.body && item.body.trim().length > 0;
+  const isTranscript = item.source === 'transcript';
+  const hasBody = !isTranscript && !!item.body && item.body.trim().length > 0;
   return (
     <div
       style={{
@@ -127,7 +145,7 @@ function InboxRow({
         />
         <button
           type="button"
-          onClick={hasBody ? onToggle : undefined}
+          onClick={isTranscript ? onOpenTranscript : hasBody ? onToggle : undefined}
           style={{
             flex: 1,
             minWidth: 0,
@@ -135,14 +153,14 @@ function InboxRow({
             border: 'none',
             padding: 0,
             textAlign: 'left',
-            cursor: hasBody ? 'pointer' : 'default',
+            cursor: isTranscript || hasBody ? 'pointer' : 'default',
           }}
         >
           <div className="stack" style={{ gap: 2 }}>
             <span style={{ wordBreak: 'break-word' }}>{item.title}</span>
             <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
               {formatRelative(item.created_at)}
-              {hasBody && (open ? ' · hide' : ' · click to read')}
+              {isTranscript ? ' · click to open' : hasBody ? (open ? ' · hide' : ' · click to read') : ''}
             </span>
           </div>
         </button>

@@ -1,6 +1,20 @@
 ---
 name: youtube-description
-description: Generate a complete, ready-to-publish YouTube description in one shot from a video transcript and finalised title. Produces the full description with CTA at the top, a 2-sentence hook paragraph, and timestamped chapters extracted from the transcript. Pulls the user's channel CTA from their channel positioning. Use whenever the user directly asks to write, generate, or rework a YouTube description. Auto-triggering on a dropped transcript is handled by /youtube-post-film, not this skill.
+description: 'Generate a complete, ready-to-publish YouTube description in one shot from a video transcript and finalised title. Produces the full description with CTA at the top, a 2-sentence hook paragraph, and timestamped chapters extracted from the transcript. Pulls the user''s channel CTA from their channel positioning. Use whenever the user directly asks to write, generate, or rework a YouTube description. Auto-triggering on a dropped transcript is handled by /youtube-post-film, not this skill.'
+title: Description Generator
+card: Generate a YouTube description from a finished transcript
+category: Create
+inputs:
+  - type: video
+    scope: transcribed
+outputs:
+  - type: content
+    description: the description attached to the selected video
+schedule:
+  trigger: event
+  event: transcript-uploaded
+  output: the video's YouTube description (saved to its description field)
+  enabled: true
 ---
 
 # YouTube Description
@@ -39,27 +53,49 @@ If timestamps are missing, write chapter titles only and flag at the end that th
 
 ---
 
-## Step 0 - Generate tracking slug + update link manifest
+## Step 0 - Tracking link (only if conversion tracking is set up)
 
-Before writing the description, mint a unique tracking slug for this video and add it to the link manifest. The CTA in the description will use that branded short link instead of the raw destination URL, so every video gets per-video click attribution.
+Per-video tracking links are optional. They depend on the member having run
+`/setup-conversion-tracking`, which deploys their own Cloudflare worker and
+creates `scripts/link_manifest.json` in their vault.
+
+**Check setup:** does the vault have BOTH `03_Projects/agents/worker/wrangler.toml`
+AND `scripts/link_manifest.json`?
+
+- **Not set up (soft gate):** skip tracking entirely. The CTA in the description
+  uses the raw channel CTA link from `04_YouTube/core_channel-positioning.md`.
+  At the end of the output, add one line: *"Tip: run /setup-conversion-tracking
+  to get per-video click attribution on your CTA links."* Then go to "Generate
+  the description in one shot". Skip the rest of Step 0.
+
+- **Set up:** mint a per-video tracking slug as below so every video gets its
+  own click attribution.
+
+### Find the tracking base URL
+
+Read `03_Projects/agents/worker/wrangler.toml`. If an active `routes` block
+exists, the base is the host in `pattern = "<host>/go/*"` (e.g. `theirdomain.com`).
+If the routes block is commented out, the worker publishes to
+`<their-worker>.<their-account>.workers.dev` - ask the member for that URL (they
+saw it printed on deploy). Call the result `<tracking-base>`.
 
 ### Slug logic
 
 1. **If the title starts with `day N:` (Day X build-in-public series):** slug = `day-N` (lowercase, no leading zero). Examples: `day-1`, `day-12`.
 2. **Otherwise:** slug = `video-<3-to-5-word-slug-from-title>`. Strip filler words (the, a, how, to, you, your, my, of), lowercase, hyphens, no special chars. Example: `"how I went from zero to 1000 subs"` -> `video-zero-to-1000-subs`.
-3. **Collision check:** read `<vault>/scripts/link_manifest.json`. If the slug already exists, append `-v2` (or `-v3`, etc) until unique.
+3. **Collision check:** read `scripts/link_manifest.json` (in the vault). If the slug already exists, append `-v2` (or `-v3`, etc) until unique.
 
 ### Destination logic
 
-Default destination is the Solopreneur Systems Skool link: `<your-community-url>`. This is the same as the universal `ss` slug, but every video gets its own slug so we can attribute clicks back to the specific video.
+Default destination is the channel CTA link from `04_YouTube/core_channel-positioning.md`. Every video gets its own slug pointing at it, so clicks attribute back to the specific video.
 
 Override only if:
-- The video's primary CTA is the discovery call: ask the user "Primary CTA is the call - use the universal `call` slug, or mint a per-video slug pointing at the call link?" Default to the universal `call` slug unless the user wants per-video attribution.
+- The video's primary CTA is a discovery call (from `01_Core/core_offer-suite.md`): ask the user "Primary CTA is the call - use the universal `call` slug, or mint a per-video slug pointing at the call link?" Default to the universal `call` slug unless the user wants per-video attribution.
 - The user explicitly named a different destination URL in the request.
 
 ### Update the manifest
 
-Read `<vault>/scripts/link_manifest.json`. Add a new top-level key:
+Read `scripts/link_manifest.json` (in the vault). Add a new top-level key:
 
 ```json
 "<slug>": {
@@ -73,9 +109,7 @@ Preserve the `_meta` block at the top and every existing entry. Write the file b
 
 ### Tracking URL
 
-The CTA in the description uses: `https://<yourdomain>/go/<slug>`
-
-Use this URL regardless of whether DNS has cut over yet. Add this one-line note in the post-description output (see "Output format" below): *"Note: <yourdomain> URL is being set up. Until live, the working URL is <your-worker>.<your-cf-account>.workers.dev/go/<slug>."*
+The CTA in the description uses: `<tracking-base>/go/<slug>`. After updating the manifest the member redeploys the worker (`cd 03_Projects/agents/worker && npm run deploy`) to make the new slug live.
 
 ---
 
@@ -85,9 +119,9 @@ Pull the channel CTA + link. Write the hook paragraph. Extract the chapters. Out
 
 ### Component 1 - CTA
 
-Use the CTA text from `core_channel-positioning.md`, but swap the raw link for the tracking link minted in Step 0: `https://<yourdomain>/go/<slug>`.
+Use the CTA text from `core_channel-positioning.md`. If tracking is set up, swap the raw link for the tracking link minted in Step 0: `<tracking-base>/go/<slug>`. If tracking is NOT set up, use the raw channel CTA link as-is.
 
-If a secondary "hop on a call" CTA is included, use the universal call link: `https://<yourdomain>/go/call` (no per-video version - the call slug is universal).
+If a secondary "hop on a call" CTA is included and tracking is set up, use the universal call link: `<tracking-base>/go/call` (no per-video version - the call slug is universal). Without tracking, use the raw call link from the offer suite.
 
 The CTA structure from `01_Core/core_offer-suite.md` (soft invite, pre-dismissal, two CTAs) stays intact - only the URLs change.
 
@@ -143,7 +177,7 @@ Examples of chapter naming:
 Output the full description in one block, ready to paste:
 
 ```
-[CTA text from channel positioning] → [CTA link, with UTM if applicable]
+[CTA text from channel positioning] -> [CTA link, with UTM if applicable]
 
 [Hook sentence 1]
 
@@ -166,18 +200,18 @@ After the description, briefly note any choices made the user might want to swap
 - Whether sentence 1 used the "I share / helped me" framing or "going to help you" framing
 - Anything else the user might want to tweak
 
-Then append the manifest update block:
+If tracking is set up, append the manifest update block:
 
 ```
 New tracking link added to manifest:
   slug: <slug>
   destination: <destination URL>
-  full link: https://<yourdomain>/go/<slug>
+  full link: <tracking-base>/go/<slug>
 
 Deploy with: cd 03_Projects/agents/worker && npm run deploy
-
-Note: <yourdomain> URL is being set up. Until live, the working URL is <your-worker>.<your-cf-account>.workers.dev/go/<slug>.
 ```
+
+If tracking is NOT set up, append instead: *"Tip: run /setup-conversion-tracking to get per-video click attribution on your CTA links."*
 
 ---
 
@@ -192,5 +226,5 @@ Note: <yourdomain> URL is being set up. Until live, the working URL is <your-wor
 - Never use hashtags.
 - Never add extra links beyond the user's channel CTA.
 - Never keyword-stuff.
-- Always mint a tracking slug + update the manifest in Step 0 before writing the description. The CTA in the description uses `https://<yourdomain>/go/<slug>`, not the raw destination URL.
+- If conversion tracking is set up, mint a tracking slug + update the manifest in Step 0 before writing the description, and the CTA uses `<tracking-base>/go/<slug>`. If it is not set up, use the raw channel CTA link and skip tracking - never invent a tracking domain.
 - Never use - (em dash). Use - instead.

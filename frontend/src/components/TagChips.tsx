@@ -1,6 +1,6 @@
 /**
  * Topic-tag chip editor. the creator's topic taxonomy is locked to 8 options (see
- * lib/topics.ts) — you don't type freeform, you pick from the dropdown.
+ * lib/topics.ts) - you don't type freeform, you pick from the dropdown.
  *
  * Slash-namespaced YAML metadata tags (e.g. type/asset, domain/povs) are
  * filtered out at display time so they never show up to the creator.
@@ -8,7 +8,7 @@
  * Existing freeform tags that DON'T match the allowed list still render so
  * old data isn't silently lost; she can remove them with × if she wants.
  *
- * Controlled component — parent owns the topics array and saves on change.
+ * Controlled component - parent owns the topics array and saves on change.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -20,12 +20,16 @@ export function TagChips({
   color,
   placeholder = '+ tag',
   size = 'normal',
+  inline = false,
 }: {
   topics: string[];
   onChange: (next: string[]) => void;
   color?: string;
   placeholder?: string;
   size?: 'normal' | 'small';
+  // inline: drop the top border + "topics:" label, show a tag icon instead.
+  // Used to sit the chips up in a card header next to the tag selector.
+  inline?: boolean;
 }) {
   // Drop slash-namespaced metadata at the boundary. The persisted array can
   // still contain them (we don't mutate the parent's source), but the user
@@ -78,25 +82,33 @@ export function TagChips({
     <div
       ref={rootRef}
       className="tg-chips"
-      style={{
-        borderTop: '1px dashed var(--hairline)',
-        paddingTop: 8,
-        marginTop: 4,
-        position: 'relative',
-      }}
+      style={
+        inline
+          ? { position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }
+          : { borderTop: '1px dashed var(--hairline)', paddingTop: 8, marginTop: 4, position: 'relative' }
+      }
     >
-      <span
-        style={{
-          fontSize: 10,
-          textTransform: 'uppercase',
-          letterSpacing: '0.14em',
-          color: 'var(--muted)',
-          fontWeight: 700,
-          marginRight: 6,
-        }}
-      >
-        topics:
-      </span>
+      {inline ? (
+        <span aria-hidden title="topics" style={{ display: 'inline-flex', color: color || 'var(--muted)', marginRight: 2 }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20.6 13.4l-7.2 7.2a1.5 1.5 0 0 1-2.1 0L3.4 12.6V4h8.6l8.6 8.3a1 1 0 0 1 0 1.1z" />
+            <circle cx="7.5" cy="7.5" r="1.3" />
+          </svg>
+        </span>
+      ) : (
+        <span
+          style={{
+            fontSize: 10,
+            textTransform: 'uppercase',
+            letterSpacing: '0.14em',
+            color: 'var(--muted)',
+            fontWeight: 700,
+            marginRight: 6,
+          }}
+        >
+          topics:
+        </span>
+      )}
       <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', verticalAlign: 'middle' }}>
         {local.map((t, i) => {
           const isLegacy = !(ALLOWED_TOPICS as readonly string[]).includes(t);
@@ -104,7 +116,7 @@ export function TagChips({
             <span
               key={`${t}-${i}`}
               className="tg-chip"
-              title={isLegacy ? 'legacy tag — not in the current 8. click × to remove.' : undefined}
+              title={isLegacy ? 'legacy tag - not in the current 8. click × to remove.' : undefined}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',

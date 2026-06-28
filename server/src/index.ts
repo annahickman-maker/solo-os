@@ -44,7 +44,7 @@ import offers from './routes/offers.js';
 import seed from './routes/seed.js';
 import extracts from './routes/extracts.js';
 import audienceQuotes from './routes/audienceQuotes.js';
-import instagram from './routes/instagram.js';
+import instagram, { serveCarouselFile, serveCarouselAsset } from './routes/instagram.js';
 import journey from './routes/journey.js';
 import decks, { serveDeckFile, serveDeckAsset } from './routes/decks.js';
 import google, { callbackApp as googleCallback } from './routes/google.js';
@@ -53,6 +53,8 @@ import onboarding from './routes/onboarding.js';
 import updateSoloOs from './routes/updateSoloOs.js';
 import membership from './routes/membership.js';
 import zoom from './routes/zoom.js';
+import chat from './routes/chat.js';
+import nanoBanana from './routes/nanoBanana.js';
 
 const PORT = Number(process.env.PORT ?? 8790);
 
@@ -136,6 +138,12 @@ app.get('/api/decks/file', (c) => serveDeckFile(c.req.url));
 // Public so <img> tags resolve. Path-locked to deck folders.
 app.get('/api/decks/asset/*', (c) => serveDeckAsset(c.req.url));
 
+// Carousel HTML + sibling assets - public (above auth) so the in-app iframe
+// can load them. The /file route does its own ?pw= check; both are path-locked
+// to the carousels dir. Mirrors the deck routes above.
+app.get('/api/instagram/carousel-file', (c) => serveCarouselFile(c.req.url));
+app.get('/api/instagram/carousel-asset/*', (c) => serveCarouselAsset(c.req.url));
+
 // Google OAuth callback - PUBLIC because Google's redirect can't send the
 // dashboard password header. Bound to this dashboard via a signed state
 // param (HMAC over DASHBOARD_PASSWORD, 10-min expiry).
@@ -183,6 +191,8 @@ app.route('/api/onboarding', onboarding);
 app.route('/api/update-solo-os', updateSoloOs);
 app.route('/api/membership', membership);
 app.route('/api/zoom', zoom);
+app.route('/api/chat', chat);
+app.route('/api/nano-banana', nanoBanana);
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`solo-os-dashboard-server listening on http://localhost:${info.port}`);

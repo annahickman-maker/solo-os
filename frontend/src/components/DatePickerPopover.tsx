@@ -3,7 +3,7 @@
  * DatePopover on the Today page (Mon-first week, circular day cells, today
  * outlined, selected filled).
  *
- * Position is `absolute` — render inside a parent with `position: relative`.
+ * Position is `absolute` - render inside a parent with `position: relative`.
  * Closes on outside click (handled by parent) or Escape.
  */
 

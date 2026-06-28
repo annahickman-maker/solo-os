@@ -21,6 +21,9 @@ interface TaskRowProps {
   showCategory?: boolean;
   compact?: boolean;
   projectOptions?: ProjectOption[];
+  // When true, the row gets a full border outline (master to-do, client
+  // project tasks) so each task stands out instead of just a bottom rule.
+  outlined?: boolean;
 }
 
 // Categories listed highest-strain-first, matching the activity-tracker picker.
@@ -354,7 +357,7 @@ function PickerRow({
   );
 }
 
-export function TaskRow({ task, onToggle, onSetEnergy: _onSetEnergy, onEditTitle, onCycleCategory, onSetProject, onDelete, showCategory: _showCategory = true, compact = false, projectOptions = [] }: TaskRowProps) {
+export function TaskRow({ task, onToggle, onSetEnergy: _onSetEnergy, onEditTitle, onCycleCategory, onSetProject, onDelete, showCategory: _showCategory = true, compact = false, projectOptions = [], outlined = false }: TaskRowProps) {
   const completed = task.status === 'completed';
   const next = completed ? 'pending' : 'completed';
   const [editing, setEditing] = useState(false);
@@ -391,9 +394,21 @@ export function TaskRow({ task, onToggle, onSetEnergy: _onSetEnergy, onEditTitle
         display: 'flex',
         alignItems: 'flex-start',
         gap: 'var(--space-4)',
-        padding: compact ? 'var(--space-2) 0' : 'var(--space-3) 0',
-        borderBottom: '1px solid var(--hairline)',
+        padding: outlined
+          ? compact
+            ? 'var(--space-2) var(--space-3)'
+            : 'var(--space-3) var(--space-4)'
+          : compact
+            ? 'var(--space-2) 0'
+            : 'var(--space-3) 0',
         position: 'relative',
+        ...(outlined
+          ? {
+              border: '1px solid var(--hairline)',
+              borderRadius: 'var(--radius-md)',
+              marginBottom: 'var(--space-2)',
+            }
+          : { borderBottom: '1px solid var(--hairline)' }),
       }}
     >
       <button
@@ -404,7 +419,7 @@ export function TaskRow({ task, onToggle, onSetEnergy: _onSetEnergy, onEditTitle
           width: 22,
           height: 22,
           borderRadius: 'var(--radius-pill)',
-          border: `1.5px solid ${completed ? 'var(--accent)' : 'rgba(255,255,255,0.32)'}`,
+          border: `1.5px solid ${completed ? 'var(--accent)' : 'var(--muted-2)'}`,
           background: completed ? 'var(--accent)' : 'transparent',
           display: 'inline-flex',
           alignItems: 'center',

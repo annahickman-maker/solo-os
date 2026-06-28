@@ -75,6 +75,7 @@ export interface BankItem {
 }
 
 export type IgItemStatus =
+  | 'idea'
   | 'queued'
   | 'editing'
   | 'ready_to_schedule'
@@ -113,6 +114,20 @@ export interface IgQueueItem {
   caption?: string;
   caption_hashtags?: string[];
   caption_generated_at?: number;
+  // Reel-clipper producer fields: seed idea = original_quote + script (editable);
+  // clip-as-is = edit_plan.
+  original_quote?: string;
+  script?: string;
+  edit_plan?: string;
+  topics?: string[];
+  // How this reel got to "ready to edit":
+  //   'clip' = clipped from a transcript (grouped by source transcript)
+  //   'film' = filmed from a script (grouped by the date it was marked filmed)
+  reel_origin?: 'clip' | 'film';
+  // 'carousel' = a multi-slide Instagram carousel (carousel_path -> slides.html)
+  // instead of a single reel/video. Defaults to a reel when unset.
+  format?: 'reel' | 'carousel';
+  carousel_path?: string;
   video_path?: string;
   thumbnail_path?: string;
   hook_variants?: string[];
@@ -250,12 +265,14 @@ export interface Product {
 
 export interface InboxItem {
   id: string;
-  source: 'skool_reply' | 'zoom_transcript' | 'flagged_review' | 'manual';
+  source: 'skool_reply' | 'zoom_transcript' | 'flagged_review' | 'manual' | 'transcript';
   title: string;
   body?: string;
   status: 'pending' | 'done' | 'dismissed';
   link?: string;
   created_at: number;
+  // For source 'transcript': open the same vault view (TranscriptPanel) by id.
+  transcript_id?: string;
 }
 
 export interface Win {
@@ -439,6 +456,163 @@ export function clearStoredPassword(): void {
   localStorage.removeItem(PASSWORD_KEY);
 }
 
+// ─── In-dashboard chat (streaming) ──────────────────────────────────────
+// The chat does NOT go through request() (that's for buffered JSON). It reads
+// the /api/chat SSE stream frame-by-frame and hands each event to onEvent as
+// it arrives, so the UI can render text deltas live.
+
+// ─── Skills ─────────────────────────────────────────────────────────────
+export interface SkillInput {
+  type: string; // input: transcript|offer|avatar|video|client|project|idea|pov|text · output: inbox|project|transcript|content|tasks
+  multiple?: boolean; // inputs only
+  optional?: boolean; // inputs only
+  label?: string;
+  description?: string; // outputs: the instruction for what happens to this output
+  scope?: string; // video inputs: 'transcribed' (has a transcript, newest first) vs default drafts
+}
+
+// How/when a skill runs on its own. Lives in the skill's frontmatter so it
+// travels to the template. The actual execution (LaunchAgent / file-watcher) is
+// wired up on the user's machine when they set it up.
+export interface SkillSchedule {
+  trigger?: 'time' | 'event' | string;
+  cadence?: string; // time-based: weekly | daily
+  at?: string; // time-based: e.g. "Mon 06:00"
+  event?: string; // event-based: e.g. "transcript-uploaded"
+  output?: string; // where the result goes
+  enabled?: boolean;
+}
+
+export interface SkillListItem {
+  id: string;
+  name: string;
+  title: string;
+  summary: string;
+  trigger_summary: string;
+  pack: string;
+  category: string;
+  icon: string;
+  color: string;
+  builtIn: boolean;
+  schedule?: SkillSchedule | null;
+}
+
+export interface SkillFull {
+  id: string;
+  name: string;
+  title: string;
+  card: string;
+  description: string;
+  trigger_summary: string;
+  instructions: string;
+  category: string;
+  inputs: SkillInput[];
+  outputs: SkillInput[];
+  icon: string;
+  color: string;
+  notes: string;
+  knowledge: string;
+  schedule?: SkillSchedule | null;
+  hidden: boolean;
+  pack: string;
+  builtIn: boolean;
+  editable: boolean;
+  location: string;
+}
+
+// What the editor sends on create/update.
+export interface SkillWrite {
+  title: string;
+  card: string;
+  description: string;
+  instructions: string;
+  category: string;
+  inputs: SkillInput[];
+  outputs: SkillInput[];
+  icon: string;
+  color: string;
+  notes: string;
+  knowledge: string;
+}
+
+// Saved chat threads (persisted in the vault).
+export interface ChatStoredMsg {
+  role: 'user' | 'assistant';
+  content: string;
+  hidden?: boolean;
+}
+export interface ChatThreadMeta {
+  id: string;
+  title: string;
+  updatedAt: string;
+  messageCount: number;
+}
+export interface ChatThreadFull {
+  id: string;
+  title: string;
+  sessionId: string;
+  messages: ChatStoredMsg[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ChatEvent =
+  | { type: 'delta'; text: string }
+  | { type: 'tool'; name: string }
+  | { type: 'status'; label: string }
+  | { type: 'done'; sessionId: string; text: string; costUsd?: number; numTurns?: number; isError?: boolean }
+  | { type: 'error'; message: string };
+
+export async function chatStream(
+  body: { sessionId: string; message: string; resume: boolean; system?: string },
+  onEvent: (e: ChatEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const password = getStoredPassword() ?? '';
+  const res = await fetch(`${API_URL}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Dashboard-Password': password },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (res.status === 401) {
+    clearStoredPassword();
+    throw new UnauthorizedError();
+  }
+  if (!res.ok || !res.body) {
+    let msg = `chat failed: ${res.status}`;
+    try {
+      const d = (await res.json()) as { error?: string };
+      if (d.error) msg = d.error;
+    } catch {
+      // ignore
+    }
+    throw new Error(msg);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    // SSE frames are separated by a blank line.
+    let idx: number;
+    while ((idx = buf.indexOf('\n\n')) !== -1) {
+      const frame = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      const dataLine = frame.split('\n').find((l) => l.startsWith('data:'));
+      if (!dataLine) continue;
+      const json = dataLine.slice(dataLine.indexOf(':') + 1).trim();
+      try {
+        onEvent(JSON.parse(json) as ChatEvent);
+      } catch {
+        // skip malformed frame
+      }
+    }
+  }
+}
+
 // Build a URL for an auth-protected media endpoint that can be passed straight
 // to <video src> / <img src> / <video poster>. Browsers can't attach custom
 // auth headers to these tags, so the server's auth middleware accepts a `?pw=`
@@ -513,6 +687,8 @@ export const api = {
     }),
   pipeline: (archived?: boolean) =>
     request<PipelineResponse>(`/api/pipeline${archived ? '?archived=1' : ''}`),
+  // Archived videos only - for the "Archived" section so they can be restored.
+  archivedVideos: () => request<{ items: Video[] }>('/api/videos?archived=true'),
   metrics: () => request<MetricsResponse>('/api/metrics'),
   inbox: () => request<InboxResponse>('/api/inbox'),
   products: () => request<ProductsResponse>('/api/products'),
@@ -563,6 +739,18 @@ export const api = {
   deleteSSModule: (id: string) =>
     request<{ ok: true }>(`/api/ss-modules/${id}`, { method: 'DELETE' }),
   syncYouTube: () => request<{ ok: true; total: number; inserted: number; updated: number; handle: string }>('/api/youtube/sync', { method: 'POST' }),
+  // Import a YouTube Studio "Table data.csv" export to fill per-video CTR / sub
+  // rate / views (CTR + impressions are Studio-only, no API exposes them).
+  importYoutubeAnalyticsCsv: (csv: string) =>
+    request<{
+      ok: true;
+      data_rows: number;
+      matched: number;
+      updated: number;
+      unmatched_count: number;
+      unmatched: Array<{ id: string; title: string }>;
+      sample: Array<{ id: string; views: number | null; ctr_pct: number | null; sub_rate_pct: number | null }>;
+    }>('/api/youtube/import-analytics-csv', { method: 'POST', body: JSON.stringify({ csv }) }),
   generateTitles: (videoId: string, preserve = false) =>
     request<VideoSuggestions>(`/api/videos/${videoId}/generate-titles${preserve ? '?preserve=1' : ''}`, { method: 'POST' }),
   saveSuggestions: (videoId: string, suggestions: VideoSuggestions) =>
@@ -623,8 +811,22 @@ export const api = {
 
   brainstorm: () => request<BrainstormResponse>('/api/brainstorm'),
 
-  skills: () => request<{ items: Array<{ id: string; name: string; summary: string; trigger_summary: string; pack: string; category: string }> }>('/api/skills'),
-  getSkill: (id: string) => request<{ id: string; name: string; trigger_summary: string; full_md: string; pack: string; location: string }>(`/api/skills/${id}`),
+  skills: () => request<{ items: SkillListItem[] }>('/api/skills'),
+  getSkill: (id: string) => request<SkillFull>(`/api/skills/${id}`),
+  createSkill: (body: SkillWrite) =>
+    request<{ id: string; name: string }>('/api/skills', { method: 'POST', body: JSON.stringify(body) }),
+  updateSkill: (id: string, body: SkillWrite) =>
+    request<SkillFull>(`/api/skills/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  duplicateSkill: (id: string) =>
+    request<{ id: string; name: string }>(`/api/skills/${id}/duplicate`, { method: 'POST' }),
+
+  clientsList: () => request<{ clients: Array<{ id: string; name: string; status?: string }> }>('/api/clients'),
+
+  chatThreads: () => request<{ items: ChatThreadMeta[] }>('/api/chat/threads'),
+  getChatThread: (id: string) => request<ChatThreadFull>(`/api/chat/threads/${id}`),
+  saveChatThread: (id: string, body: { sessionId: string; title?: string; messages: ChatStoredMsg[] }) =>
+    request<{ ok: boolean; id: string; title: string }>(`/api/chat/threads/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteChatThread: (id: string) => request<{ ok: boolean }>(`/api/chat/threads/${id}`, { method: 'DELETE' }),
 
   archivePovs: () => request<{ items: Array<{ id: string; title: string; format: string; category: string; opinion: string }> }>('/api/archive/povs'),
 
@@ -732,6 +934,21 @@ export const api = {
     request<{ items: IgQueueItem[]; counts: { queued: number; filmed: number; posted: number; dismissed: number } }>(
       '/api/instagram/queue'
     ),
+  // Onboarding "bring your context" ingest: scrape YouTube transcripts (no
+  // auth) + fetch website text into context files the onboarding reads.
+  onboardingIngest: (body: { youtube?: string[]; websites?: string[] }) =>
+    request<{
+      ok: true;
+      items: { path: string | null; title: string; kind: 'youtube' | 'website'; ok: boolean; note?: string }[];
+      paths: string[];
+    }>('/api/onboarding/ingest', { method: 'POST', body: JSON.stringify(body) }),
+  // Approve a rendered carousel (from the chat preview) into the Ready to
+  // Schedule lane as a carousel-format queue item.
+  approveCarousel: (path: string) =>
+    request<{ ok: true; item: IgQueueItem; already?: boolean }>('/api/instagram/carousels/approve', {
+      method: 'POST',
+      body: JSON.stringify({ path }),
+    }),
   createIgIdea: (body: {
     title?: string;
     text?: string;
@@ -743,12 +960,18 @@ export const api = {
     source_moments?: SourceMoment[];
     kind?: ExtractedKind;
     quote_id?: string;
+    status?: IgItemStatus;
+    original_quote?: string;
+    script?: string;
+    edit_plan?: string;
+    topics?: string[];
+    reel_origin?: 'clip' | 'film';
   }) =>
     request<{ ok: true; item: IgQueueItem }>('/api/instagram/queue', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  updateIgItem: (id: string, body: Partial<Pick<IgQueueItem, 'status' | 'text' | 'title' | 'posted_url' | 'queue_order' | 'tag' | 'caption' | 'caption_hashtags' | 'posted_at' | 'view_count' | 'share_count' | 'comment_count' | 'chosen_hook' | 'hook_pos_x' | 'hook_pos_y'>>) =>
+  updateIgItem: (id: string, body: Partial<Pick<IgQueueItem, 'status' | 'text' | 'title' | 'posted_url' | 'queue_order' | 'tag' | 'caption' | 'caption_hashtags' | 'posted_at' | 'scheduled_for' | 'view_count' | 'share_count' | 'comment_count' | 'chosen_hook' | 'hook_pos_x' | 'hook_pos_y' | 'script' | 'original_quote' | 'edit_plan' | 'topics' | 'format' | 'carousel_path'>>) =>
     request<{ ok: true; item: IgQueueItem }>(`/api/instagram/queue/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
@@ -788,6 +1011,7 @@ export const api = {
         days: Array<{ day: number; count: number }>;
       }>;
       target_per_week: number;
+      target_set: boolean;
       source: 'instagram_graph_api' | 'manual_posted_status';
       synced_post_count: number;
     }>('/api/instagram/output'),
@@ -902,6 +1126,8 @@ export const api = {
       instagram_cta_url: string;
       youtube_cta_text: string;
       youtube_cta_url: string;
+      // Source-file path of the avatar selected as the content focus, or null.
+      content_focus_avatar: string | null;
       // Legacy aliases - both point at the Instagram pair.
       focus_cta_text: string;
       focus_cta_url: string;
@@ -917,6 +1143,8 @@ export const api = {
     instagram_cta_url: string;
     youtube_cta_text: string;
     youtube_cta_url: string;
+    // Avatar selected as the content focus (source-file path). '' clears it.
+    content_focus_avatar: string;
     // Live SS metrics - settable inline from the Focus page big number.
     ss_members: number;
     ss_mrr_usd: number;
@@ -1266,6 +1494,14 @@ export const api = {
     request<{ ok: true }>(`/api/offers/pricing-rungs/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deletePricingRung: (id: string) =>
     request<{ ok: true }>(`/api/offers/pricing-rungs/${id}`, { method: 'DELETE' }),
+  // The written sales page copy for an offer (its own markdown file).
+  getRungSalesPage: (id: string) =>
+    request<{ ok: true; path: string; content: string }>(`/api/offers/pricing-rungs/${id}/sales-page`),
+  saveRungSalesPage: (id: string, content: string) =>
+    request<{ ok: true; path: string }>(`/api/offers/pricing-rungs/${id}/sales-page`, {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    }),
   setFeaturedRung: (id: string, featured: boolean) =>
     request<{ ok: true }>('/api/offers/pricing-rungs/featured', {
       method: 'PATCH',
@@ -1284,6 +1520,15 @@ export const api = {
       after_state: string;
       outcomes: string[];
     }>(`/api/offers/avatars/${id}/synthesise`, { method: 'POST' }),
+  // Nano Banana (Gemini image model) connection - powers avatar + thumbnail
+  // image generation. connected = a GEMINI_API_KEY is saved locally.
+  nanoBananaStatus: () =>
+    request<{ connected: boolean; key_preview: string | null }>('/api/nano-banana/status'),
+  saveNanoBananaKey: (key: string) =>
+    request<{ ok: boolean; key_preview: string }>('/api/nano-banana/key', {
+      method: 'POST',
+      body: JSON.stringify({ key }),
+    }),
   // Check whether the Cloudflare-worker link manifest exists. If not, the
   // setup_prompt comes back so the UI can show "paste this into Claude".
   getTrackingSetupStatus: () =>
@@ -1473,6 +1718,18 @@ export function deckEditorUrl(deckPath: string): string {
   return u.toString();
 }
 
+// URL that serves a carousel's slides.html for an in-app iframe. The pw rides
+// in the query string because an iframe can't send the dashboard-password
+// header (same reason as deckEditorUrl).
+export function carouselFileUrl(carouselPath: string): string {
+  const pw = getStoredPassword() ?? '';
+  const base = API_URL || window.location.origin;
+  const u = new URL('/api/instagram/carousel-file', base);
+  u.searchParams.set('path', carouselPath);
+  u.searchParams.set('pw', pw);
+  return u.toString();
+}
+
 export type JourneyEntryType = 'win' | 'failure' | 'lesson' | 'avatar';
 export interface JourneyEntry {
   id: string;
@@ -1606,6 +1863,10 @@ export interface OfferPricingRung {
   sales_page_url: string;
   sales_page_visitors_30d: number | null;
   sales_page_buyers_30d: number | null;
+  // The written sales page copy lives in its own markdown file; the rung stores
+  // the path. sales_page_words is a read-time count (0 = not written yet).
+  sales_page_file?: string;
+  sales_page_words?: number;
   vsl_url: string;
   vsl_tracking_slug: string;
   vsl_views_30d: number | null;       // YouTube views in the last 30 days

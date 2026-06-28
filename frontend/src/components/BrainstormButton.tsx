@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { Voice } from '../pages/Voice';
+import { createButtonStyle } from '../lib/ui';
 
 export function BrainstormButton() {
   const [open, setOpen] = useState(false);
@@ -29,49 +30,14 @@ export function BrainstormButton() {
         type="button"
         onClick={() => setOpen(true)}
         title="open your ideas bank"
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          padding: '6px 14px',
-          background: 'var(--surface)',
-          border: '1px solid var(--hairline)',
-          borderRadius: 'var(--radius-pill)',
-          color: 'var(--ink)',
-          cursor: 'pointer',
-          fontFamily: 'inherit',
-          fontSize: 'var(--body-sm)',
-          transition: 'background 0.15s, border-color 0.15s',
-        }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.02)';
-          (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.22)';
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLElement).style.background = 'var(--surface)';
-          (e.currentTarget as HTMLElement).style.borderColor = 'var(--hairline)';
-        }}
+        style={{ ...createButtonStyle, display: 'inline-flex', alignItems: 'center', gap: 6 }}
       >
-        <span
-          style={{
-            display: 'inline-flex',
-            flexDirection: 'column',
-            alignItems: 'flex-start',
-            lineHeight: 1.2,
-          }}
-        >
-          <span
-            style={{
-              fontSize: 10,
-              textTransform: 'uppercase',
-              letterSpacing: '0.14em',
-              color: 'var(--muted)',
-              fontWeight: 500,
-            }}
-          >
-            ideas bank
-          </span>
-          <span style={{ fontSize: 12 }}>brainstorm prompts</span>
-        </span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M9 18h6" />
+          <path d="M10 22h4" />
+          <path d="M12 2a7 7 0 0 0-4 12.7c.5.4.9 1.1 1 1.8v.5h6v-.5c.1-.7.5-1.4 1-1.8A7 7 0 0 0 12 2Z" />
+        </svg>
+        ideas bank
       </button>
 
       {open && (

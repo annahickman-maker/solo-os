@@ -15,12 +15,18 @@ import { Content } from './pages/Content';
 import { Inbox } from './pages/Inbox';
 import { Voice } from './pages/Voice';
 import { Skills } from './pages/Skills';
+import { SkillEditor } from './pages/SkillEditor';
+import { Chat } from './pages/Chat';
+import { History } from './pages/History';
 import { Archive } from './pages/Archive';
 import { Profile } from './pages/Profile';
 import { Journey } from './pages/Journey';
 import { Settings } from './pages/Settings';
 import { Decks } from './pages/Decks';
 import { TeleprompterProvider } from './components/TeleprompterProvider';
+import { ChatProvider } from './components/ChatProvider';
+import { SkillRunProvider } from './components/SkillRunProvider';
+import { FirstRunGate } from './components/FirstRunGate';
 
 function handleAuthError(err: unknown) {
   if (err instanceof UnauthorizedError) {
@@ -65,6 +71,11 @@ function Shell() {
             <Route path="/brand" element={<Profile />} />
             <Route path="/offers" element={<Profile />} />
             <Route path="/skills" element={<Skills />} />
+            <Route path="/skills/new" element={<SkillEditor />} />
+            <Route path="/skills/:id" element={<SkillEditor />} />
+            <Route path="/chat" element={<Chat />} />
+            <Route path="/chat/:id" element={<Chat />} />
+            <Route path="/history" element={<History />} />
             <Route path="/decks" element={<Decks />} />
             <Route path="/vault" element={<Archive />} />
             <Route path="/archive" element={<Archive />} />
@@ -73,6 +84,7 @@ function Shell() {
         </div>
       </main>
       <BottomNav />
+      <FirstRunGate />
       {import.meta.env.DEV && <Agentation />}
     </div>
   );
@@ -85,7 +97,11 @@ export default function App() {
         <PasswordGate>
           <MembershipGate>
             <TeleprompterProvider>
-              <Shell />
+              <ChatProvider>
+                <SkillRunProvider>
+                  <Shell />
+                </SkillRunProvider>
+              </ChatProvider>
             </TeleprompterProvider>
           </MembershipGate>
         </PasswordGate>

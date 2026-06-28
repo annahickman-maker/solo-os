@@ -131,7 +131,16 @@ spawn_supervised frontend 5174 "$LOG_DIR/solo-os-frontend.log" \
 spawn_supervised claude-bridge 8789 "$LOG_DIR/solo-os-claude-bridge.log" \
   bash -c 'cd claude-bridge && npm start'
 
-sleep 6
+# Wait for server + frontend to accept connections instead of a blanket sleep.
+# ~1-2s on a fast machine, longer only if the machine genuinely needs it.
+ready=0
+for _ in $(seq 1 120); do   # up to ~12s
+  if lsof -ti:8791 >/dev/null 2>&1 && lsof -ti:5174 >/dev/null 2>&1; then
+    ready=1; break
+  fi
+  sleep 0.1
+done
+[ "$ready" = 1 ] || echo "  (services still starting; supervisor will keep retrying)"
 
 check_port() {
   local port="$1"; local label="$2"

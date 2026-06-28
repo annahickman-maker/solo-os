@@ -1,16 +1,18 @@
 ---
 name: emotion-in-copy
-description: Use emotion strategically in persuasive copy without crossing into manipulation. Make the reader feel seen, not sold to. Use when writing sales pages, emails, video scripts, About pages, social posts, or any content where the reader's emotional state needs to be acknowledged and shifted.
+description: 'Use emotion strategically in persuasive copy without crossing into manipulation. Make the reader feel seen, not sold to. Use when writing sales pages, emails, video scripts, About pages, social posts, or any content where the reader''s emotional state needs to be acknowledged and shifted.'
+category: Create
+hidden: true
 ---
 
 # Emotion in Copy
 
-The heart decides, the head justifies. But emotion in copy is a knife — used precisely it cuts through resistance, used clumsily it cuts the trust between writer and reader. This skill teaches the precise use.
+The heart decides, the head justifies. But emotion in copy is a knife - used precisely it cuts through resistance, used clumsily it cuts the trust between writer and reader. This skill teaches the precise use.
 
 ## Required vault data
 
-- `01_Core/core_voice-style.md` — what the user sounds like emotionally (not performative, not flat)
-- `01_Core/core_audience.md` — what the reader is carrying that needs to be named
+- `01_Core/core_voice-style.md` - what the user sounds like emotionally (not performative, not flat)
+- `01_Core/core_audience.md` - what the reader is carrying that needs to be named
 
 ## The principle
 
@@ -22,37 +24,37 @@ The test: would the reader read your sentence and think "yes, that's me" or "ugh
 
 | Section of a sales page | Emotional move |
 |---|---|
-| **Mirror section** ("Does this sound familiar?") | Recognition — name the reader's exact frustration in their own words |
-| **The "if you've been here too" moments** | Identification — "you're not alone in this" |
+| **Mirror section** ("Does this sound familiar?") | Recognition - name the reader's exact frustration in their own words |
+| **The "if you've been here too" moments** | Identification - "you're not alone in this" |
 | **The story** | Internal emotion at the turning points (not just events) |
-| **The reframe** | Relief — "this thing you've been blaming yourself for isn't your fault" |
-| **The vision of the after** | Hope — but specific, not aspirational fluff |
-| **The final CTA** | Warmth — invitation, not pressure |
+| **The reframe** | Relief - "this thing you've been blaming yourself for isn't your fault" |
+| **The vision of the after** | Hope - but specific, not aspirational fluff |
+| **The final CTA** | Warmth - invitation, not pressure |
 
 ## Where emotion does NOT belong
 
-- Logistics (dates, format, what's included) — flat and clear, never excited
-- Pricing — no emotional language around money
-- FAQs — direct answers, no warmth padding
-- Authority section (about the seller) — confident-but-grounded, not boastful
+- Logistics (dates, format, what's included) - flat and clear, never excited
+- Pricing - no emotional language around money
+- FAQs - direct answers, no warmth padding
+- Authority section (about the seller) - confident-but-grounded, not boastful
 
 If a sentence about logistics has emotional language, strip it. The reader's emotion is built earlier; logistics just need to not interrupt it.
 
 ## How to write specific emotions without being heavy-handed
 
-**Recognition** — name the situation, not the feeling
+**Recognition** - name the situation, not the feeling
 - Heavy: "You're feeling overwhelmed and exhausted"
 - Sharp: "It's 9pm, the kids are in bed, and you're staring at a half-finished email you've rewritten four times"
 
-**Relief** — name the wrong belief, then refute it
+**Relief** - name the wrong belief, then refute it
 - Heavy: "You don't have to feel guilty anymore!"
 - Sharp: "You were not weak. You were doing what the system trained you to do."
 
-**Hope** — make the after specific
+**Hope** - make the after specific
 - Heavy: "Imagine waking up free and fulfilled"
 - Sharp: "Imagine Friday afternoon with nothing on the calendar and the rent paid until November"
 
-**Stakes / fear** — let the consequence speak; don't push it
+**Stakes / fear** - let the consequence speak; don't push it
 - Heavy: "Don't let another year slip by!"
 - Sharp: "Another quarter passes. Another year. The opportunity keeps growing. And you're not in the game."
 

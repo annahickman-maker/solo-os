@@ -23,15 +23,18 @@ export function Card({
 }: CardProps) {
   return (
     <section
+      className="card"
       style={{
         background:
           tone === 'surface-2' ? 'var(--surface-2)' : 'var(--surface)',
-        border: bordered ? '1px solid var(--hairline)' : 'none',
         borderRadius: 'var(--radius-lg)',
         padding: padded ? 'var(--space-5)' : 0,
         display: 'flex',
         flexDirection: 'column',
         gap: 'var(--space-4)',
+        // Only force a border inline when explicitly requested. Otherwise leave
+        // it to the .card rule so light mode can add the floating border/shadow.
+        ...(bordered ? { border: '1px solid var(--hairline)' } : {}),
         ...style,
       }}
     >

@@ -9,6 +9,8 @@ import { Hono } from 'hono';
 import fs from 'node:fs';
 import path from 'node:path';
 import { abs, loadCollection, loadFile } from '../vault.js';
+import { runContentExtraction } from './extracts.js';
+import { runAudienceExtraction } from './audienceQuotes.js';
 
 const app = new Hono();
 
@@ -76,6 +78,7 @@ type TranscriptInfo = {
   source_rel?: string; // for files outside TRANSCRIPT_DIRS (e.g. 04_Channel video files)
   youtube_url?: string | null;
   has_raw?: boolean; // true when a sibling raw/ file exists with full word-for-word transcript
+  is_summary?: boolean; // true only for genuine summaries (title starts with "Q&A Recording"), not verbatim transcripts
 };
 
 const TRANSCRIPT_DIRS: Array<{ rel: string; type: string }> = [
@@ -83,6 +86,7 @@ const TRANSCRIPT_DIRS: Array<{ rel: string; type: string }> = [
   { rel: path.join('05_Assets', 'Transcripts', 'Live-Workshops'), type: 'workshop' },
   { rel: path.join('05_Assets', 'Transcripts', 'YouTube-Videos'), type: 'video' },
   { rel: path.join('05_Assets', 'Transcripts', 'Client-Calls'), type: 'client' },
+  { rel: path.join('05_Assets', 'Transcripts', 'Solo-OS-Dashboard'), type: 'solo-os' },
   // Holding bin for zoom recordings whose topic didn't match any auto-classifier.
   // The user picks the right category from the Vault page, which moves the file
   // into the matching folder above.
@@ -95,17 +99,56 @@ function detectClient(filename: string): string | null {
   return match ? match[1]! : null;
 }
 
-function dateFromFilename(filename: string): number | null {
-  const m = filename.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return null;
-  // Pin to local midnight so the frontend's toLocaleDateString renders the
-  // same calendar day the filename names, not the previous day in negative-UTC
-  // timezones. Using (year, monthIdx, day) builds a local-time Date.
-  const t = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
+// Pin to local midnight so the frontend's toLocaleDateString renders the same
+// calendar day the source names, not the previous day in negative-UTC
+// timezones. Using (year, monthIdx, day) builds a local-time Date.
+function ymdToSec(y: number, mIdx: number, d: number): number | null {
+  const t = new Date(y, mIdx, d).getTime();
   return Number.isNaN(t) ? null : Math.floor(t / 1000);
 }
 
-function scanTranscripts(): TranscriptInfo[] {
+const MONTH_INDEX: Record<string, number> = {
+  january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+  july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+};
+
+/**
+ * Best-effort recorded/published date for a transcript, used for both display
+ * and newest-first sorting. Tries, in order:
+ *   1. an ISO date (YYYY-MM-DD) in the filename (legacy date-prefixed names)
+ *   2. a readable date in the filename ("25th of June", "8th October 2024")
+ *      - the human-named scheme; year defaults to the current year when omitted
+ *   3. a `**Published:** YYYY-MM-DD` line in the body (YouTube videos)
+ *   4. the first ISO date anywhere in the file - covers the ISO baked into the
+ *      `slug:`/`aliases:` frontmatter of client calls and Q&As
+ * Returns null when nothing is found (e.g. workshop recordings carry no date);
+ * the caller sorts those to the bottom.
+ */
+function transcriptDate(filename: string, raw: string): number | null {
+  const iso = filename.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return ymdToSec(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+
+  const readable = filename.match(
+    /(\d{1,2})(?:st|nd|rd|th)\s+(?:of\s+)?([A-Za-z]+)(?:\s+(\d{4}))?/,
+  );
+  if (readable) {
+    const mIdx = MONTH_INDEX[readable[2]!.toLowerCase()];
+    if (mIdx !== undefined) {
+      const year = readable[3] ? Number(readable[3]) : new Date().getFullYear();
+      return ymdToSec(year, mIdx, Number(readable[1]));
+    }
+  }
+
+  const pub = raw.match(/\*\*Published:\*\*\s*(\d{4})-(\d{2})-(\d{2})/);
+  if (pub) return ymdToSec(Number(pub[1]), Number(pub[2]) - 1, Number(pub[3]));
+
+  const anyIso = raw.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (anyIso) return ymdToSec(Number(anyIso[1]), Number(anyIso[2]) - 1, Number(anyIso[3]));
+
+  return null;
+}
+
+export function scanTranscripts(): TranscriptInfo[] {
   const out: TranscriptInfo[] = [];
   for (const { rel, type } of TRANSCRIPT_DIRS) {
     let entries: fs.Dirent[];
@@ -140,11 +183,18 @@ function scanTranscripts(): TranscriptInfo[] {
       const summaryMatch = raw.match(/^summary:\s*"?(.+?)"?\s*$/m);
       const summary = summaryMatch ? summaryMatch[1]!.slice(0, 200) : '';
       const hasRaw = findRawTranscript(rel, e.name) != null;
+      // Genuine summaries (the only non-verbatim transcripts) are identifiable
+      // by an H1 / filename that starts with "Q&A Recording". Everything else -
+      // Q&As, workshops, client calls, Solo-OS walkthroughs - is word-for-word
+      // verbatim, even when it has no raw/ companion.
+      const h1 = body.match(/^#\s+(.+?)\s*$/m)?.[1] ?? '';
+      const titleForKind = (h1 || e.name.replace(/\.(md|txt)$/, '')).toLowerCase().replace(/&/g, '').replace(/\s+/g, ' ').trim();
+      const isSummary = titleForKind.startsWith('qa recording');
       out.push({
         id: `transcript-${e.name.replace(/\.(md|txt)$/, '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
         filename: e.name,
         type,
-        date: dateFromFilename(e.name),
+        date: transcriptDate(e.name, raw),
         processed: 1,
         pov_count: 0,
         created_at: Math.floor(stat.mtimeMs / 1000),
@@ -153,6 +203,7 @@ function scanTranscripts(): TranscriptInfo[] {
         excerpt,
         client: detectClient(e.name),
         has_raw: hasRaw,
+        is_summary: isSummary,
       });
     }
   }
@@ -202,7 +253,16 @@ function scanVideoFileTranscripts(): TranscriptInfo[] {
 function allTranscripts(): TranscriptInfo[] {
   const all = [...scanTranscripts(), ...scanVideoFileTranscripts()];
   all.sort((a, b) => (b.date ?? 0) - (a.date ?? 0));
-  return all;
+  // Two files whose names slugify to the same id (e.g. a space-named and a
+  // hyphen-named copy of the same transcript) would otherwise emit duplicate
+  // ids - duplicate React keys in the list + ambiguous select-by-id. Keep the
+  // first occurrence per id so every transcript id is unique.
+  const seen = new Set<string>();
+  return all.filter((t) => {
+    if (seen.has(t.id)) return false;
+    seen.add(t.id);
+    return true;
+  });
 }
 
 app.get('/transcripts', (c) => {
@@ -280,6 +340,17 @@ app.post('/transcripts/upload', async (c) => {
   // the id the rest of the dashboard uses).
   const all = allTranscripts();
   const created = all.find((t) => t.filename === finalName && t.type === type);
+
+  // Auto-extract content quotes + audience quotes in the background so a dropped
+  // transcript is processed without anyone pressing the extract buttons. Fire-
+  // and-forget: the upload returns immediately; the transcript panel polls and
+  // fills in when extraction finishes.
+  if (created?.id) {
+    const tid = created.id;
+    void runContentExtraction(tid).catch((e) => console.error('auto content-extract failed:', e));
+    void runAudienceExtraction(tid).catch((e) => console.error('auto audience-extract failed:', e));
+  }
+
   return c.json({
     ok: true,
     id: created?.id ?? null,
@@ -414,7 +485,9 @@ function findRawTranscript(dirRel: string, summaryFilename: string): string | nu
   if (!fs.existsSync(rawDir)) return null;
   const stem = summaryFilename.replace(/\.(md|txt)$/, '');
   const candidates = [
-    `${stem}_raw.md`,           // 2026-06-04_tharros_raw.md
+    `${stem} (raw).md`,         // Client B call 4th of June (raw).md - readable scheme
+    `${stem} (raw webvtt).md`,  // Skool Q&A 27th May (raw webvtt).md
+    `${stem}_raw.md`,           // 2026-06-04_tharros_raw.md - legacy date scheme
     `${stem.replace(/^qa_/, 'qa-raw_')}.md`, // qa-raw_2026-06-03.md
     `${stem}-raw.md`,
     `raw_${stem}.md`,

@@ -74,9 +74,9 @@ If you're ready to do the same - this is what I teach inside Independent Creator
 
 **Internal emotion at the rock-bottom moment.** "Completely broke - on the phone to my mum in tears and ready to give up." The reader can SEE this. Vague version ("I was struggling") doesn't land.
 
-**The turning point is named.** "Instead of bending over backwards trying to please the algorithms - I focused on simply serving my audience." This is the reframe. It's not just a sequence of events — it's a mindset shift the reader can take.
+**The turning point is named.** "Instead of bending over backwards trying to please the algorithms - I focused on simply serving my audience." This is the reframe. It's not just a sequence of events - it's a mindset shift the reader can take.
 
-**The shift back to the reader.** "If you're ready to do the same - this is what I teach inside Independent Creator." Story → offer in one move. Doesn't dwell on the win. Doesn't assume the reader will draw the connection — names it.
+**The shift back to the reader.** "If you're ready to do the same - this is what I teach inside Independent Creator." Story → offer in one move. Doesn't dwell on the win. Doesn't assume the reader will draw the connection - names it.
 
 **Voice fragments.** "This shit was fun! ...until it wasn't." / "No team. No complex funnels." Conversational, dropped lines that mirror how she actually talks.
 
@@ -85,17 +85,17 @@ If you're ready to do the same - this is what I teach inside Independent Creator
 **Story arc structure:** Hero's Journey
 - Pain (no clients, no system)
 - Trigger (TikTok success that wasn't sustainable)
-- Attempts (day rates, course, digital products, template — all failed)
+- Attempts (day rates, course, digital products, template - all failed)
 - Rock bottom (broke, in tears)
 - Discovery (serve audience > please algorithms)
 - Resolution (5-figure months, leverage, freedom)
 
 **4-part reader-facing pattern:** This story is the **personal-story** opener. The 4-part pattern (Mirror → Turning Point → After → CTA) lives in the next sections of the page that follow this story:
 
-1. **Mirror their 'before'** — "If you've been here too: posting content but stuck at the same revenue, burnt out from the hamster wheel..."
-2. **Show the turning point** — "The shift isn't more content. It's the right offer + a system that turns content into customers."
-3. **Connect to their desired 'after'** — "5-figure months without a team. Work when you want, with who you want."
-4. **Shift the focus back to them** — "Inside Independent Creator, I teach exactly how to build this for yourself. If you're ready..."
+1. **Mirror their 'before'** - "If you've been here too: posting content but stuck at the same revenue, burnt out from the hamster wheel..."
+2. **Show the turning point** - "The shift isn't more content. It's the right offer + a system that turns content into customers."
+3. **Connect to their desired 'after'** - "5-figure months without a team. Work when you want, with who you want."
+4. **Shift the focus back to them** - "Inside Independent Creator, I teach exactly how to build this for yourself. If you're ready..."
 
 ---
 
@@ -103,7 +103,7 @@ If you're ready to do the same - this is what I teach inside Independent Creator
 
 1. **Start with the specific date.** Don't open with the lesson, open with the moment. "My journey starts in 2020."
 2. **Build the early success.** Make the reader want what you had. ("I would post a few videos and see leads coming into my inbox.")
-3. **Name the turning bad.** Don't skip to the lesson — show the cost. ("Tired of churning out endless content that lacked any real strategy.")
+3. **Name the turning bad.** Don't skip to the lesson - show the cost. ("Tired of churning out endless content that lacked any real strategy.")
 4. **List the failed attempts.** Specifically. ("Testing day rates, building a course, flirting with digital products.")
 5. **Land the rock bottom.** With internal emotion + a real scene. ("On the phone to my mum in tears.")
 6. **Name the discovery.** What changed? In one specific sentence.

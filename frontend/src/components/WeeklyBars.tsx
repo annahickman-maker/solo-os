@@ -35,7 +35,7 @@ export function WeeklyBars({
               key={i}
               style={{
                 height: `${ratio * 100}%`,
-                background: hit ? 'var(--accent)' : 'rgba(255,255,255,0.18)',
+                background: hit ? 'var(--accent)' : 'var(--bar-empty)',
                 borderRadius: 'var(--radius-sm)',
                 transition: 'height 600ms var(--ease-out)',
               }}

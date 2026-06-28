@@ -13,10 +13,17 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { abs, loadFile, saveFile } from '../vault.js';
 import { BRIDGE_URL } from '../lib/bridge.js';
-import { buildOffersResponse, setFeaturedRung, clearFeaturedRung } from '../lib/offersPage.js';
+import { buildOffersResponse, setFeaturedRung, clearFeaturedRung, defaultSalesPageRel } from '../lib/offersPage.js';
 import { analyzeSection, type SectionKey as AnalysisSection } from '../lib/offerAnalysis.js';
 
 const app = new Hono();
+
+// Base URL for the optional link-shortener / click-tracking worker. This is
+// per-creator infrastructure, NOT a shared service: set LINK_SHORTENER_BASE_URL
+// (e.g. https://yourdomain.com) to your own deployed worker. When unset, the
+// feature degrades gracefully - no short links are minted and stats report
+// "not configured" - so a member install never points at someone else's domain.
+const LINK_BASE_URL = process.env.LINK_SHORTENER_BASE_URL ?? '';
 
 // ─── Main GET ──────────────────────────────────────────────────────────────
 
@@ -225,6 +232,50 @@ app.post('/pricing-rungs/:id/analyze', async (c) => {
   }
 });
 
+// ─── Sales page copy (per offer) ───────────────────────────────────────────
+// The written sales page lives in its own markdown file (07_Products/
+// sales-pages/<slug>.md). GET reads it for the inline editor; PUT writes it
+// (and pins the path onto the rung). The sales-page-builder skill writes this
+// same file directly from chat, so both paths stay in sync.
+app.get('/pricing-rungs/:id/sales-page', (c) => {
+  const id = c.req.param('id');
+  const items = loadBank('pricing-rungs');
+  const rung = items.find((x) => x.id === id);
+  if (!rung) return c.json({ error: 'rung not found' }, 404);
+  const rel = (typeof rung.sales_page_file === 'string' && rung.sales_page_file) || defaultSalesPageRel(rung);
+  let content = '';
+  try {
+    content = fs.readFileSync(abs(...rel.split('/')), 'utf8');
+  } catch {
+    // no page written yet - empty is fine
+  }
+  return c.json({ ok: true, path: rel, content });
+});
+
+app.put('/pricing-rungs/:id/sales-page', async (c) => {
+  const id = c.req.param('id');
+  const body = (await c.req.json().catch(() => null)) as { content?: string } | null;
+  if (body?.content == null) return c.json({ error: 'content required' }, 400);
+  const items = loadBank('pricing-rungs');
+  const rung = items.find((x) => x.id === id);
+  if (!rung) return c.json({ error: 'rung not found' }, 404);
+  const rel = (typeof rung.sales_page_file === 'string' && rung.sales_page_file) || defaultSalesPageRel(rung);
+  const absPath = abs(...rel.split('/'));
+  try {
+    fs.mkdirSync(path.dirname(absPath), { recursive: true });
+    fs.writeFileSync(absPath, body.content);
+  } catch (err: any) {
+    return c.json({ ok: false, error: err?.message ?? 'write failed' }, 500);
+  }
+  // Pin the path onto the rung so it stays stable even if the offer name changes.
+  if (rung.sales_page_file !== rel) {
+    rung.sales_page_file = rel;
+    rung.updated_at = nowSec();
+    saveBank('pricing-rungs', items);
+  }
+  return c.json({ ok: true, path: rel });
+});
+
 // ─── Worker link-stats proxy ───────────────────────────────────────────────
 // Fetches aggregated click counts from the Cloudflare worker for a given
 // /go/<slug>. Used by the frontend's Conversions panel to auto-fill the
@@ -234,7 +285,13 @@ app.get('/link-stats', async (c) => {
   const slug = c.req.query('slug');
   const days = c.req.query('days') ?? '30';
   if (!slug) return c.json({ error: 'slug query param required' }, 400);
-  const workerBase = process.env.LINK_STATS_BASE_URL ?? 'https://yourdomain.com';
+  const workerBase = process.env.LINK_STATS_BASE_URL ?? LINK_BASE_URL;
+  if (!workerBase) {
+    return c.json(
+      { error: 'link tracking is not configured. Set LINK_SHORTENER_BASE_URL to your own worker domain to enable click stats.' },
+      501,
+    );
+  }
   const url = `${workerBase}/link-stats?slug=${encodeURIComponent(slug)}&days=${encodeURIComponent(days)}`;
   try {
     const res = await fetch(url);
@@ -296,7 +353,7 @@ app.get('/tracking-setup-status', async (c) => {
       'Set up the Cloudflare Worker tracking-link system for the dashboard.',
       '',
       'Requirements:',
-      `1. A worker project at ${WORKER_DIR_REL} that handles routes like yourdomain.com/go/<slug>.`,
+      `1. A worker project at ${WORKER_DIR_REL} that handles routes like <your-domain>/go/<slug>.`,
       '2. A bundled link manifest at scripts/link_manifest.json mapping slug -> { destination, source, created }.',
       '3. The worker reads the manifest at deploy time and serves a 302 redirect to the destination, logging clicks to a LINK_CLICKS KV namespace.',
       '4. A `npm run deploy` command in the worker that publishes the latest manifest to Cloudflare.',
@@ -395,7 +452,7 @@ app.post('/pricing-rungs/:id/generate-tracking-link', async (c) => {
   return c.json({
     ok: true,
     slug,
-    short_url: `https://yourdomain.com/go/${slug}`,
+    short_url: LINK_BASE_URL ? `${LINK_BASE_URL}/go/${slug}` : '',
     deploy_command: `cd ${WORKER_DIR_REL} && npm run deploy`,
     needs_deploy: true,
   });
@@ -567,7 +624,7 @@ app.post('/short-form-links/:id/generate-tracking-link', async (c) => {
   return c.json({
     ok: true,
     slug,
-    short_url: `https://yourdomain.com/go/${slug}`,
+    short_url: LINK_BASE_URL ? `${LINK_BASE_URL}/go/${slug}` : '',
     deploy_command: `cd ${WORKER_DIR_REL} && npm run deploy`,
     needs_deploy: true,
   });
@@ -867,7 +924,34 @@ app.post('/avatars/:id/upload-image', async (c) => {
   return c.json({ ok: true, image_path: relPath, size_bytes: buffer.length });
 });
 
-// POST /avatars/:id/generate-image — generates a portrait via Google's
+// A stable rotation slot for an avatar, by its position in the full sorted
+// avatar list (markdown files + bank rows, deduped by slug). Drives the
+// male -> female -> androgynous gender rotation and the per-avatar look variety
+// below, so the bank reads as a real mix of people rather than a row of
+// near-identical portraits. Stable per avatar (regenerating gives the same
+// look); adding avatars can shift later slots, which is fine.
+function avatarRotationIndex(thisSlug: string): number {
+  const norm = (s: string) =>
+    s.toLowerCase().replace(/^avatar-/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const slugs = new Set<string>();
+  try {
+    for (const f of fs.readdirSync(abs('05_Assets', 'Avatars'))) {
+      if (f.endsWith('.md') && !f.startsWith('_') && !f.startsWith('.')) {
+        slugs.add(norm(f.replace(/\.md$/, '')));
+      }
+    }
+  } catch {}
+  try {
+    for (const r of loadBank('results')) {
+      if (typeof r?.name === 'string' && r.name.trim()) slugs.add(norm(String(r.name)));
+    }
+  } catch {}
+  const sorted = [...slugs].sort();
+  const idx = sorted.indexOf(norm(thisSlug));
+  return idx === -1 ? sorted.length : idx;
+}
+
+// POST /avatars/:id/generate-image - generates a portrait via Google's
 // Nano Banana (gemini-2.5-flash-image), saves the PNG into 05_Assets/
 // Avatars/images/, and PATCHes the bank row with image_path. Reads the
 // API key from 04_Channel/00_System/system_config.md (line "GEMINI_API_KEY: ...").
@@ -898,21 +982,37 @@ app.post('/avatars/:id/generate-image', async (c) => {
     );
   }
 
-  // Build the prompt. Aim for a documentary-portrait look so the image
-  // feels like a real person, not a stock avatar. The avatar's one_line
-  // shapes vibe; falls back to a generic creative-freelancer brief if
-  // the creator hasn't filled it in yet.
-  const subject = oneLine.trim() ||
-    `${name}, an experienced creative freelancer in her mid-30s, mid-stage of building a teaching business off the back of her client work`;
+  // Build the prompt. Aim for a documentary-portrait look so the image feels
+  // like a real person, not a stock avatar. Appearance is driven by the
+  // avatar's rotation slot (NOT the persona text), so the bank stays a varied
+  // mix of people: gender rotates man -> woman -> androgynous, and age,
+  // ethnicity, hair, build, and wardrobe each vary per avatar. The persona text
+  // is passed only as a mood/setting cue.
+  const rotation = avatarRotationIndex(slug);
+  const GENDERS = ['a man', 'a woman', 'an androgynous person'];
+  const AGES = ['in their mid-20s', 'in their early 30s', 'in their late 30s', 'in their mid-40s', 'in their early 50s'];
+  const ETHNICITIES = ['East Asian', 'Black', 'South Asian', 'White', 'Latina or Latino', 'Middle Eastern', 'mixed-race'];
+  const HAIR = ['short cropped hair', 'long wavy hair', 'a closely shaved head', 'curly shoulder-length hair', 'hair tied back', 'a textured undercut', 'a soft bob'];
+  const BUILD = ['a slim build', 'an average build', 'a fuller build', 'a broad build'];
+  const WARDROBE = ['a muted neutral knit', 'a simple linen shirt', 'a relaxed denim shirt', 'a fine-gauge turtleneck', 'a plain tee under an open overshirt', 'a soft cardigan'];
+  const gender = GENDERS[rotation % GENDERS.length];
+  const age = AGES[rotation % AGES.length];
+  const ethnicity = ETHNICITIES[(rotation * 3 + 1) % ETHNICITIES.length];
+  const hair = HAIR[(rotation * 2 + 1) % HAIR.length];
+  const build = BUILD[(rotation * 5 + 2) % BUILD.length];
+  const wardrobe = WARDROBE[(rotation * 4 + 2) % WARDROBE.length];
+
+  const moodCue = (oneLine.trim() || beforeState.trim());
   const promptText = [
-    'Editorial documentary portrait, shoulders-up, soft natural window light, slightly off-centre composition, shallow depth of field.',
+    `Editorial documentary portrait of ${gender}, ${ethnicity}, ${age}, with ${hair} and ${build}.`,
+    'Shoulders-up, soft natural window light, slightly off-centre composition, shallow depth of field.',
     'The subject is grounded, present, lightly smiling but not posed. Real skin texture, no plastic finish, no AI gloss.',
-    `Subject: ${subject}.`,
-    'Wardrobe: muted neutral knit or simple shirt, no logos, no graphic prints.',
+    `Wardrobe: ${wardrobe}, no logos, no graphic prints.`,
     'Background: a softly blurred warm interior (cream wall, a hint of plant or shelf), nothing branded.',
+    moodCue ? `Mood and setting cue only - do NOT infer the person's gender, age, ethnicity, or build from this, those are fixed above: ${moodCue}.` : '',
     'Aspect ratio square (1:1). 35mm film aesthetic. Subtle film grain. Warm-tone colour palette.',
     'Absolutely no text, watermarks, captions, or visible logos.',
-  ].join(' ');
+  ].filter(Boolean).join(' ');
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`;
   let geminiData: any;

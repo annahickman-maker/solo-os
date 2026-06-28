@@ -1,6 +1,8 @@
 ---
 name: youtube-script-cta
-description: Write a mid-video implementation-helper CTA - the soft, casual mention of an offer or freebie that gets dropped into a video after a value section. Uses the Barrier / Shortcut / Alignment / Casual Invite structure. Pulls the channel CTA from channel positioning. This is NOT the outro CTA - this is the in-flow mention. Use when the user is scripting a mid-video CTA, or when called by /youtube-script orchestrator at the right point in the script.
+description: 'Write a mid-video implementation-helper CTA - the soft, casual mention of an offer or freebie that gets dropped into a video after a value section. Uses the Barrier / Shortcut / Alignment / Casual Invite structure. Pulls the YouTube CTA the user set on their Content page. This is NOT the outro CTA - this is the in-flow mention. Use when the user is scripting a mid-video CTA, or when called by /youtube-script orchestrator at the right point in the script.'
+category: Create
+hidden: true
 ---
 
 # YouTube Script CTA
@@ -18,9 +20,8 @@ This CTA can be dropped 1-2 times in a video. Common placements:
 
 ## Preflight
 
-1. Read `04_YouTube/core_channel-positioning.md`. If missing, STOP: "Run /youtube-onboarding first to set up channel positioning."
-2. Read `01_Core/core_voice-style.md`.
-3. Read `04_YouTube/core_channel-positioning.md` for the channel CTA (text + link). Read `01_Core/core_offer-suite.md` if the channel CTA points to a specific offer that needs more context.
+1. Read `01_Core/core_voice-style.md` (set up in Solo OS onboarding). If your core files aren't set up yet, stop and say: run /solopreneur-onboarding first.
+2. Read your YouTube CTA - `youtube_cta_text` + `youtube_cta_url` in `00_System/state.md` (the "what you point viewers to" box on your Content page) - for the CTA text and link. Read `01_Core/core_offer-suite.md` if the CTA points to a specific offer that needs more context.
 
 ---
 
@@ -29,7 +30,7 @@ This CTA can be dropped 1-2 times in a video. Common placements:
 Confirm before drafting. If missing, ask.
 
 - What teaching just happened in the video right before the CTA (so the alignment is specific)
-- Whether this CTA is the channel default (from channel positioning) or a different one specific to this video
+- Whether this CTA is your YouTube CTA default (from `00_System/state.md`) or a different one specific to this video
 - Where in the video this CTA lands (after which value section)
 
 ---
@@ -108,7 +109,7 @@ The user can edit or ask for variations after seeing the draft.
 ## Hard rules
 
 1. **Voice overrides framework.** Match `core_voice-style.md`. The CTA must sound conversational - not like a sponsored ad read.
-2. **Never invent the offer.** Use the channel CTA from `core_channel-positioning.md` or a specific offer from `core_offer-suite.md`. Confirm with user if unsure.
+2. **Never invent the offer.** Use the YouTube CTA from `00_System/state.md` (`youtube_cta_text` + `youtube_cta_url`) or a specific offer from `core_offer-suite.md`. Confirm with user if unsure.
 3. **Stay casual.** No "amazing", "exclusive", "limited time", "act now" language.
 4. **Total length:** 15-25 seconds spoken. Any longer and it feels like a sales push.
 5. **Never use em dashes.** Use hyphens.
@@ -126,7 +127,7 @@ The user can edit or ask for variations after seeing the draft.
 - [ ] Voice is conversational, not promotional
 - [ ] No hype language
 - [ ] Length is 15-25 seconds spoken
-- [ ] Uses the actual offer + link from `core_channel-positioning.md` (or a confirmed alternative)
+- [ ] Uses the actual offer + link from `00_System/state.md` (`youtube_cta_text` + `youtube_cta_url`) (or a confirmed alternative)
 - [ ] No em dashes
 
 If any check fails, rewrite before presenting.

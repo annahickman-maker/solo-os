@@ -1,6 +1,8 @@
 ---
 name: youtube-post-film
-description: Post-filming workflow that auto-triggers when the user drops a YouTube transcript in chat. Saves the transcript to 04_YouTube/Transcripts/, observes new voice patterns and updates 01_Core/core_voice-style.md, moves the corresponding script from 04_YouTube/Scripts/ to 04_YouTube/Archive/, and generates a complete YouTube description by calling /youtube-description. Use whenever a YouTube transcript is dropped in chat with no other context, or when the user asks to "process this transcript" or "I just filmed this".
+description: 'Post-filming workflow that auto-triggers when the user drops a YouTube transcript in chat. Saves the transcript to 04_YouTube/Transcripts/, observes new voice patterns and updates 01_Core/core_voice-style.md, moves the corresponding script from 04_YouTube/Scripts/ to 04_YouTube/Archive/, and generates a complete YouTube description by calling /youtube-description. Use whenever a YouTube transcript is dropped in chat with no other context, or when the user asks to "process this transcript" or "I just filmed this".'
+category: Create
+hidden: true
 ---
 
 # YouTube Post-Film
@@ -19,8 +21,7 @@ What it does in order:
 
 ## Preflight
 
-1. Read `04_YouTube/core_channel-positioning.md`. If missing, STOP: "Run /youtube-onboarding first to set up channel positioning."
-2. Read `01_Core/core_voice-style.md`.
+1. Read `01_Core/core_voice-style.md` (set up in Solo OS onboarding). If your core files aren't set up yet, stop and say: run /solopreneur-onboarding first.
 
 ---
 
@@ -129,17 +130,17 @@ Hand off to /youtube-description. Pass:
 - Note that the transcript is already saved (so the description skill doesn't have to ask for it)
 
 The description skill will:
-- Mint a per-video tracking slug and add it to `<vault>/scripts/link_manifest.json`
-- Produce CTA + 2-sentence hook + chapters + final assembled description (with `https://<yourdomain>/go/<slug>` as the CTA link)
-- Return the manifest update block (slug, destination, deploy command)
+- If conversion tracking is set up, mint a per-video tracking slug and add it to `scripts/link_manifest.json` (in the vault), and use the member's `<tracking-base>/go/<slug>` as the CTA link. If tracking isn't set up, use the raw channel CTA link and skip the manifest.
+- Produce CTA + 2-sentence hook + chapters + final assembled description
+- Return the manifest update block (slug, destination, deploy command) only when tracking is set up
 
 When it returns, present the description to the user.
 
 ---
 
-## Step 5 - Surface the deploy reminder
+## Step 5 - Surface the deploy reminder (only if a tracking link was minted)
 
-The manifest has a new entry but Cloudflare doesn't know about it yet. Tell the user:
+Skip this step entirely if conversion tracking isn't set up (no manifest entry was made). Otherwise the manifest has a new entry but Cloudflare doesn't know about it yet. Tell the user:
 
 > "A new tracking link was added to the manifest for this video. Deploy it to Cloudflare before publishing:
 >
@@ -147,7 +148,7 @@ The manifest has a new entry but Cloudflare doesn't know about it yet. Tell the 
 > cd 03_Projects/agents/worker && npm run deploy
 > ```
 >
-> After deploy, test the link by visiting `https://<yourdomain>/go/<slug>` in a browser - confirm it redirects to the right destination - then publish the video."
+> After deploy, test the link by visiting `<tracking-base>/go/<slug>` in a browser - confirm it redirects to the right destination - then publish the video."
 
 If the user wants, they can run the deploy command themselves. Don't auto-run it.
 
@@ -163,7 +164,7 @@ Final output to user:
 > 2. ✓ Voice style updated -> [N new patterns / no new patterns]
 > 3. ✓ Script archived -> `04_YouTube/Archive/[slug].md` (status: filmed)
 > 4. ✓ Description generated (below)
-> 5. ✓ Tracking link added to manifest -> `https://<yourdomain>/go/[slug]` (deploy before publish: `cd 03_Projects/agents/worker && npm run deploy`)
+> 5. ✓ Tracking link added to manifest -> `<tracking-base>/go/[slug]` (deploy before publish: `cd 03_Projects/agents/worker && npm run deploy`) - only if conversion tracking is set up
 >
 > ---
 >

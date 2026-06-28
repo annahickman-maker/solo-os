@@ -25,6 +25,9 @@ interface MonthGridProps {
   months: MonthData[]; // newest first; the renderer reverses to oldest-on-top
   targetPerWeek?: number;
   onEditTarget?: () => void;
+  // When false, hides the internal "X reels posted / target" summary row (the IG
+  // content-output box renders that itself as a section heading). Default true.
+  showSummary?: boolean;
 }
 
 function targetLabel(perWeek: number): string {
@@ -33,7 +36,7 @@ function targetLabel(perWeek: number): string {
   return `target: ${perWeek} per week`;
 }
 
-export function MonthGrid({ months, targetPerWeek = 3, onEditTarget }: MonthGridProps) {
+export function MonthGrid({ months, targetPerWeek = 3, onEditTarget, showSummary = true }: MonthGridProps) {
   // Bottom row should be the current month, oldest on top - mirrors how
   // a calendar reads (most recent activity closest to the eye).
   const rows = [...months].reverse();
@@ -42,11 +45,11 @@ export function MonthGrid({ months, targetPerWeek = 3, onEditTarget }: MonthGrid
     0,
   );
 
-  // Determine cell color intensity. 0 = empty, 1 = single post, 2+ = stacked.
+  // Posted = solid accent green, matches YearGrid (YouTube tracker). No
+  // count-based opacity tiering - single posted day reads the same as a
+  // stacked day, which is consistent with how YearGrid renders weeks.
   function bgFor(count: number): string {
-    if (count === 0) return 'rgba(255,255,255,0.05)';
-    if (count === 1) return 'color-mix(in srgb, var(--accent) 55%, transparent)';
-    if (count === 2) return 'color-mix(in srgb, var(--accent) 75%, transparent)';
+    if (count === 0) return 'var(--fill-subtle-2)';
     return 'var(--accent)';
   }
 
@@ -55,6 +58,7 @@ export function MonthGrid({ months, targetPerWeek = 3, onEditTarget }: MonthGrid
 
   return (
     <div className="stack" style={{ gap: 'var(--space-3)' }}>
+      {showSummary && (
       <div
         style={{
           display: 'flex',
@@ -83,6 +87,7 @@ export function MonthGrid({ months, targetPerWeek = 3, onEditTarget }: MonthGrid
           </span>
         )}
       </div>
+      )}
 
       <div className="stack" style={{ gap: 4 }}>
         {rows.map((m) => {

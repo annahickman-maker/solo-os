@@ -6,9 +6,15 @@ import { VideoDetail } from '../components/VideoDetail';
 import { YearGrid } from '../components/YearGrid';
 import { AvatarToggle } from '../components/AvatarToggle';
 import { BrainstormButton } from '../components/BrainstormButton';
-import { FocusCtaEditor } from '../components/FocusCtaEditor';
+import { ArchivedVideos } from '../components/ArchivedVideos';
+import { FilterTabs } from '../components/FilterTabs';
+import { PageTabs } from '../components/PageTabs';
+import { SectionHeading } from '../components/SectionHeading';
+import { ConnectAppCard } from '../components/ConnectAppCard';
+import { YouTubeAnalytics } from '../components/YouTubeAnalytics';
 import { formatRelative } from '../lib/format';
-import { Instagram, BankPicker, IG_CSS, Stat } from './Instagram';
+import { ghostButtonStyle, solidButtonStyle, filledPillStyle } from '../lib/ui';
+import { Instagram, BankPicker, IG_CSS, CtaPopup, TargetPopup } from './Instagram';
 import type { BankItem } from '../api';
 
 const STAGES: { status: VideoStatus; label: string }[] = [
@@ -27,7 +33,7 @@ export function Content() {
   const qc = useQueryClient();
   const [openId, setOpenId] = useState<string | null>(null);
   const [tab, setTab] = useState<'youtube' | 'instagram'>('youtube');
-  const { data, isLoading, error } = useQuery<PipelineResponse>({
+  const { data, error } = useQuery<PipelineResponse>({
     queryKey: ['pipeline', false],
     queryFn: () => api.pipeline(false),
   });
@@ -40,6 +46,11 @@ export function Content() {
   // YT add-bar state: text draft + bank picker overlay.
   const [ytIdeaDraft, setYtIdeaDraft] = useState('');
   const [ytBankOpen, setYtBankOpen] = useState(false);
+  const [ytCtaOpen, setYtCtaOpen] = useState(false);
+  const [ytTargetOpen, setYtTargetOpen] = useState(false);
+  // Stage filter for the YouTube cards ('all' shows every stage). Published is
+  // the archive at the bottom - not part of the filter.
+  const [ytFilter, setYtFilter] = useState<string>('all');
   const addYtFromBank = useMutation({
     mutationFn: (bi: BankItem) => {
       // A bank item is a quote/story snippet, not a video idea. We seed a
@@ -70,22 +81,6 @@ export function Content() {
   const igActiveCount =
     (igData?.counts?.queued ?? 0) + (igData?.counts?.filmed ?? 0) + (igData?.counts?.posted ?? 0);
 
-  const updateSettings = useMutation({
-    mutationFn: (body: { youtube_target_per_weeks?: number }) => api.updateSettings(body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
-  });
-
-  function editPublishingTarget() {
-    const current = settings?.youtube_target_per_weeks ?? 1;
-    const v = window.prompt(
-      'how often do you want to publish?\n\nenter the number of weeks between videos (1 = weekly, 2 = every 2 weeks):',
-      String(current)
-    );
-    if (!v) return;
-    const n = parseInt(v, 10);
-    if (!Number.isFinite(n) || n < 1 || n > 12) return;
-    updateSettings.mutate({ youtube_target_per_weeks: n });
-  }
 
   const updateStatus = useMutation({
     mutationFn: (vars: { id: string; status: VideoStatus }) =>
@@ -112,44 +107,28 @@ export function Content() {
 
   // Move a video between the queue and this-week buckets without changing its
   // script status. Lets a scripted video sit in the queue until she's ready to film.
-  const updateQueued = useMutation({
-    mutationFn: (vars: { id: string; queued: boolean }) =>
-      api.updateVideo(vars.id, { queued: vars.queued }),
-    onMutate: async (vars) => {
-      await qc.cancelQueries({ queryKey: ['pipeline'] });
-      const prev = qc.getQueryData<PipelineResponse>(['pipeline']);
-      if (prev) {
-        const next: PipelineResponse = {
-          ...prev,
-          videos: prev.videos.map((v) =>
-            v.id === vars.id ? { ...v, queued: vars.queued ? 1 : 0 } : v
-          ),
-        };
-        qc.setQueryData(['pipeline'], next);
-      }
-      return { prev };
-    },
-    onError: (_e, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData(['pipeline'], ctx.prev);
-    },
-    onSettled: () => qc.invalidateQueries({ queryKey: ['pipeline'] }),
-  });
-
   if (error) {
     return <div className="empty">couldn't load pipeline: {(error as Error).message}</div>;
   }
 
   const videos = data?.videos ?? [];
 
-  // Bucket rules:
-  //   published bucket: status='published'
-  //   ideas bucket:    queued=1 OR status='idea' (scripted-but-parked sits here)
-  //   working bucket:  everything else (scripted/filmed/editing currently active)
-  const isQueued = (v: Video) => v.queued === 1 || v.status === 'idea';
-  const working = videos
-    .filter((v) => v.status !== 'published' && !isQueued(v))
-    .sort((a, b) => (a.queue_order ?? 999) - (b.queue_order ?? 999));
-  const ideas = videos.filter((v) => v.status !== 'published' && isQueued(v));
+  // Categorise PURELY by status so a card moves to the right lane the moment its
+  // stage changes (the stage bar / drag both just set status). The legacy
+  // `queued` flag is no longer used for lane placement.
+  const ideas = videos.filter((v) => v.status === 'idea');
+  const scriptingCards = videos.filter((v) => v.status === 'scripted');
+  const filmingCards = videos.filter((v) => v.status === 'filmed');
+  const packagingCards = videos.filter((v) => v.status === 'editing');
+  const ytActive = ideas.length + scriptingCards.length + filmingCards.length + packagingCards.length;
+  // Lane display order (top -> bottom): furthest-along first, ideas last. Empty
+  // lanes are hidden. (The filter row keeps its own pipeline order.)
+  const ytStages: { key: VideoStatus; label: string; cards: Video[] }[] = [
+    { key: 'editing', label: 'packaging', cards: packagingCards },
+    { key: 'filmed', label: 'filming', cards: filmingCards },
+    { key: 'scripted', label: 'scripting', cards: scriptingCards },
+    { key: 'idea', label: 'ideas', cards: ideas },
+  ];
   const [sortBy, setSortBy] = useState<'date' | 'views' | 'ctr' | 'sub_rate' | 'conversion'>('date');
   const published = videos
     .filter((v) => v.status === 'published')
@@ -164,180 +143,114 @@ export function Content() {
       }
     });
 
-  function handleDrop(target: 'working' | 'ideas', e: React.DragEvent) {
+  function handleDropStage(stage: VideoStatus, e: React.DragEvent) {
     e.preventDefault();
     const id = e.dataTransfer.getData('text/plain');
     if (!id) return;
     const video = videos.find((v) => v.id === id);
-    if (!video) return;
-    if (target === 'ideas') {
-      // Park in queue. Status stays as-is so a scripted video stays scripted -
-      // it just lives in the queue instead of this-week.
-      if (video.queued !== 1) updateQueued.mutate({ id, queued: true });
-    } else {
-      // Promote to this-week. If it was a raw idea, also bump status to scripted.
-      if (video.queued === 1) updateQueued.mutate({ id, queued: false });
-      if (video.status === 'idea') updateStatus.mutate({ id, status: 'scripted' });
-    }
+    if (!video || video.status === stage) return;
+    // Lanes are status-based, so dropping just sets the status.
+    updateStatus.mutate({ id, status: stage });
   }
 
   return (
-    <div className="stack" style={{ gap: 'var(--space-8)' }}>
+    <div className="stack" style={{ gap: 'var(--space-6)' }}>
       {/* The IG page's CSS block (ig-add-row, ig-idea-input, ig-pill*,
           ig-pick-card*, etc.) lives in IG_CSS. We re-inject it here so the
           YouTube tab's add-bar + bank picker get the same styling as IG. */}
       <style>{IG_CSS}</style>
 
-      {/* Page title on the left, avatar trigger on the right. Avatar lives
-          here (not inside either tab) so "who this is for" is visible from
-          either YT or IG view - it's upstream of both channels. */}
-      <header
-        className="page-header"
-        style={{
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          gap: 'var(--space-4)',
-          flexWrap: 'wrap',
-        }}
-      >
-        <div>
-          <span className="eyebrow">content</span>
-          <h1 className="h2">youtube + instagram</h1>
-        </div>
-        <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
-          <BrainstormButton />
-          <AvatarToggle />
-        </div>
-      </header>
+      {/* YouTube / Instagram file-folder page-tabs on the left, brainstorm +
+          avatar on the right, with a full-width hairline beneath. The avatar
+          lives here (not inside either tab) so "who this is for" is visible from
+          either channel view - it's upstream of both. No page title - the tabs
+          are the header. */}
+      <PageTabs
+        value={tab}
+        onChange={(v) => setTab(v as 'youtube' | 'instagram')}
+        ariaLabel="content channel"
+        options={[
+          { value: 'youtube', label: 'youtube', count: ytActive + published.length },
+          { value: 'instagram', label: 'instagram', count: igActiveCount },
+        ]}
+        rightActions={
+          <>
+            <BrainstormButton />
+            <AvatarToggle />
+          </>
+        }
+      />
 
-      <div
-        style={{
-          display: 'inline-flex',
-          border: '1px solid var(--hairline)',
-          borderRadius: 'var(--radius-pill)',
-          padding: 4,
-          alignSelf: 'flex-start',
-        }}
-      >
-        {(['youtube', 'instagram'] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            style={{
-              border: 'none',
-              padding: '8px 20px',
-              borderRadius: 'var(--radius-pill)',
-              cursor: 'pointer',
-              background: tab === t ? 'var(--ink)' : 'transparent',
-              color: tab === t ? 'var(--bg)' : 'var(--muted)',
-              fontSize: 'var(--body-sm)',
-              fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: '0.12em',
-              transition: 'background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out)',
-            }}
-          >
-            {t}
-            {t === 'youtube' && (
-              <span style={{ marginLeft: 8, opacity: 0.7, fontVariantNumeric: 'tabular-nums' }}>
-                {working.length + ideas.length + published.length}
-              </span>
-            )}
-            {t === 'instagram' && (
-              <span style={{ marginLeft: 8, opacity: 0.7, fontVariantNumeric: 'tabular-nums' }}>
-                {igActiveCount}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      {/* Shows only while YouTube analytics isn't connected; self-hides once live. */}
+      {tab === 'youtube' && <ConnectAppCard app="youtube" />}
 
-      {tab === 'youtube' && data?.weekly_publish_year && (
-        <div
-          style={{
-            background: 'var(--surface)',
-            borderRadius: 'var(--radius-lg)',
-            padding: 'var(--space-5)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--space-4)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
-            <div>
-              <span className="eyebrow" style={{ color: 'var(--strain)' }}>publishing year</span>
-              <h3 className="h3" style={{ marginTop: 4 }}>your content output</h3>
+      {tab === 'youtube' && data?.weekly_publish_year && (() => {
+        const ytPublished = data.weekly_publish_year.filter((v) => typeof v === 'number' && v > 0).length;
+        const ytPerWeeks = settings?.youtube_target_per_weeks ?? 1;
+        const ytTargetLabel = ytPerWeeks <= 1
+          ? 'target: 1 per week'
+          : ytPerWeeks === 2 ? 'target: 1 every 2 weeks' : `target: 1 every ${ytPerWeeks} weeks`;
+        const ytCtaSet = !!(settings?.youtube_cta_text ?? '').trim();
+        return (
+          <div className="stack" style={{ gap: 'var(--space-4)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
+              <div>
+                <span className="eyebrow">your content output</span>
+                <div className="muted" style={{ fontSize: 'var(--body-sm)', marginTop: 2 }}>
+                  {ytPublished} {ytPublished === 1 ? 'week' : 'weeks'} you posted this year
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setYtCtaOpen(true)}
+                  title="set the call-to-action the description generator points viewers to"
+                  style={ytCtaSet ? filledPillStyle : ghostButtonStyle}
+                >
+                  {ytCtaSet ? 'CTA' : 'add CTA'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setYtTargetOpen(true)}
+                  title="set how often you publish"
+                  style={filledPillStyle}
+                >
+                  {ytTargetLabel}
+                </button>
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center' }}>
-              {data?.youtube_last_sync && (
-                <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-                  synced {formatRelative(data.youtube_last_sync)}
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => syncYT.mutate()}
-                disabled={syncYT.isPending}
-                className="btn"
-                style={{ fontSize: 'var(--body-sm)' }}
-              >
-                {syncYT.isPending ? 'syncing youtube' : 'sync from youtube'}
-              </button>
+            <div className="card" style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+              {/* Sync lives inside the tracking-squares card. */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                {data?.youtube_last_sync && (
+                  <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>synced {formatRelative(data.youtube_last_sync)}</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => syncYT.mutate()}
+                  disabled={syncYT.isPending}
+                  style={ghostButtonStyle}
+                >
+                  {syncYT.isPending ? 'syncing youtube' : 'sync from youtube'}
+                </button>
+              </div>
+              <YearGrid data={data.weekly_publish_year} targetPerWeeks={ytPerWeeks} showSummary={false} />
             </div>
+            {syncYT.isError && (
+              <span style={{ color: 'var(--danger)', fontSize: 'var(--body-sm)' }}>{(syncYT.error as Error).message}</span>
+            )}
           </div>
-          <YearGrid
-            data={data.weekly_publish_year}
-            targetPerWeeks={settings?.youtube_target_per_weeks ?? 1}
-            onEditTarget={editPublishingTarget}
-          />
-          {syncYT.isError && (
-            <span style={{ color: 'var(--danger)', fontSize: 'var(--body-sm)' }}>
-              {(syncYT.error as Error).message}
-            </span>
-          )}
-        </div>
-      )}
+        );
+      })()}
 
       {tab === 'youtube' && (
-        // Pull tight under the output card so CTA reads as part of "what
-        // you're publishing → where it points to" instead of a standalone
-        // block. The bottom margin adds visual separation so "this week"
-        // below doesn't feel glued to the CTA.
-        <div style={{ marginTop: 'calc(-1 * var(--space-7))', marginBottom: 'var(--space-5)' }}>
-          <FocusCtaEditor channel="youtube" />
-        </div>
-      )}
-
-      {tab === 'youtube' && (
-        // YT queue title block + add-row act as one block to mirror the
-        // IG "your Instagram queue" pattern. Title on top with the same
-        // three-bucket stat strip (cue / this week / published), add-row
-        // directly under it.
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
-          <header className="ig-page-head" style={{ marginBottom: 0 }}>
-            <div>
-              <h1 className="h2">your YouTube queue</h1>
-              <p className="ig-page-sub">
-                ideas in the cue, drafts in progress, and videos that have shipped.
-              </p>
-            </div>
-            <div className="ig-stat-strip">
-              <Stat label="in cue" value={ideas.length} color="var(--recovery)" />
-              <Stat label="this week" value={working.length} color="var(--sleep)" />
-              <Stat label="published" value={published.length} color="var(--muted-2)" />
-            </div>
-          </header>
-
-          {/* Add-bar - mirrors the IG add-row pattern (text input +
-              "add from bank"). Replaces the old "+ add idea" button that
-              used to live inside the video-cue section header. */}
-          <div className="ig-add-row" style={{ marginBottom: 0 }}>
+        // Add-row, mirroring the IG pattern: bare-underline idea input + "add
+        // idea" (ghost -> green when typing) + "add from bank" (cream solid).
+        <div className="ig-add-row" style={{ marginBottom: 0 }}>
           <div className="ig-idea-input" style={{ marginBottom: 0 }}>
             <input
               type="text"
-              placeholder="add a video idea… (e.g. 'how I built a $5k OS in one week')"
+              placeholder="add a video idea..."
               value={ytIdeaDraft}
               onChange={(e) => setYtIdeaDraft(e.target.value)}
               onKeyDown={(e) => {
@@ -350,153 +263,102 @@ export function Content() {
             />
             <button
               type="button"
-              className="rep-btn rep-btn--primary"
               onClick={() => {
                 if (ytIdeaDraft.trim()) {
                   createIdea.mutate(ytIdeaDraft.trim());
                   setYtIdeaDraft('');
                 }
               }}
-              disabled={createIdea.isPending || !ytIdeaDraft.trim()}
-              style={{ ['--dim-c' as any]: 'var(--recovery)' }}
+              disabled={createIdea.isPending}
+              style={
+                ytIdeaDraft.trim()
+                  ? { ...ghostButtonStyle, background: 'var(--accent)', color: 'var(--bg)', border: '1px solid var(--accent)' }
+                  : ghostButtonStyle
+              }
             >
               {createIdea.isPending ? '...' : 'add idea'}
             </button>
           </div>
           <button
             type="button"
-            className="rep-btn rep-btn--ghost ig-add-row__bank"
+            className="ig-add-row__bank"
             onClick={() => setYtBankOpen(true)}
+            style={solidButtonStyle}
           >
             + add from bank
           </button>
         </div>
-        </div>
       )}
 
+      {/* Stage filter (mirrors Instagram). Published is the archive at the
+          bottom - not a filter option. 'all' shows every stage lane. */}
       {tab === 'youtube' && (
-      <section
-        className="section"
-        style={{ marginTop: 0 }}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => handleDrop('working', e)}
-      >
-        <header className="section__header">
-          <div className="section__title">
-            <span className="eyebrow">this week</span>
-            <h3 className="h3">content to be filmed this week</h3>
-          </div>
-          <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-            drag down to park as an idea
-          </span>
-        </header>
-        {isLoading ? (
-          <div className="empty">loading</div>
-        ) : working.length === 0 ? (
-          <div
-            className="empty"
-            style={{
-              padding: 'var(--space-7)',
-              border: '1.5px dashed var(--hairline)',
-              borderRadius: 'var(--radius-lg)',
-            }}
+        <FilterTabs
+          value={ytFilter}
+          onChange={setYtFilter}
+          ariaLabel="filter videos by stage"
+          options={[
+            { value: 'all', label: 'all', count: ytActive },
+            { value: 'idea', label: 'ideas', count: ideas.length },
+            { value: 'scripted', label: 'scripting', count: scriptingCards.length },
+            { value: 'filmed', label: 'filming', count: filmingCards.length },
+            { value: 'editing', label: 'packaging', count: packagingCards.length },
+          ]}
+        />
+      )}
+
+      {tab === 'youtube' && ytStages.map((stage) => (
+        // Empty lanes are hidden entirely.
+        (stage.cards.length > 0 && (ytFilter === 'all' || ytFilter === stage.key)) && (
+          <section
+            key={stage.key}
+            className="section"
+            style={{ marginTop: 0 }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => handleDropStage(stage.key, e)}
           >
-            drag an idea here to start work
-          </div>
-        ) : (
-          <div className="video-grid">
-            {working.map((v) => (
-              <VideoCard
-                key={v.id}
-                video={v}
-                onSetStage={(status) => updateStatus.mutate({ id: v.id, status })}
-                onOpen={() => setOpenId(v.id)}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-      )}
+            <div style={{ marginBottom: 'var(--space-5)' }}>
+              <SectionHeading label={stage.label} count={stage.cards.length} />
+            </div>
+            <div className="video-grid">
+              {stage.cards.map((v) => (
+                <VideoCard
+                  key={v.id}
+                  video={v}
+                  onSetStage={(status) => updateStatus.mutate({ id: v.id, status })}
+                  onOpen={() => setOpenId(v.id)}
+                />
+              ))}
+            </div>
+          </section>
+        )
+      ))}
 
-      {tab === 'youtube' && (
-      <section
-        className="section"
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => handleDrop('ideas', e)}
-        // Pull tight under "this week" so the queue + this-week read as one
-        // section (drag-to-park flow lives between them).
-        style={{ marginTop: 'calc(-1 * var(--space-6))' }}
-      >
-        <header className="section__header">
-          <div className="section__title">
-            <span className="eyebrow">video cue</span>
-            <h3 className="h3">
-              {ideas.length === 0
-                ? 'cue is empty'
-                : `${ideas.length} in the cue`}
-            </h3>
-          </div>
-          <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
-            <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-              grey bar = idea, green bar = scripted
-            </span>
-          </div>
-        </header>
-        {ideas.length === 0 ? (
-          <div className="empty">drag a video down here to park it in the cue</div>
-        ) : (
-          <div className="video-grid">
-            {ideas.map((v) => (
-              <VideoCard
-                key={v.id}
-                video={v}
-                onSetStage={(status) => updateStatus.mutate({ id: v.id, status })}
-                onOpen={() => setOpenId(v.id)}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-      )}
+      {/* Analytics: import the Studio CSV + run the analysis skill, and show top
+          content per monitored metric. Sits between the pipeline and the archive. */}
+      {tab === 'youtube' && published.length > 0 && <YouTubeAnalytics published={published} />}
 
       {tab === 'youtube' && published.length > 0 && (
-        <section className="section">
-          <header className="section__header">
-            <div className="section__title">
-              <span className="eyebrow">published</span>
-              <h3 className="h3">{published.length} video{published.length === 1 ? '' : 's'} live</h3>
-            </div>
-            <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-              click any to expand
-            </span>
-          </header>
-          <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-4)' }}>
-            <span className="eyebrow" style={{ alignSelf: 'center', marginRight: 'var(--space-2)' }}>sort by</span>
-            {([
-              { key: 'date', label: 'recent' },
-              { key: 'views', label: 'views' },
-              { key: 'ctr', label: 'ctr' },
-              { key: 'sub_rate', label: 'sub rate' },
-              { key: 'conversion', label: 'conversion' },
-            ] as const).map((opt) => {
-              const active = sortBy === opt.key;
-              return (
-                <button
-                  key={opt.key}
-                  type="button"
-                  onClick={() => setSortBy(opt.key)}
-                  className="btn"
-                  style={{
-                    fontSize: 'var(--body-sm)',
-                    background: active ? 'var(--ink)' : 'transparent',
-                    color: active ? 'var(--bg)' : 'var(--muted)',
-                    borderColor: active ? 'var(--ink)' : 'var(--hairline)',
-                  }}
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
+        // Extra top gap so the published archive reads as clearly separate from
+        // the active pipeline above it.
+        <section className="section" style={{ marginTop: 'var(--space-7)' }}>
+          <div style={{ marginBottom: 'var(--space-5)' }}>
+            <SectionHeading label="published" count={published.length} />
+          </div>
+          <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-4)', alignItems: 'center' }}>
+            <span className="eyebrow" style={{ marginRight: 'var(--space-2)' }}>sort by</span>
+            <FilterTabs
+              value={sortBy}
+              onChange={(v) => setSortBy(v as typeof sortBy)}
+              ariaLabel="sort published videos"
+              options={[
+                { value: 'date', label: 'recent' },
+                { value: 'views', label: 'views' },
+                { value: 'ctr', label: 'ctr' },
+                { value: 'sub_rate', label: 'sub rate' },
+                { value: 'conversion', label: 'conversion' },
+              ]}
+            />
           </div>
           <div className="stack">
             {published.map((v) => (
@@ -505,6 +367,8 @@ export function Content() {
           </div>
         </section>
       )}
+
+      {tab === 'youtube' && <ArchivedVideos />}
 
       {tab === 'instagram' && <Instagram />}
 
@@ -532,6 +396,9 @@ export function Content() {
           display: flex;
           flex-direction: column;
           gap: var(--space-3);
+          /* Resting soft lift (SURFACE_LIFT / Rule 2) so the card reads against
+             the canvas in light mode; hover deepens it. */
+          box-shadow: 0 1px 3px rgba(15, 15, 15, 0.06), 0 4px 12px -2px rgba(15, 15, 15, 0.07);
           transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s;
           position: relative;
         }
@@ -597,6 +464,8 @@ export function Content() {
           pending={addYtFromBank.isPending}
         />
       )}
+      {ytCtaOpen && <CtaPopup channel="youtube" onClose={() => setYtCtaOpen(false)} />}
+      {ytTargetOpen && <TargetPopup channel="youtube" current={settings?.youtube_target_per_weeks ?? 1} onClose={() => setYtTargetOpen(false)} />}
     </div>
   );
 }

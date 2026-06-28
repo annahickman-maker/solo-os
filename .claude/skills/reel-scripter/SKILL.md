@@ -1,20 +1,34 @@
 ---
 name: reel-scripter
-description: Find clippable moments inside the creator's existing video transcripts and produce a reel editing brief - timestamp range, verbatim spoken line (locked as-is), on-screen text overlay per beat, b-roll suggestions, caption, hashtags. Does NOT invent new spoken lines; the spoken track is the existing footage the creator already shot. Use when the user wants to repurpose published YouTube videos as Instagram reels, extract reel clips from any existing video transcript, or convert long-form video into vertical 9:16 reel briefs. Reads brand context files first and pauses for human approval on clip selection before writing the full brief.
+description: 'Find clippable moments inside your existing video transcripts. First it writes each clip out as its verbatim script (one paragraph each), then for any clip you pick one of two directions: clip-as-is (an editing brief - on-screen text, b-roll, caption, hashtags - over the footage you already shot) or seed-idea (rewritten into a cohesive, Instagram-ready post in your voice). Clip-as-is never invents spoken lines; the spoken track is the footage you already shot. Use when the user wants to repurpose published videos as Instagram reels or pull reel clips from any existing transcript. Reads brand context first and pauses for clip selection before writing.'
+title: Reel Clipper
+card: Find clippable moments from your transcripts and edit into reels
+category: Create
+inputs:
+  - type: transcript
+    multiple: true
+outputs:
+  - type: content
+    description: reel editing briefs or Instagram-ready posts
+schedule:
+  trigger: event
+  event: transcript-uploaded
+  output: a task in your inbox to clip reels from the new transcript
+  enabled: true
 ---
 
-# Reel Scripter
+# Reel Clipper
 
-Turn existing video transcripts into shoot-ready Instagram Reel briefs. The video already exists - this skill writes the editing instructions.
+Turn existing video transcripts into Instagram reels. The video already exists. First surface the clippable moments as verbatim scripts; then, per clip, the user picks one of two directions.
 
 ## Required vault data
 
-The skill ERRORS OUT and names the missing file if any of these are absent:
+The skill ERRORS OUT and names the missing file if any are absent:
 
-- `03_Projects/instagram/instagram-context.md` - the IG-specific positioning, audience, CTAs, voice deltas, hard nos, hashtag pool
+- `03_Projects/instagram/instagram-context.md` - IG positioning, audience, CTAs, voice deltas, hard nos, hashtag pool
 - `01_Core/core_voice-style.md` - master voice rules
-- `01_Core/core_audience.md` - master audience persona
-- `../content-extractor/frameworks.md` - shared reference for caption skeleton, voice anti-patterns, on-screen text patterns (only sections 4, 5, 6 are relevant to reels)
+- `01_Core/core_audience.md` - master persona
+- `../content-extractor/frameworks.md` - shared reference for the caption skeleton, voice anti-patterns, and on-screen text patterns (sections 4, 5, 6)
 
 Also ERRORS OUT if `instagram-context.md` still contains any `<FILL IN>` placeholders.
 
@@ -25,90 +39,108 @@ Also ERRORS OUT if `instagram-context.md` still contains any `<FILL IN>` placeho
 /reel-scripter 05_Assets/Transcripts/positioning-myth.md --section "around the niche example"
 ```
 
-Input is a transcript that maps to actual published video footage. The transcript MUST contain enough specificity (verbatim phrasing, ideally timestamps) for clip selection to be accurate.
+The transcript must map to actual published footage and carry enough specificity (verbatim phrasing, ideally timestamps) for accurate clip selection.
 
 ## Workflow
 
 ### Step 1 - Load context
 
-Read instagram-context.md, core_voice-style.md, core_audience.md. Hold the IG context as the strictest constraint.
+Read instagram-context.md, core_voice-style.md, core_audience.md, and frameworks.md (sections 4-6). Hold the IG context as the strictest constraint.
 
 ### Step 2 - Read the transcript
 
-Load the full transcript. Note whether it has timestamps. If no timestamps, use line numbers or surrounding-line excerpts to locate clips - tell the user the brief will reference "rough location" rather than precise timestamps.
+Load it fully. Note whether it has timestamps. If not, locate clips by line or surrounding excerpt and tell the user the brief will reference "rough location."
 
-### Step 3 - Scan for clippable moments
+### Step 3 - Find clippable moments
 
-A clippable moment is a self-contained beat that:
+A clippable moment opens on a strong verbatim hook, resolves in 20-90s of spoken material, stands alone without earlier setup, and has one clear takeaway. Use the scoring heuristic in REFERENCE.md. Bias toward fewer, stronger clips.
 
-- Opens with a verbatim line that works as a stop-scrolling hook (contrarian, specific number, question, result-first claim)
-- Resolves within 20-60 seconds of spoken material (rough heuristic: 50-150 words spoken at conversational pace)
-- Stands alone without setup from earlier in the video
-- Has a clear single takeaway
+### Step 4 - FIRST MESSAGE: write each clip out as its verbatim script
 
-Find 3-7 candidates. Score them subjectively for: hook strength, standalone clarity, alignment with the IG content pillars in instagram-context.md.
-
-### Step 4 - CHECKPOINT: Present candidates
-
-Present a numbered list. STOP and WAIT for the user to pick.
+This is the first thing the user sees after selecting the transcript. For every clip, write the spoken content out as a paragraph, VERBATIM from the transcript (stitch the lines as spoken; trim only filler like "um", marking any cut with [...]). No table, no editing notes yet - just the script.
 
 ```
-1. Clip: <one-line summary>
-   Verbatim hook (0-3s): "<exact line from transcript>"
-   Location: <timestamp range OR rough position>
-   Estimated length: <Xs>
-   Why it works: <one-line reasoning>
-   Pillar: <which IG content pillar from instagram-context.md>
+Here are the clips I'd pull from this video - each is the verbatim script, written out:
 
-2. ...
+1. <short label>  (~<Xs>, around <location>)
+"<verbatim paragraph - the exact spoken lines for this clip>"
+
+2. <short label> ...
 ```
 
-Ask: "Which clip(s) do you want a full brief for?"
+Then offer the two directions and STOP:
 
-If the user wants more candidates or wants you to look in a specific section, re-scan and repeat the checkpoint.
+> Pick a clip and a direction:
+> 1. Clip as is - I write the editing brief (on-screen text, b-roll, caption, hashtags) to cut the footage you already shot.
+> 2. Seed idea - I rewrite it into a cohesive, Instagram-ready post in your voice (fresh copy, not locked to the verbatim).
 
-### Step 5 - Write the editing brief
+Wait for the pick. Do not proceed without it.
 
-For each approved clip:
+### Step 5 - Direction 1: Clip as is (editing brief)
 
-1. Generate a slug: kebab-case, max 5 words, from the hook line.
-2. Create folder: `03_Projects/instagram/<YYYY-MM-DD>-<slug>/`
-3. Write `reel-script.md` matching the format in REFERENCE.md.
-4. Copy the relevant transcript excerpt to `source-excerpt.md` in the same folder.
+Write the brief readably - NO table. Follow the reel-script.md format in REFERENCE.md:
 
-Critical rules for the brief:
+- **Script** - the verbatim paragraph, broken into its natural beats with a rough timecode in plain text before each line. The spoken line is LOCKED - never paraphrase. Mark any trim with [...].
+- **On-screen text** - a short list of overlay suggestions tied to moments. Each <= 8 words, reinforces but never duplicates the spoken line.
+- **B-roll / shots** - a short list of shot suggestions.
+- **CTA card** - the closing payoff line (verbatim, if any) plus an on-screen CTA card added in edit, using the main CTA from instagram-context.md.
+- **Caption + hashtags** - caption follows frameworks.md Part 4; 8-15 hashtags from instagram-context.md in their own block.
+- **Specs** - target length, pacing, original audio (the voice is the value), 9:16.
 
-- **The Hook section uses the verbatim spoken line.** Do not paraphrase. If the line needs trimming (e.g. removing an "um"), mark the edit explicitly in square brackets.
-- **The Beats table has no "spoken line" column you can write.** The spoken track is whatever's in the existing video. The columns are: location/timestamp, what the creator said (verbatim quote from transcript), on-screen text overlay (NEW, written for the eye), b-roll cue (optional).
-- **On-screen text is YOURS to write.** Punchy, short, ≤ 8 words per overlay. Reinforces but doesn't duplicate the spoken line.
-- **CTA / payoff section** is the closing beat. If the video closes naturally on a payoff line, identify it. Then add a separate on-screen CTA card at the end (e.g. "More on Solopreneur Systems → link in bio") - this is added in editing, not spoken.
-- **Specs section** lists target length, pacing notes, audio style (trending vs original - reels usually keep the creator's original audio because the spoken track is the value), aspect ratio 9:16.
-- **Caption** follows the 7-part skeleton in `../content-extractor/frameworks.md` Part 4. The caption complements the verbatim spoken hook - it doesn't repeat it.
-- **On-screen text** patterns drawn from `frameworks.md` Part 6 (hook patterns) and the on-screen text guidance in `reel-scripter/REFERENCE.md`. Both: tight, ≤ 8 words, never duplicates the spoken line.
-- **Hashtags** drawn from the pool in instagram-context.md, 8-15 tags.
-- **Every line written by this skill** (on-screen text, caption, hashtags) passes the voice anti-patterns kill list in `frameworks.md` Part 5.
+Then **queue it to Instagram** (see "Queue to Instagram" below) with `status: "filmed"` so it lands in the **ready to edit** lane - the footage already exists. Keep the saved item minimal and the SAME shape as everything else in the queue: put the verbatim script (broken into beats, one beat per line) in `script`, the timestamped moments in `source_moments`, and the hook label in `title`. Do NOT save the on-screen-text / b-roll / CTA / specs into the item - the ready-to-edit card shows only the script and the source moments. Set `source_transcript_filename`.
 
-### Step 6 - Report
+### Step 5b - Direction 2: Seed idea (Instagram rewrite)
 
-End the run with:
+Treat the clip as a seed. REWRITE it into a cohesive, ready-to-post Instagram piece in the user's voice - this direction is NOT verbatim-locked. Follow the reel-seed.md format in REFERENCE.md:
 
+- The rewritten piece - a tight talking-head script or a written post, whichever fits, cohesive start to finish and ready to record or publish.
+- Caption + hashtags (same caption skeleton + hashtag pool rules).
+
+Every line passes the voice anti-patterns kill list in frameworks.md Part 5.
+
+Then **queue it to Instagram** (see "Queue to Instagram" below) with `status: "queued"` so it lands in the **ready to film** lane - it needs recording. Put the rewritten script (beats one per line) in `script`, the original verbatim line in `original_quote`, the timestamped moments in `source_moments`, and set `source_transcript_filename`.
+
+### Step 6 - Queue to Instagram
+
+Both directions queue into the Instagram queue at `00_System/instagram-queue.json` (a JSON array the dashboard reads). To queue an item:
+
+1. Read the file and read ONE existing entry to match its exact shape.
+2. Append a new entry, then write the array back (never overwrite existing entries):
+
+```json
+{
+  "id": "ig-reel-<unix-seconds>-<4 random chars>",
+  "text": "<short label / the hook line>",
+  "title": "<short label, the hook>",
+  "tag": "value | connection | pov | authority",
+  "kind": "story",
+  "status": "queued (seed idea -> ready to film) | filmed (clip as is -> ready to edit)",
+  "reel_origin": "clip (clip as is) | film (seed idea)",
+  "queued_at": <unix-seconds>,
+  "source_transcript_id": "<transcript id if known>",
+  "source_transcript_filename": "<transcript filename, so the video is easy to find>",
+  "source_moments": [{ "timestamp": "mm:ss", "text": "<verbatim phrase to find in the footage>" }],
+  "script": "<the editable script, beats separated by line breaks>",
+  "original_quote": "<seed idea only: the verbatim seed line>"
+}
 ```
-Wrote N reel briefs:
-- 03_Projects/instagram/2026-06-01-niche-myth/reel-script.md
-- 03_Projects/instagram/2026-06-01-niche-myth/source-excerpt.md
-- ...
-```
+
+Same shape for both directions: `script` + `source_moments` (+ `original_quote` for seeds). No `edit_plan` or other fields. Use `date +%s` for the timestamp.
+
+### Step 7 - Report
+
+End by confirming what you queued and to which lane (ready to film / ready to edit), with the source transcript filename.
 
 ## Hard rules
 
-- No em dashes anywhere. Hyphens only.
-- NEVER invent or paraphrase a spoken line. The spoken track is what's already on tape.
-- If a candidate clip's verbatim hook is weak, do NOT rewrite it - either present a different clip or tell the user this transcript doesn't have a strong reel in this section.
-- On-screen text and caption are freshly written for IG and follow the creator's voice.
+- No beats table. Always write the script out as paragraphs / plain-text beats.
+- No em dashes. Hyphens only.
+- Clip as is: NEVER invent or paraphrase a spoken line - the spoken track is what's on tape. If a clip's verbatim hook is weak, present a different clip or say this section has no strong reel.
+- Seed idea: rewriting is expected - it's a fresh post inspired by the clip, in the user's voice.
+- On-screen text and captions are freshly written for IG.
 - Pull the CTA from instagram-context.md. Never invent.
-- 9:16 aspect ratio. Non-negotiable.
-- Target 30-60s default length (range allowed: 20-90s if the moment demands it).
+- 9:16. Target 30-60s (range 20-90s).
 
 ## Advanced
 
-See `REFERENCE.md` for the exact `reel-script.md` section format, clip-scoring heuristics, and on-screen text patterns.
+See `REFERENCE.md` for the reel-script.md format, the seed-idea format, the clip-scoring heuristic, and on-screen text patterns.

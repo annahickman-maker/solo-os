@@ -106,7 +106,7 @@ const factoryApp = createFileRoute<VideoFrontmatter, VideoResponse>({
     const titleMatch = entry.body.match(/^#\s+(.+?)\s*$/m);
     // Strip the leading title heading so the script body shows just the script.
     // Match the whole first line (including its newline) rather than just `\n?`
-    // — the non-greedy `.+?` was eating only the first character.
+    // - the non-greedy `.+?` was eating only the first character.
     const script = entry.body.replace(/^#\s+[^\n]*\n?/, '').trim();
     // Publish date: tolerate ISO string or number, normalize to unix seconds.
     let publishDate: number | null = null;

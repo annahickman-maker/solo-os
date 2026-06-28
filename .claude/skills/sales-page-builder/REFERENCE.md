@@ -235,7 +235,7 @@ Run before output. Every strip item gets a one-line replacement.
 | "As Seen In: [obscure logos]" | Real media mentions only. If none, omit. |
 | Generic praise testimonials | Tier 1 specific-number, or Tier 2 emotional/transformation as fallback. (See `testimonial-selection`.) |
 | "P.S. - price goes up at midnight!" | If using P.S., make it warm reinforcement. No fake urgency. |
-| Em dashes (—) | Hyphens (-). Global vault rule. |
+| The long dash character | Use a hyphen (-) instead. Global vault rule. |
 | Manipulative emotion ("you'll regret this forever") | Recognition emotion - name the situation, not the threat. (See `emotion-in-copy`.) |
 | "We've all been there" (when reader hasn't) | Only use if reader actually has. Specific not generic. |
 | Pushy CTAs | Genuine, non-pushy. CTAs invite, never close. |
@@ -244,31 +244,23 @@ Run before output. Every strip item gets a one-line replacement.
 
 ## 12. Output Format
 
-```
-PAGE TYPE: [type]   TRAFFIC SOURCE: [source]   GOAL: [one action]
+Keep two things separate.
 
-ABOVE THE FOLD
-Headline / Subheading / Benefits (3-5 bullets) / CTA / Friction reducer
+**The saved sales page file = the page copy ONLY, publish-ready.** It starts at the headline and ends at the sign-off. Do NOT write any of this into the file: a "PAGE TYPE / TRAFFIC SOURCE / GOAL" config block, a "Status" line, "Design Inspo", "Designer Notes", or a "Notes" section, a document title like "<offer> - Sales Page", a "## Copy" wrapper, or an "ABOVE THE FOLD" label. Just the page itself:
 
-4-thing test:
-- What you do / Who it's for / How it makes life better / What to do next
+- Headline
+- Subheading
+- Primary CTA + friction reducer
+- Body sections, each with its own section header and 2-3 paragraphs (lead / story, the reframe, what's included, proof, who-it-is-for, close)
+- Secondary CTAs where they belong
+- P.S. only if warm, never urgency
+- Sign-off
 
-BODY (composes methodology skills as needed)
-- Lead / Story (storytelling-for-conversion)
-- Body sections with subheadings, 2-3 paragraphs each
-- Trust (testimonial-selection)
-- Offer / What's included - "so you can" framing, no value stack
-- Guarantee (if real)
-- Secondary CTA (cta-writing)
-- P.S. (if used): warm reinforcement, no urgency
-
-DESIGNER NOTES: CTA button color / hero image direction / mobile priority
-```
+**The chat reply (not the file)** is where you note the page type + traffic source you chose and any design direction (CTA button color, hero image, mobile priority). Mention those to the user in conversation so the saved page stays clean and ready to paste straight onto a site.
 
 ---
 
 ## 13. Pointer to Existing Assets
 
-- `Product - Web Design OS/03_Workflows/workflow_sales-page-copy.md` - prior workflow, useful to diff against
-- `Product - Web Design OS/02_Frameworks/framework_copy-template-services.md` (Long Form Sales Page section) - quick-reference template
-- `Channel - Main/05_Assets/Transcripts/watch-me-write-a-100000-sales-page-from-scratch-copywriting-tutorial.md` - teaching content (currently a stub)
+- `06_Swipe/sales-pages/` - swiped sales page transcripts to diff against for structure (reference only, never reuse as the user's own copy)
+- The composed skills above are the live source of truth for voice, sections, and SEO: `brand-voice-writing`, `website-sections-cheatsheet`, `seo-aio-optimisation`

@@ -1,6 +1,8 @@
 ---
 name: headline-writing
-description: Write a value-driven, offer-anchored headline that filters for the right reader and rejects the wrong one. Use when writing a sales page headline, video title, email subject line, blog headline, social hook, About page hero, or any moment where a single line has to earn the next scroll. Anti-clever, anti-vague, anti-hype.
+description: 'Write a value-driven, offer-anchored headline that filters for the right reader and rejects the wrong one. Use when writing a sales page headline, video title, email subject line, blog headline, social hook, About page hero, or any moment where a single line has to earn the next scroll. Anti-clever, anti-vague, anti-hype.'
+category: Create
+hidden: true
 ---
 
 # Headline Writing
@@ -9,9 +11,9 @@ A headline's job is not to seduce. It is to **filter**. The right reader leans i
 
 ## Required vault data
 
-- `01_Core/core_offer.md` — the offer being headlined
-- `01_Core/core_audience.md` — who it's for, who it's NOT for
-- `01_Core/core_voice-style.md` — voice patterns, hype words to avoid
+- `01_Core/core_offer.md` - the offer being headlined
+- `01_Core/core_audience.md` - who it's for, who it's NOT for
+- `01_Core/core_voice-style.md` - voice patterns, hype words to avoid
 
 If any are missing, stop and name the missing file.
 
@@ -23,11 +25,11 @@ If yes, the headline isn't filtering. Sharpen it until the wrong person stops.
 
 ## Headline patterns that work for high-ticket / founder-led offers
 
-1. **Identity + pain removal** — "Become a [aspirational identity] without [specific pain point]"
-2. **Specific number + outcome** — "How [specific person] added [specific outcome] in [timeframe]"
-3. **Counter-intuitive truth** — "The hidden reason your [thing] [problem] (and how to fix it)"
-4. **Pre-qualifying question** — direct address to the exact reader you want
-5. **Stakes-led declarative** — "I [outcome] without [common alternative]"
+1. **Identity + pain removal** - "Become a [aspirational identity] without [specific pain point]"
+2. **Specific number + outcome** - "How [specific person] added [specific outcome] in [timeframe]"
+3. **Counter-intuitive truth** - "The hidden reason your [thing] [problem] (and how to fix it)"
+4. **Pre-qualifying question** - direct address to the exact reader you want
+5. **Stakes-led declarative** - "I [outcome] without [common alternative]"
 
 ## Headline patterns that FAIL
 
@@ -58,7 +60,7 @@ Never repeat the headline in different words.
 
 ## Common failure modes
 
-- Trying to be clever — clever loses to clear every time
-- Listing all benefits in the headline — the headline picks ONE
-- Writing for everyone — pick the one reader you want
+- Trying to be clever - clever loses to clear every time
+- Listing all benefits in the headline - the headline picks ONE
+- Writing for everyone - pick the one reader you want
 - Using words your voice never uses (game-changer, transform, unlock, supercharge, 10x)

@@ -6,7 +6,7 @@ Increase visual impact and personality in designs that are too safe, generic, or
 
 Brand: "bolder" means distinctive. Extreme scale, unexpected color, typographic risk, committed POV.
 
-Product: "bolder" rarely means theatrics — those undermine trust. It means stronger hierarchy, clearer weight contrast, one sharper accent, more committed density. The amplification is in clarity, not drama.
+Product: "bolder" rarely means theatrics - those undermine trust. It means stronger hierarchy, clearer weight contrast, one sharper accent, more committed density. The amplification is in clarity, not drama.
 
 ---
 
@@ -57,7 +57,7 @@ Systematically increase impact across these dimensions:
 
 ### Color Intensification
 - **Increase saturation**: Shift to more vibrant, energetic colors (but not neon)
-- **Bold palette**: Introduce unexpected color combinations—avoid the purple-blue gradient AI slop
+- **Bold palette**: Introduce unexpected color combinations-avoid the purple-blue gradient AI slop
 - **Dominant color strategy**: Let one bold color own 60% of the design
 - **Sharp accents**: High-contrast accent colors that pop
 - **Tinted neutrals**: Replace pure grays with tinted grays that harmonize with your palette
@@ -73,7 +73,7 @@ Systematically increase impact across these dimensions:
 ### Visual Effects
 - **Dramatic shadows**: Large, soft shadows for elevation (but not generic drop shadows on rounded rectangles)
 - **Background treatments**: Mesh patterns, noise textures, geometric patterns, intentional gradients (not purple-to-blue)
-- **Texture & depth**: Grain, halftone, duotone, layered elements—NOT glassmorphism (it's overused AI slop)
+- **Texture & depth**: Grain, halftone, duotone, layered elements-NOT glassmorphism (it's overused AI slop)
 - **Borders & frames**: Thick borders, decorative frames, custom shapes (not rounded rectangles with colored border on one side)
 - **Custom elements**: Illustrative elements, custom icons, decorative details that reinforce brand
 
@@ -81,7 +81,7 @@ Systematically increase impact across these dimensions:
 - **Entrance choreography**: Staggered, dramatic page load animations with 50-100ms delays
 - **Scroll effects**: Parallax, reveal animations, scroll-triggered sequences
 - **Micro-interactions**: Satisfying hover effects, click feedback, state changes
-- **Transitions**: Smooth, noticeable transitions using ease-out-quart/quint/expo (not bounce or elastic—they cheapen the effect)
+- **Transitions**: Smooth, noticeable transitions using ease-out-quart/quint/expo (not bounce or elastic-they cheapen the effect)
 
 ### Composition Boldness
 - **Hero moments**: Create clear focal points with dramatic treatment

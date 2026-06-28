@@ -123,27 +123,34 @@ app.get('/:transcriptId', (c) => {
   return c.json({ quotes });
 });
 
+// Run content-quote extraction for a transcript and merge into the bank.
+// Exported so it can fire automatically on upload, not just from the button.
+export async function runContentExtraction(transcriptId: string): Promise<ExtractedQuote[]> {
+  const loaded = loadTranscriptContent(transcriptId);
+  if (!loaded) throw new Error('transcript not found');
+  const fresh = await extractQuotesFromTranscript({
+    transcriptId,
+    transcriptFilename: loaded.filename,
+    transcriptText: loaded.content,
+  });
+  // Merge with bank: keep existing approved/queued/dismissed quotes, replace pending.
+  const bank = readBank(QUOTES_BANK);
+  const others = bank.quotes.filter(
+    (q) => !(q.source_transcript_id === transcriptId && q.status === 'pending')
+  );
+  bank.quotes = [...others, ...fresh];
+  writeBank(QUOTES_BANK, bank);
+  return fresh;
+}
+
 /** POST /api/extracts/:transcriptId/run - kick off extraction */
 app.post('/:transcriptId/run', async (c) => {
   const transcriptId = c.req.param('transcriptId');
-  const loaded = loadTranscriptContent(transcriptId);
-  if (!loaded) return c.json({ error: 'transcript not found' }, 404);
-
   try {
-    const fresh = await extractQuotesFromTranscript({
-      transcriptId,
-      transcriptFilename: loaded.filename,
-      transcriptText: loaded.content,
-    });
-    // Merge with bank: keep existing approved/queued/dismissed status quotes, replace pending
-    const bank = readBank(QUOTES_BANK);
-    const others = bank.quotes.filter(
-      (q) => !(q.source_transcript_id === transcriptId && q.status === 'pending')
-    );
-    bank.quotes = [...others, ...fresh];
-    writeBank(QUOTES_BANK, bank);
+    const fresh = await runContentExtraction(transcriptId);
     return c.json({ quotes: fresh, total: fresh.length });
   } catch (err: any) {
+    if (err?.message === 'transcript not found') return c.json({ error: 'transcript not found' }, 404);
     console.error('extract failed:', err);
     return c.json({ error: err?.message ?? 'extract failed' }, 500);
   }

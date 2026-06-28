@@ -93,10 +93,39 @@ export function loadConfig(): ZoomConfig | null {
         connected_at: typeof parsed.connected_at === 'number' ? parsed.connected_at : Math.floor(Date.now() / 1000),
       };
     }
-    return null;
   } catch {
-    return null;
+    // no dashboard config - fall through to the env-based setup
   }
+  // Fallback: the LaunchAgent-based Zoom workflow keeps its creds in
+  // 00_System/scripts/.zoom-transcript.env. If those are present, Zoom IS
+  // connected even though it was never set up through the dashboard form.
+  return loadEnvConfig();
+}
+
+function loadEnvConfig(): ZoomConfig | null {
+  try {
+    const envPath = abs('00_System', 'scripts', '.zoom-transcript.env');
+    const raw = fs.readFileSync(envPath, 'utf8');
+    const get = (k: string) => {
+      const m = raw.match(new RegExp(`^${k}\\s*=\\s*(.*)$`, 'm'));
+      return m ? m[1].trim().replace(/^["']|["']$/g, '') : '';
+    };
+    const account_id = get('ZOOM_ACCOUNT_ID');
+    const client_id = get('ZOOM_CLIENT_ID');
+    const client_secret = get('ZOOM_CLIENT_SECRET');
+    if (account_id && client_id && client_secret) {
+      let connected_at = Math.floor(Date.now() / 1000);
+      try {
+        connected_at = Math.floor(fs.statSync(envPath).mtimeMs / 1000);
+      } catch {
+        // keep default
+      }
+      return { account_id, client_id, client_secret, connected_at };
+    }
+  } catch {
+    // no env file either
+  }
+  return null;
 }
 
 export function saveConfig(config: Omit<ZoomConfig, 'connected_at'>): ZoomConfig {

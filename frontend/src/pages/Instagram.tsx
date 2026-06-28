@@ -1,10 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, mediaUrl, type BankItem, type BankKind, type IgItemStatus, type IgQueueItem, type QuoteTag } from '../api';
+import { TagChips } from '../components/TagChips';
+import { SectionHeading } from '../components/SectionHeading';
+import { FilterTabs } from '../components/FilterTabs';
+import { solidButtonStyle, ghostButtonStyle, filledPillStyle } from '../lib/ui';
 import { Voice } from './Voice';
 import { MonthGrid } from '../components/MonthGrid';
-import { FocusCtaEditor } from '../components/FocusCtaEditor';
+import { Markdown } from '../lib/Markdown';
 import { DatePickerPopover } from '../components/DatePickerPopover';
+import { CarouselFrame } from '../components/CarouselViewer';
 
 // Map approved bank kinds → IG queue tag values
 const BANK_KIND_TO_TAG: Record<BankKind, QuoteTag> = {
@@ -28,25 +33,20 @@ function tagMeta(tag: string) {
   return TAG_META[tag as QuoteTag] ?? FALLBACK_TAG_META;
 }
 
-const STAGES: { status: IgItemStatus; label: string }[] = [
-  { status: 'queued', label: 'queued' },
-  { status: 'filmed', label: 'filmed' },
-  { status: 'posted', label: 'posted' },
-];
 
-function stageIndex(s: IgItemStatus): number {
-  if (s === 'dismissed' || s === 'failed') return -1;
-  // Map the auto-pipeline statuses onto the 3-dot queued / filmed / posted track:
-  // queued = 0, editing/ready_to_schedule/scheduled/filmed = 1, posted = 2.
-  if (s === 'queued') return 0;
-  if (s === 'posted') return 2;
-  return 1;
-}
 
 export function Instagram() {
   const qc = useQueryClient();
   const [openId, setOpenId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Stage filter for the pipeline lanes ('all' shows every lane). Posted always
+  // shows at the bottom regardless - it's the archive, not part of the filter.
+  const [laneFilter, setLaneFilter] = useState<string>('all');
+  // CTA + target popups (edit the instagram CTA line + link / the weekly target).
+  const [ctaOpen, setCtaOpen] = useState(false);
+  const [targetOpen, setTargetOpen] = useState(false);
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
+  const ctaSet = !!(settings?.instagram_cta_text ?? '').trim();
   const { data, isLoading } = useQuery({
     queryKey: ['ig-queue'],
     queryFn: api.igQueue,
@@ -55,37 +55,15 @@ export function Instagram() {
     queryKey: ['ig-output'],
     queryFn: api.igOutput,
   });
-  const setIgTarget = useMutation({
-    mutationFn: (n: number) => api.setIgTarget(n),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['ig-output'] }),
-  });
-  const { data: syncStatus } = useQuery({
-    queryKey: ['ig-sync-status'],
-    queryFn: api.igSyncStatus,
-  });
-  const syncIg = useMutation({
-    mutationFn: () => api.syncInstagram(),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['ig-output'] });
-      qc.invalidateQueries({ queryKey: ['ig-sync-status'] });
-    },
-  });
-
-  function editIgTarget() {
-    const current = output?.target_per_week ?? 3;
-    const v = window.prompt(
-      'how many reels per week do you want to publish?',
-      String(current),
-    );
-    if (!v) return;
-    const n = parseFloat(v);
-    if (!Number.isFinite(n) || n <= 0) return;
-    setIgTarget.mutate(Math.round(n));
-  }
 
   const createIdea = useMutation({
-    mutationFn: (title: string) => api.createIgIdea({ title }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['ig-queue'] }),
+    // New ideas land in "raw ideas" (unscripted). Creating one opens the panel
+    // so you can script it, then move it to "ready to film".
+    mutationFn: (title: string) => api.createIgIdea({ title, status: 'idea' }),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['ig-queue'] });
+      if (res?.item?.id) setOpenId(res.item.id);
+    },
   });
 
   const addFromBank = useMutation({
@@ -111,15 +89,20 @@ export function Instagram() {
   }, [openId, pickerOpen]);
 
   const items = data?.items ?? [];
-  // Queued lane shows everything that hasn't reached "video dropped" yet:
-  // queued, filmed (legacy), and editing (clicked "I'm editing in Descript").
-  // ready_to_schedule and scheduled get their own dedicated surfaces below.
-  const queued = items.filter((i) => i.status === 'queued' || i.status === 'filmed' || i.status === 'editing');
+  // Pipeline lanes, driven purely by status (the lane itself shows the phase):
+  //   ready to film  = queued   (scripted, needs recording)
+  //   ready to edit  = filmed   (recorded, needs editing)
+  //   in-edit        = editing  (HIDDEN - the user checked it off ready-to-edit;
+  //                              it reappears in ready-to-schedule when the
+  //                              edited video file drops in the folder)
+  //   ready to schedule = ready_to_schedule (edited file landed)
+  const rawIdeas = items.filter((i) => i.status === 'idea');
+  const readyToFilm = items.filter((i) => i.status === 'queued');
+  const readyToEdit = items.filter((i) => i.status === 'filmed');
   const readyToSchedule = items.filter((i) => i.status === 'ready_to_schedule');
   const scheduled = items.filter((i) => i.status === 'scheduled');
   const posted = items.filter((i) => i.status === 'posted');
   const failed = items.filter((i) => i.status === 'failed');
-  const counts = data?.counts ?? { queued: 0, filmed: 0, posted: 0, dismissed: 0 };
   const openItem = items.find((i) => i.id === openId) ?? null;
 
   return (
@@ -130,189 +113,57 @@ export function Instagram() {
           YearGrid card on the YouTube tab so both channels feel like the
           same surface: same padding/radius, "publishing months" eyebrow in
           strain blue + "your content output" h3, sync info on the right. */}
-      {output && (
-        <div
-          style={{
-            background: 'var(--surface)',
-            borderRadius: 'var(--radius-lg)',
-            padding: 'var(--space-5)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--space-4)',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'baseline',
-              gap: 'var(--space-4)',
-              flexWrap: 'wrap',
-            }}
-          >
-            <div>
-              <span className="eyebrow" style={{ color: 'var(--strain)' }}>publishing months</span>
-              <h3 className="h3" style={{ marginTop: 4 }}>your content output</h3>
-            </div>
-            <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center' }}>
-              {output.source === 'instagram_graph_api' ? (
-                <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-                  synced · {output.synced_post_count} posts
-                </span>
-              ) : !syncStatus?.configured ? (
-                <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-                  manual mode
-                </span>
-              ) : null}
-              {syncStatus?.configured && (
+      {output && (() => {
+        const totalPosts = output.months.reduce((acc, m) => acc + m.days.reduce((s, d) => s + d.count, 0), 0);
+        const tLabel =
+          output.target_per_week === 1 ? '1 per week'
+          : output.target_per_week === 7 ? 'daily'
+          : `${output.target_per_week} per week`;
+        return (
+          <div className="stack" style={{ gap: 'var(--space-4)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-4)' }}>
+              <div>
+                <span className="eyebrow">your content output</span>
+                <div className="muted" style={{ fontSize: 'var(--body-sm)', marginTop: 2 }}>
+                  {totalPosts} {totalPosts === 1 ? 'reel' : 'reels'} posted in the last 4 months
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexShrink: 0 }}>
                 <button
                   type="button"
-                  className="btn"
-                  onClick={() => syncIg.mutate()}
-                  disabled={syncIg.isPending}
-                  style={{ fontSize: 'var(--body-sm)' }}
+                  onClick={() => setCtaOpen(true)}
+                  title="set the call-to-action the caption generator points viewers to"
+                  style={ctaSet ? filledPillStyle : ghostButtonStyle}
                 >
-                  {syncIg.isPending ? 'syncing instagram' : 'sync from instagram'}
+                  {ctaSet ? 'CTA' : 'add CTA'}
                 </button>
-              )}
+                <button
+                  type="button"
+                  onClick={() => setTargetOpen(true)}
+                  title="set how many reels per week you want to publish"
+                  style={output.target_set ? filledPillStyle : ghostButtonStyle}
+                >
+                  {output.target_set ? `target: ${tLabel}` : 'set daily target'}
+                </button>
+              </div>
+            </div>
+            <div className="card" style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-5)' }}>
+              <MonthGrid months={output.months} targetPerWeek={output.target_per_week} showSummary={false} />
             </div>
           </div>
-          <MonthGrid
-            months={output.months}
-            targetPerWeek={output.target_per_week}
-            onEditTarget={editIgTarget}
-          />
-          {syncIg.isError && (
-            <span style={{ color: 'var(--danger)', fontSize: 'var(--body-sm)' }}>
-              sync failed: {(syncIg.error as Error)?.message}
-            </span>
-          )}
-          {syncIg.data?.error && (
-            <span style={{ color: 'var(--danger)', fontSize: 'var(--body-sm)' }}>
-              {syncIg.data.error}
-            </span>
-          )}
-          {!syncStatus?.configured && (
-            <details style={{ marginTop: 'var(--space-3)' }}>
-              <summary style={{ cursor: 'pointer', fontSize: 'var(--body-sm)', color: 'var(--muted)' }}>
-                set up auto-sync with instagram (10 min, one-time)
-              </summary>
-              <ol
-                style={{
-                  marginTop: 'var(--space-2)',
-                  paddingLeft: 'var(--space-5)',
-                  fontSize: 'var(--body-sm)',
-                  lineHeight: 1.7,
-                  color: 'var(--muted)',
-                }}
-              >
-                <li>
-                  Make sure your Instagram is a <strong>Business</strong> or <strong>Creator</strong> account
-                  (not Personal), connected to a Facebook Page.
-                </li>
-                <li>
-                  Go to{' '}
-                  <a href="https://developers.facebook.com/apps" target="_blank" rel="noreferrer">
-                    developers.facebook.com/apps
-                  </a>{' '}
-                  → Create App → type <strong>Business</strong>. Skip the verification prompts; you don't need
-                  App Review for personal use.
-                </li>
-                <li>
-                  In the new app, add <strong>Instagram Graph API</strong> as a product.
-                </li>
-                <li>
-                  Open the{' '}
-                  <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer">
-                    Graph API Explorer
-                  </a>
-                  , select your app, grant{' '}
-                  <code style={{ background: 'rgba(255,255,255,0.06)', padding: '0 4px', borderRadius: 3 }}>
-                    instagram_basic
-                  </code>{' '}
-                  +{' '}
-                  <code style={{ background: 'rgba(255,255,255,0.06)', padding: '0 4px', borderRadius: 3 }}>
-                    pages_show_list
-                  </code>
-                  , and copy the generated access token. Then exchange it for a long-lived token (60-day
-                  expiry) via{' '}
-                  <code style={{ background: 'rgba(255,255,255,0.06)', padding: '0 4px', borderRadius: 3 }}>
-                    /oauth/access_token?grant_type=fb_exchange_token
-                  </code>
-                  .
-                </li>
-                <li>
-                  Fetch your Instagram Business Account ID:{' '}
-                  <code style={{ background: 'rgba(255,255,255,0.06)', padding: '0 4px', borderRadius: 3 }}>
-                    GET /me/accounts
-                  </code>
-                  , then for your page:{' '}
-                  <code style={{ background: 'rgba(255,255,255,0.06)', padding: '0 4px', borderRadius: 3 }}>
-                    GET /{'{page-id}'}?fields=instagram_business_account
-                  </code>
-                  .
-                </li>
-                <li>
-                  Add to <code>server/.env</code>:
-                  <pre
-                    style={{
-                      background: 'rgba(0,0,0,0.3)',
-                      padding: 'var(--space-2)',
-                      borderRadius: 4,
-                      fontSize: 11,
-                      marginTop: 6,
-                      overflow: 'auto',
-                    }}
-                  >
-{`INSTAGRAM_ACCESS_TOKEN=<your-long-lived-token>
-INSTAGRAM_BUSINESS_ACCOUNT_ID=<your-ig-business-id>`}
-                  </pre>
-                </li>
-                <li>Restart the dashboard. Hit "sync from instagram". Done.</li>
-              </ol>
-            </details>
-          )}
-        </div>
-      )}
+        );
+      })()}
 
-      {/* Focus CTA - the line description/caption generators pull from.
-          Sits right under the output card so the CTA is visually paired
-          with "what you're publishing". Avatar lives one level up on the
-          Content page so it's shared across YT and IG. Negative top
-          margin pulls it tight under the output card; bottom margin
-          separates it from the reel queue header below. */}
-      <div style={{ marginTop: 'calc(-1 * var(--space-7))', marginBottom: 'var(--space-5)' }}>
-        <FocusCtaEditor channel="instagram" />
-      </div>
-
-      {/* Queue header + add-row act as one block: header on top, add-row
-          directly under it. Outer wrapper keeps the block balanced between
-          the CTA above and the "queued · ready to film" lane below. */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
-        <header className="ig-page-head" style={{ marginBottom: 0 }}>
-          <div>
-            <h1 className="h2">your Instagram queue</h1>
-            <p className="ig-page-sub">
-              stories and quotes from your transcripts, scripted and ready to record.
-            </p>
-          </div>
-          <div className="ig-stat-strip">
-            <Stat label="queued" value={counts.queued} color="var(--recovery)" />
-            <Stat label="filmed" value={counts.filmed} color="var(--sleep)" />
-            <Stat label="posted" value={counts.posted} color="var(--muted-2)" />
-          </div>
-        </header>
-
-        <div className="ig-add-row" style={{ marginBottom: 0 }}>
-          <IdeaInput onAdd={(title) => createIdea.mutate(title)} pending={createIdea.isPending} />
-          <button
-            type="button"
-            className="rep-btn rep-btn--ghost ig-add-row__bank"
-            onClick={() => setPickerOpen(true)}
-          >
-            + add from bank
-          </button>
-        </div>
+      <div className="ig-add-row" style={{ marginBottom: 0 }}>
+        <IdeaInput onAdd={(title) => createIdea.mutate(title)} pending={createIdea.isPending} />
+        <button
+          type="button"
+          className="ig-add-row__bank"
+          onClick={() => setPickerOpen(true)}
+          style={solidButtonStyle}
+        >
+          + add from bank
+        </button>
       </div>
 
       {isLoading ? (
@@ -321,35 +172,78 @@ INSTAGRAM_BUSINESS_ACCOUNT_ID=<your-ig-business-id>`}
         <EmptyState />
       ) : (
         <>
+          {/* Stage filter. Posted is NOT a filter option - it always shows at
+              the bottom as the archive. 'all' shows every pipeline lane. */}
+          <FilterTabs
+            value={laneFilter}
+            onChange={setLaneFilter}
+            ariaLabel="filter reels by stage"
+            options={[
+              { value: 'all', label: 'all', count: rawIdeas.length + readyToFilm.length + readyToEdit.length + readyToSchedule.length },
+              { value: 'idea', label: 'ideas', count: rawIdeas.length },
+              { value: 'queued', label: 'ready to film', count: readyToFilm.length },
+              { value: 'filmed', label: 'ready to edit', count: readyToEdit.length },
+              { value: 'ready_to_schedule', label: 'ready to schedule', count: readyToSchedule.length },
+            ]}
+          />
+
           {/* Action surface: reels the creator dropped from Descript that need her to
               pick a hook and approve. Highest-attention slot - lives above the
               queued lane so it's the first thing she sees on this page. */}
-          {readyToSchedule.length > 0 && (
+          {(laneFilter === 'all' || laneFilter === 'ready_to_schedule') && readyToSchedule.length > 0 && (
             <Lane
               label="ready to schedule"
               color="var(--strain)"
               items={readyToSchedule}
               onOpen={setOpenId}
               targetStatus="ready_to_schedule"
+              scheduleMode
             />
           )}
 
-          {/* Scheduled: reels approved and waiting for their post slot. */}
-          {scheduled.length > 0 && <ScheduledStrip items={scheduled} />}
+          {/* Scheduled + failed: edge states, shown only in the full view. */}
+          {laneFilter === 'all' && scheduled.length > 0 && <ScheduledStrip items={scheduled} />}
+          {laneFilter === 'all' && failed.length > 0 && <FailedStrip items={failed} />}
 
-          {/* Failed: any post that errored - retry button + error reason. */}
-          {failed.length > 0 && <FailedStrip items={failed} />}
+          {/* ready to edit = filmed. Grouped by source video so all the clips
+              from one recording sit under one card, each with its source
+              moments in order. Check a clip off (edited) and it disappears;
+              it returns under ready to schedule when the edited file drops. */}
+          {readyToEdit.length > 0 && (laneFilter === 'all' || laneFilter === 'filmed') && <ReadyToEditLane items={readyToEdit} />}
 
-          <Lane
-            label="queued · ready to film"
-            color="var(--ink)"
-            items={queued}
-            onOpen={setOpenId}
-            empty="nothing queued yet. add an idea above, or head to vault and click 'queue to instagram' on a quote."
-            targetStatus="queued"
-          />
-          {/* Posted is a TABLE at the bottom, not a card lane. Drop a card on
-              the header strip to mark it posted (defaults to today). */}
+          {/* ready to film = queued. Check it off once recorded and it moves
+              into ready to edit. */}
+          {readyToFilm.length > 0 && (laneFilter === 'all' || laneFilter === 'queued') && (
+            <Lane
+              label="ready to film"
+              color="var(--ink)"
+              items={readyToFilm}
+              onOpen={setOpenId}
+              empty="nothing to film yet. add an idea above, or head to vault and click 'queue to instagram' on a quote."
+              targetStatus="queued"
+              checkTo="filmed"
+              checkLabel="filmed"
+            />
+          )}
+
+          {/* Raw ideas: unscripted ideas you typed in. Open one to script it,
+              then tick it off (or use the panel stage bar) to send it to
+              "ready to film". Sits between ready-to-film and posted. */}
+          {rawIdeas.length > 0 && (laneFilter === 'all' || laneFilter === 'idea') && (
+            <Lane
+              label="raw ideas"
+              color="var(--hrv)"
+              items={rawIdeas}
+              onOpen={setOpenId}
+              empty="no raw ideas yet. type one in the box above - it opens here so you can script it."
+              targetStatus="idea"
+              checkTo="queued"
+              checkLabel="ready to film"
+            />
+          )}
+
+          {/* Posted is a TABLE at the bottom, not a card lane (the archive).
+              Always shown, regardless of the stage filter. */}
           <PostedTable items={posted} onOpen={setOpenId} />
         </>
       )}
@@ -373,6 +267,8 @@ INSTAGRAM_BUSINESS_ACCOUNT_ID=<your-ig-business-id>`}
       </section>
 
       {openItem && <ReelPanel item={openItem} onClose={() => setOpenId(null)} />}
+      {ctaOpen && <CtaPopup channel="instagram" onClose={() => setCtaOpen(false)} />}
+      {targetOpen && <TargetPopup channel="instagram" current={output?.target_per_week ?? 3} onClose={() => setTargetOpen(false)} />}
       {pickerOpen && (
         <BankPicker
           existingQuoteIds={new Set(items.map((i) => i.quote_id).filter(Boolean) as string[])}
@@ -382,6 +278,173 @@ INSTAGRAM_BUSINESS_ACCOUNT_ID=<your-ig-business-id>`}
         />
       )}
     </>
+  );
+}
+
+// Shared centered pop-up box (scrim + card). Used by the CTA and target popups.
+function PopupBox({ title, sub, children, footer, onClose }: {
+  title: string;
+  sub?: string;
+  children: ReactNode;
+  footer: ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.55)',
+        zIndex: 60,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 'var(--space-5)',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="card"
+        style={{
+          width: 'min(520px, 100%)',
+          background: 'var(--surface)',
+          borderRadius: 'var(--radius-lg)',
+          padding: 'var(--space-5)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--space-4)',
+        }}
+      >
+        <div>
+          <span className="eyebrow">{title}</span>
+          {sub && <div className="muted" style={{ fontSize: 'var(--body-sm)', marginTop: 2 }}>{sub}</div>}
+        </div>
+        {children}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>{footer}</div>
+      </div>
+    </div>
+  );
+}
+
+const POPUP_LABEL = { fontSize: 'var(--body-xs)', fontWeight: 600, color: 'var(--muted)' } as const;
+const POPUP_FIELD = {
+  width: '100%',
+  background: 'var(--surface-2)',
+  border: '1px solid var(--hairline)',
+  borderRadius: 'var(--radius-md)',
+  color: 'var(--ink)',
+  fontFamily: 'inherit',
+  fontSize: 'var(--body-sm)',
+  padding: 'var(--space-2) var(--space-3)',
+  outline: 'none',
+} as const;
+
+// Pop-up box to edit a channel's CTA line + link. Saves to settings
+// (instagram_cta_* or youtube_cta_*) - the same fields the caption/description
+// generators read. Opened by the "add CTA" button in the content-output box.
+export function CtaPopup({ channel, onClose }: { channel: 'instagram' | 'youtube'; onClose: () => void }) {
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
+  const isIg = channel === 'instagram';
+  const [text, setText] = useState('');
+  const [url, setUrl] = useState('');
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    if (data && !loaded) {
+      setText((isIg ? data.instagram_cta_text : data.youtube_cta_text) ?? '');
+      setUrl((isIg ? data.instagram_cta_url : data.youtube_cta_url) ?? '');
+      setLoaded(true);
+    }
+  }, [data, loaded, isIg]);
+  const save = useMutation({
+    mutationFn: () => api.updateSettings(isIg
+      ? { instagram_cta_text: text.trim(), instagram_cta_url: url.trim() }
+      : { youtube_cta_text: text.trim(), youtube_cta_url: url.trim() }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['settings'] }); onClose(); },
+  });
+  return (
+    <PopupBox
+      title={isIg ? 'instagram call to action' : 'youtube call to action'}
+      sub={isIg
+        ? 'the line and link the caption generator points viewers to.'
+        : 'the line and link the description generator points viewers to.'}
+      onClose={onClose}
+      footer={<>
+        <button type="button" className="btn btn--ghost" onClick={onClose}>cancel</button>
+        <button type="button" className="btn btn--primary" onClick={() => save.mutate()} disabled={save.isPending}>
+          {save.isPending ? 'saving' : 'save'}
+        </button>
+      </>}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <label style={POPUP_LABEL}>CTA line</label>
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={isIg
+            ? 'want my system for building a one-person business that fits your brain? link in bio.'
+            : 'want my system for building a one-person business that fits your brain? join my free community.'}
+          autoFocus
+          rows={3}
+          style={{ ...POPUP_FIELD, lineHeight: 1.5, resize: 'vertical' }}
+        />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <label style={POPUP_LABEL}>link</label>
+        <input
+          type="url"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder=""
+          style={POPUP_FIELD}
+        />
+      </div>
+    </PopupBox>
+  );
+}
+
+// Pop-up box to set the publishing target. Instagram = reels per week (7 = daily);
+// YouTube = how often you publish (1 = every week). Same style as the CTA popup.
+export function TargetPopup({ channel, current, onClose }: { channel: 'instagram' | 'youtube'; current: number; onClose: () => void }) {
+  const qc = useQueryClient();
+  const isIg = channel === 'instagram';
+  const [n, setN] = useState(String(current || (isIg ? 3 : 1)));
+  const num = parseFloat(n);
+  const valid = Number.isFinite(num) && num > 0;
+  const save = useMutation({
+    mutationFn: () => (isIg
+      ? api.setIgTarget(Math.round(num))
+      : api.updateSettings({ youtube_target_per_weeks: Math.round(num) })),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: [isIg ? 'ig-output' : 'settings'] }); onClose(); },
+  });
+  return (
+    <PopupBox
+      title="publishing target"
+      sub={isIg
+        ? 'how many reels per week do you want to publish? (7 = daily)'
+        : 'how often do you publish a video? (1 = every week, 2 = every 2 weeks)'}
+      onClose={onClose}
+      footer={<>
+        <button type="button" className="btn btn--ghost" onClick={onClose}>cancel</button>
+        <button type="button" className="btn btn--primary" onClick={() => { if (valid) save.mutate(); }} disabled={!valid || save.isPending}>
+          {save.isPending ? 'saving' : 'save'}
+        </button>
+      </>}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <label style={POPUP_LABEL}>{isIg ? 'reels per week' : 'weeks between videos'}</label>
+        <input
+          type="number"
+          min={1}
+          max={14}
+          value={n}
+          onChange={(e) => setN(e.target.value)}
+          autoFocus
+          style={POPUP_FIELD}
+        />
+      </div>
+    </PopupBox>
   );
 }
 
@@ -397,7 +460,7 @@ function IdeaInput({ onAdd, pending }: { onAdd: (title: string) => void; pending
     <div className="ig-idea-input">
       <input
         type="text"
-        placeholder="add a reel idea… (e.g. 'why your offer isn't selling and what to test first')"
+        placeholder="add a reel idea..."
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
@@ -407,10 +470,13 @@ function IdeaInput({ onAdd, pending }: { onAdd: (title: string) => void; pending
       />
       <button
         type="button"
-        className="rep-btn rep-btn--primary"
         onClick={submit}
-        disabled={pending || !value.trim()}
-        style={{ '--dim-c': 'var(--recovery)' } as React.CSSProperties}
+        disabled={pending}
+        style={
+          value.trim()
+            ? { ...ghostButtonStyle, background: 'var(--accent)', color: 'var(--bg)', border: '1px solid var(--accent)' }
+            : ghostButtonStyle
+        }
       >
         {pending ? '...' : 'add idea'}
       </button>
@@ -442,6 +508,16 @@ function EmptyState() {
   );
 }
 
+// Skills-style breakdown sub-line for a lane heading, e.g. "1 carousel · 8 reels".
+function laneBreakdown(items: IgQueueItem[]): string | undefined {
+  const carousels = items.filter((i) => i.format === 'carousel').length;
+  const reels = items.length - carousels;
+  const parts: string[] = [];
+  if (carousels) parts.push(`${carousels} carousel${carousels === 1 ? '' : 's'}`);
+  if (reels) parts.push(`${reels} reel${reels === 1 ? '' : 's'}`);
+  return parts.length ? parts.join(' · ') : undefined;
+}
+
 function Lane({
   label,
   color,
@@ -449,6 +525,9 @@ function Lane({
   onOpen,
   empty,
   targetStatus,
+  checkTo,
+  checkLabel,
+  scheduleMode,
 }: {
   label: string;
   color: string;
@@ -457,6 +536,13 @@ function Lane({
   empty?: string;
   // Status to assign to a card dropped onto this lane.
   targetStatus: IgItemStatus;
+  // When set, each row shows a checkbox; ticking it advances the item to this
+  // status (e.g. ready-to-film -> filmed, ready-to-edit -> editing), which
+  // moves it out of this lane.
+  checkTo?: IgItemStatus;
+  checkLabel?: string;
+  // When set, rows show a "schedule" button (date picker) instead of a stage advance.
+  scheduleMode?: boolean;
 }) {
   const qc = useQueryClient();
   const [hover, setHover] = useState(false);
@@ -496,10 +582,7 @@ function Lane({
           : undefined
       }
     >
-      <header className="ig-lane__head" style={{ borderBottomColor: `color-mix(in srgb, ${color} 25%, transparent)` }}>
-        <h2 className="ig-lane__title" style={{ color }}>{label}</h2>
-        <span className="eyebrow">{items.length}</span>
-      </header>
+      <SectionHeading label={label} count={items.length} color={color} sub={laneBreakdown(items)} />
       {items.length === 0 && empty ? (
         <p className="ig-lane__empty">{empty}</p>
       ) : items.length === 0 ? (
@@ -507,7 +590,7 @@ function Lane({
       ) : (
         <div className="ig-grid">
           {items.map((it) => (
-            <ReelCard key={it.id} item={it} onClick={() => onOpen(it.id)} />
+            <ReelCard key={it.id} item={it} onClick={() => onOpen(it.id)} checkTo={checkTo} checkLabel={checkLabel} scheduleMode={scheduleMode} />
           ))}
         </div>
       )}
@@ -515,15 +598,278 @@ function Lane({
   );
 }
 
-function ReelCard({ item, onClick }: { item: IgQueueItem; onClick: () => void }) {
+// Ready-to-edit lane, grouped by source video. Each source is one clean card
+// (title like a YouTube video card). Clicking it OPENS a panel showing every
+// clip to edit from that video, each with its edit plan + source moments.
+// How a ready-to-edit reel got here. Explicit field if set; otherwise infer
+// (seeds carry original_quote; clips don't).
+function reelOrigin(it: IgQueueItem): 'clip' | 'film' {
+  return it.reel_origin ?? (it.original_quote ? 'film' : 'clip');
+}
+function filmedDateKey(it: IgQueueItem): string {
+  const ts = it.filmed_at ?? it.queued_at;
+  return ts ? new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'undated';
+}
+
+function ReadyToEditLane({ items }: { items: IgQueueItem[] }) {
+  const [open, setOpen] = useState<{ mode: 'clip' | 'film'; key: string } | null>(null);
+  const { clipGroups, filmGroups } = useMemo(() => {
+    const clips = new Map<string, IgQueueItem[]>();
+    const films = new Map<string, IgQueueItem[]>();
+    for (const it of items) {
+      if (reelOrigin(it) === 'film') {
+        const k = filmedDateKey(it);
+        films.set(k, [...(films.get(k) ?? []), it]);
+      } else {
+        const k = it.source_transcript_filename || 'no source';
+        clips.set(k, [...(clips.get(k) ?? []), it]);
+      }
+    }
+    return { clipGroups: [...clips.entries()], filmGroups: [...films.entries()] };
+  }, [items]);
+
+  const openGroup = open
+    ? (open.mode === 'clip' ? clipGroups : filmGroups).find(([k]) => k === open.key)
+    : undefined;
+
+  return (
+    <section className="ig-lane">
+      <SectionHeading label="ready to edit" count={items.length} color="var(--sleep)" sub={laneBreakdown(items)} />
+      {items.length === 0 ? (
+        <p className="ig-lane__empty">nothing to edit yet. check a reel off 'ready to film' once you've recorded it.</p>
+      ) : (
+        <div className="ig-grid">
+          {clipGroups.map(([src, clips]) => (
+            <EditGroupCard
+              key={`c-${src}`}
+              title={src.replace(/\.(md|txt)$/, '')}
+              subtitle={`${clips.length} clip${clips.length > 1 ? 's' : ''} to edit from this video`}
+              clips={clips}
+              onOpen={() => setOpen({ mode: 'clip', key: src })}
+            />
+          ))}
+          {filmGroups.map(([date, clips]) => (
+            <EditGroupCard
+              key={`f-${date}`}
+              title={`filmed ${date}`}
+              subtitle={`${clips.length} reel${clips.length > 1 ? 's' : ''} to edit`}
+              clips={clips}
+              onOpen={() => setOpen({ mode: 'film', key: date })}
+            />
+          ))}
+        </div>
+      )}
+      {openGroup && (
+        <GroupEditPanel
+          mode={open!.mode}
+          title={open!.mode === 'clip' ? openGroup[0].replace(/\.(md|txt)$/, '') : `filmed ${openGroup[0]}`}
+          subtitle={open!.mode === 'clip'
+            ? `${openGroup[1].length} clip${openGroup[1].length > 1 ? 's' : ''} to cut from this video`
+            : `${openGroup[1].length} reel${openGroup[1].length > 1 ? 's' : ''} to edit`}
+          clips={openGroup[1]}
+          onClose={() => setOpen(null)}
+        />
+      )}
+    </section>
+  );
+}
+
+// One group as a clean card - title (like a YouTube video card), a count badge
+// when there's more than one, and an "edited" button. Clicking opens the panel.
+function EditGroupCard({ title, subtitle, clips, onOpen }: { title: string; subtitle: string; clips: IgQueueItem[]; onOpen: () => void }) {
+  const qc = useQueryClient();
+  const markEdited = useMutation({
+    mutationFn: () => Promise.all(clips.map((c) => api.updateIgItem(c.id, { status: 'editing' }))),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ig-queue'] });
+      qc.invalidateQueries({ queryKey: ['ig-output'] });
+    },
+  });
+  return (
+    <div className="ig-card" onClick={onOpen} style={{ cursor: 'pointer' }}>
+      {clips.length > 1 && <span className="ig-count-badge">{clips.length}</span>}
+      <div className="ig-card__main">
+        <span
+          style={{
+            display: 'block',
+            fontFamily: 'var(--font-display)',
+            fontWeight: 700,
+            fontSize: '1.02rem',
+            letterSpacing: '-0.015em',
+            color: 'var(--ink)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {title}
+        </span>
+        <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>{subtitle}</span>
+      </div>
+      <button
+        type="button"
+        className="ig-card__action"
+        onClick={(e) => { e.stopPropagation(); markEdited.mutate(); }}
+        disabled={markEdited.isPending}
+        style={{ flex: '0 0 auto' }}
+        title="mark all edited - they move on to schedule when the files drop"
+      >
+        {markEdited.isPending ? '...' : 'edited'}
+      </button>
+    </div>
+  );
+}
+
+// The opened edit panel for one group. Header mirrors the YouTube video detail
+// (eyebrow + big title + close). Body lists every reel with its editable script.
+// Clip groups show source moments; film groups show a "re-film" button instead.
+function GroupEditPanel({ mode, title, subtitle, clips, onClose }: { mode: 'clip' | 'film'; title: string; subtitle: string; clips: IgQueueItem[]; onClose: () => void }) {
+  const qc = useQueryClient();
+  const markEdited = useMutation({
+    mutationFn: () => Promise.all(clips.map((c) => api.updateIgItem(c.id, { status: 'editing' }))),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ig-queue'] });
+      qc.invalidateQueries({ queryKey: ['ig-output'] });
+      onClose();
+    },
+  });
+  return (
+    <div className="rep-panel-wrap" onClick={onClose}>
+      <aside className="rep-panel" style={{ '--dim-c': 'var(--sleep)' } as React.CSSProperties} onClick={(e) => e.stopPropagation()}>
+        <header className="rep-panel__head">
+          <div className="rep-panel__head-l">
+            <span className="rep-eyebrow" style={{ color: 'var(--sleep)' }}>ready to edit</span>
+            <h2 className="rep-panel__title">{title}</h2>
+            <p className="rep-panel__def">{subtitle}</p>
+          </div>
+          <div className="rep-panel__head-r" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <button type="button" className="rep-btn rep-btn--primary" onClick={() => markEdited.mutate()} disabled={markEdited.isPending}>
+              {markEdited.isPending ? '...' : 'mark all edited'}
+            </button>
+            <button type="button" className="rep-btn rep-btn--ghost" onClick={onClose}>close</button>
+          </div>
+        </header>
+
+        {clips.map((clip, idx) => (
+          <EditClipCard key={clip.id} clip={clip} index={idx} total={clips.length} mode={mode} />
+        ))}
+      </aside>
+    </div>
+  );
+}
+
+// One reel inside the edit panel. Tick box to mark it edited, the editable
+// script, then either a source-moments dropdown (clip) or a "re-film" button
+// (film - sends it back to ready to film).
+function EditClipCard({ clip, index, total, mode }: { clip: IgQueueItem; index: number; total: number; mode: 'clip' | 'film' }) {
+  const qc = useQueryClient();
+  const [draft, setDraft] = useState(clip.script ?? clip.text ?? '');
+  useEffect(() => { setDraft(clip.script ?? clip.text ?? ''); }, [clip.script, clip.text]);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = taRef.current;
+    if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; }
+  }, [draft]);
+  const save = useMutation({
+    mutationFn: (s: string) => api.updateIgItem(clip.id, { script: s }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ig-queue'] }),
+  });
+  const markDone = useMutation({
+    mutationFn: () => api.updateIgItem(clip.id, { status: 'editing' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ig-queue'] });
+      qc.invalidateQueries({ queryKey: ['ig-output'] });
+    },
+  });
+  // Film mode: send this reel back to "ready to film" to re-record it.
+  const refilm = useMutation({
+    mutationFn: () => api.updateIgItem(clip.id, { status: 'queued' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ig-queue'] });
+      qc.invalidateQueries({ queryKey: ['ig-output'] });
+    },
+  });
+  const moments = clip.source_moments ?? [];
+  return (
+    <section className="rep-section">
+      <div style={{ border: '1px solid var(--hairline)', borderRadius: 'var(--radius-md)', padding: 'var(--space-4)', background: 'var(--surface)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
+          <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} title="mark this clip edited">
+            <input
+              type="checkbox"
+              checked={false}
+              disabled={markDone.isPending}
+              onChange={() => markDone.mutate()}
+              style={{ width: 18, height: 18, accentColor: 'var(--recovery)', cursor: 'pointer' }}
+            />
+          </label>
+          <h3 className="rep-section__title" style={{ margin: 0, flex: 1, minWidth: 0 }}>
+            {total > 1 ? `${index + 1}. ` : ''}{clip.title || (clip.text || '').slice(0, 60)}
+          </h3>
+        </div>
+        <textarea
+          ref={taRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => { if (draft !== (clip.script ?? clip.text ?? '')) save.mutate(draft); }}
+          style={{
+            width: '100%',
+            overflow: 'hidden',
+            minHeight: 80,
+            background: 'var(--surface)',
+            border: '1px solid var(--hairline)',
+            borderRadius: 'var(--radius-md)',
+            color: 'var(--ink)',
+            padding: 'var(--space-3)',
+            fontFamily: 'var(--font-body)',
+            fontSize: 'var(--body)',
+            lineHeight: 1.6,
+            resize: 'none',
+            outline: 'none',
+            whiteSpace: 'pre-wrap',
+          }}
+        />
+        {mode === 'film' ? (
+          <div style={{ marginTop: 'var(--space-3)', paddingTop: 'var(--space-3)', borderTop: '1px dashed var(--hairline)', display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              className="rep-btn rep-btn--ghost"
+              onClick={() => refilm.mutate()}
+              disabled={refilm.isPending}
+              title="send this reel back to ready to film to re-record it"
+            >
+              {refilm.isPending ? '...' : 're-film'}
+            </button>
+          </div>
+        ) : (
+          moments.length > 0 && (
+            <details style={{ marginTop: 'var(--space-3)', borderTop: '1px dashed var(--hairline)', paddingTop: 'var(--space-3)' }}>
+              <summary style={{ cursor: 'pointer', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+                source moments <span style={{ color: 'var(--muted-2)' }}>{moments.length}</span>
+              </summary>
+              <div className="stack" style={{ gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+                {moments.map((m, i) => (
+                  <div key={i} className="ig-moment">
+                    <span className="ig-moment__ts">{m.timestamp}</span>
+                    <span className="ig-moment__text">"{m.text}"</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ReelCard({ item, onClick, checkTo, checkLabel, scheduleMode }: { item: IgQueueItem; onClick: () => void; checkTo?: IgItemStatus; checkLabel?: string; scheduleMode?: boolean }) {
   const qc = useQueryClient();
   const meta = tagMeta(item.tag);
-  const current = stageIndex(item.status);
   const text = item.text ?? '';
   const title = item.title ?? (text.length > 80 ? text.slice(0, 80) + '…' : text);
   const preview = text.length > 240 ? text.slice(0, 240) + '…' : text;
   const [tagOpen, setTagOpen] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
   const tagMutation = useMutation({
     mutationFn: (t: QuoteTag) => api.updateIgItem(item.id, { tag: t }),
     onMutate: async (t: QuoteTag) => {
@@ -545,15 +891,21 @@ function ReelCard({ item, onClick }: { item: IgQueueItem; onClick: () => void })
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ['ig-queue'] }),
   });
+  // Mark posted (the dark button on the ready-to-schedule lane).
   const markPosted = useMutation({
-    mutationFn: (d: Date) => {
-      const ts = Math.floor(d.getTime() / 1000);
-      return api.updateIgItem(item.id, { status: 'posted', posted_at: ts });
-    },
+    mutationFn: () => api.updateIgItem(item.id, { status: 'posted', posted_at: Math.floor(Date.now() / 1000) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['ig-queue'] });
       qc.invalidateQueries({ queryKey: ['ig-output'] });
-      setPickerOpen(false);
+    },
+  });
+  // Advance this reel to the next stage (filmed / editing), which moves it out
+  // of this lane.
+  const advance = useMutation({
+    mutationFn: () => api.updateIgItem(item.id, { status: checkTo as IgItemStatus }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ig-queue'] });
+      qc.invalidateQueries({ queryKey: ['ig-output'] });
     },
   });
 
@@ -582,92 +934,208 @@ function ReelCard({ item, onClick }: { item: IgQueueItem; onClick: () => void })
       }}
       style={{ borderColor: `color-mix(in srgb, ${meta.color} 22%, var(--hairline))`, cursor: 'grab' }}
     >
-      <div className="ig-card__head">
-        <div className="ig-card__tag-wrap" data-id={item.id} onClick={(e) => e.stopPropagation()}>
-          <button
-            type="button"
-            className="ig-card__tag ig-card__tag--btn"
-            style={{ color: meta.color, background: `color-mix(in srgb, ${meta.color} 10%, transparent)`, borderColor: `color-mix(in srgb, ${meta.color} 28%, transparent)` }}
-            onClick={() => setTagOpen((v) => !v)}
-            title="change tag"
-          >
-            {meta.label}
-            <span className="ig-card__tag-caret" aria-hidden>▾</span>
-          </button>
-          {tagOpen && (
-            <div className="ig-card__tag-pop" role="menu">
-              {TAG_ORDER.map((t) => {
-                const m = TAG_META[t];
-                const active = item.tag === t;
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    className={`ig-card__tag-opt${active ? ' is-active' : ''}`}
-                    style={{
-                      color: active ? 'var(--bg)' : m.color,
-                      background: active ? m.color : `color-mix(in srgb, ${m.color} 10%, transparent)`,
-                      borderColor: `color-mix(in srgb, ${m.color} 28%, transparent)`,
-                    }}
-                    onClick={() => { tagMutation.mutate(t); setTagOpen(false); }}
-                    disabled={tagMutation.isPending}
-                  >
-                    {m.label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-      <h3 className="ig-card__title">{title}</h3>
-      <p className="ig-card__preview">{preview}</p>
-      {item.source_transcript_filename && (
-        <p className="ig-card__src">
-          source: {item.source_transcript_filename.replace(/\.(md|txt)$/, '')}
-          {item.source_moments && item.source_moments.length > 0 && ` · ${item.source_moments.length} moments`}
-        </p>
-      )}
-      <div className="ig-card__stages">
-        {STAGES.map((s, i) => {
-          const filled = current >= i;
-          return (
-            <span key={s.status} className={`ig-stage ${filled ? 'ig-stage--on' : ''}`} style={filled ? { background: meta.color } : undefined} />
-          );
-        })}
-      </div>
-      {(item.status === 'queued' || item.status === 'filmed') && (
-        <div
-          className="ig-card__quick"
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            display: 'flex',
-            gap: 6,
-            marginTop: 4,
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            position: 'relative',
-          }}
+      {/* Left: colored tag tile - communicates the tag, click to change it. */}
+      <div className="ig-card__tagbox ig-card__tag-wrap" data-id={item.id} onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          className="ig-card__tagtile"
+          style={{ color: meta.color, background: `color-mix(in srgb, ${meta.color} 14%, transparent)`, borderColor: `color-mix(in srgb, ${meta.color} 28%, transparent)` }}
+          onClick={() => setTagOpen((v) => !v)}
+          title={`tag: ${meta.label} (click to change)`}
         >
+          <TagIcon tag={item.tag} />
+        </button>
+        {tagOpen && (
+          <div className="ig-card__tag-pop" role="menu">
+            {TAG_ORDER.map((t) => {
+              const m = TAG_META[t];
+              const active = item.tag === t;
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  className={`ig-card__tag-opt${active ? ' is-active' : ''}`}
+                  style={{
+                    color: active ? 'var(--bg)' : m.color,
+                    background: active ? m.color : `color-mix(in srgb, ${m.color} 10%, transparent)`,
+                    borderColor: `color-mix(in srgb, ${m.color} 28%, transparent)`,
+                  }}
+                  onClick={() => { tagMutation.mutate(t); setTagOpen(false); }}
+                  disabled={tagMutation.isPending}
+                >
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Middle: title + one-line preview + source. The carousel badge sits
+          inline at the end of the title so the card stays the same height as
+          the reel cards. */}
+      <div className="ig-card__main">
+        <h3 className="ig-card__title">
+          {title}
+          {item.format === 'carousel' && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                marginLeft: 8,
+                verticalAlign: 'middle',
+                fontSize: 9,
+                fontWeight: 700,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                color: 'var(--accent)',
+                background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
+                borderRadius: 'var(--radius-pill)',
+                padding: '1px 7px',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              ▦ carousel
+            </span>
+          )}
+        </h3>
+        <p className="ig-card__preview">{preview}</p>
+        {item.source_transcript_filename && (
+          <p className="ig-card__src">
+            source: {item.source_transcript_filename.replace(/\.(md|txt)$/, '')}
+            {item.source_moments && item.source_moments.length > 0 && ` · ${item.source_moments.length} moments`}
+          </p>
+        )}
+      </div>
+
+      {/* Right: matches the skills card - a schedule pill (showing the date) +
+          a dark action button (filmed / edited / posted). */}
+      {scheduleMode ? (
+        <div className="ig-card__action-wrap" onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+          <SchedulePill item={item} />
           <button
             type="button"
-            onClick={() => setPickerOpen((v) => !v)}
-            className="ig-card__quick-btn"
-            title="pick the date this went live"
+            className="ig-card__action"
+            onClick={(e) => { e.stopPropagation(); markPosted.mutate(); }}
+            disabled={markPosted.isPending}
           >
-            mark posted
+            {markPosted.isPending ? '...' : 'posted'}
           </button>
-          {pickerOpen && (
-            <DatePickerPopover
-              selected={new Date()}
-              onPick={(d) => markPosted.mutate(d)}
-              onClose={() => setPickerOpen(false)}
-              align="left"
-            />
-          )}
         </div>
-      )}
+      ) : checkTo ? (
+        <button
+          type="button"
+          className="ig-card__action"
+          onClick={(e) => { e.stopPropagation(); advance.mutate(); }}
+          disabled={advance.isPending}
+        >
+          {advance.isPending ? '...' : (checkLabel ?? 'mark done')}
+        </button>
+      ) : null}
     </article>
+  );
+}
+
+// Ghost pill styles - identical to the skills-card schedule button.
+const SCHED_PILL = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  flex: '0 0 auto',
+  padding: '8px 14px',
+  borderRadius: 'var(--radius-md)',
+  fontSize: 'var(--body-sm)',
+  fontWeight: 600,
+  cursor: 'pointer',
+  background: 'transparent',
+  color: 'var(--muted)',
+  border: '1px solid var(--hairline)',
+  whiteSpace: 'nowrap',
+} as const;
+const SCHED_PILL_ACTIVE = {
+  ...SCHED_PILL,
+  color: 'var(--ink)',
+  background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
+  border: '1px solid color-mix(in srgb, var(--accent) 45%, var(--hairline))',
+} as const;
+
+function ClockIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
+// A glyph per tag so the colored tile communicates the tag without a text label.
+function TagIcon({ tag }: { tag: string }) {
+  const p = {
+    width: 20,
+    height: 20,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.8,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true,
+  };
+  switch (tag) {
+    case 'value': // star
+      return <svg {...p}><path d="M12 3l2.6 5.7 6.1.6-4.6 4.1 1.3 6L12 16.8 6.6 19.5l1.3-6L3.3 9.3l6.1-.6z" /></svg>;
+    case 'connection': // two people linked
+      return <svg {...p}><circle cx="8" cy="10" r="3" /><circle cx="16" cy="10" r="3" /><path d="M3 19c0-2.2 2.2-4 5-4M21 19c0-2.2-2.2-4-5-4" /></svg>;
+    case 'pov': // eye
+      return <svg {...p}><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" /><circle cx="12" cy="12" r="2.5" /></svg>;
+    case 'authority': // proof - check badge
+      return <svg {...p}><circle cx="12" cy="12" r="9" /><path d="M8 12l2.5 2.5L16 9" /></svg>;
+    default:
+      return <svg {...p}><circle cx="12" cy="12" r="4" /></svg>;
+  }
+}
+
+// The schedule pill on the ready-to-schedule lane: a ghost pill that shows the
+// scheduled date once set (else "schedule"). Opening it auto-suggests the next
+// free slot; the date is editable. Sets scheduled_for only (status unchanged).
+function SchedulePill({ item }: { item: IgQueueItem }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [slot, setSlot] = useState<Date | null>(null);
+  const save = useMutation({
+    mutationFn: (d: Date) => api.updateIgItem(item.id, { scheduled_for: Math.floor(d.getTime() / 1000) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ig-queue'] });
+      setOpen(false);
+    },
+  });
+  async function openPicker() {
+    let d = item.scheduled_for ? new Date(item.scheduled_for * 1000) : new Date();
+    if (!item.scheduled_for) {
+      try { const s = await api.igNextFreeSlot(); if (s?.scheduled_for) d = new Date(s.scheduled_for * 1000); } catch {}
+    }
+    setSlot(d);
+    setOpen(true);
+  }
+  const label = item.scheduled_for
+    ? new Date(item.scheduled_for * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : 'schedule';
+  return (
+    <div style={{ position: 'relative' }}>
+      <button type="button" style={item.scheduled_for ? SCHED_PILL_ACTIVE : SCHED_PILL} onClick={openPicker} disabled={save.isPending}>
+        <ClockIcon /> {save.isPending ? '...' : label}
+      </button>
+      {open && slot && (
+        <DatePickerPopover
+          selected={slot}
+          onPick={(d) => save.mutate(d)}
+          onClose={() => setOpen(false)}
+          align="right"
+        />
+      )}
+    </div>
   );
 }
 
@@ -716,29 +1184,20 @@ function PostedTable({ items, onOpen }: { items: IgQueueItem[]; onOpen: (id: str
         if (id && !items.some((x) => x.id === id)) drop.mutate(id);
       }}
       style={{
-        marginTop: 'var(--space-4)',
+        // Extra top gap so the posted archive reads as clearly separate from
+        // the active lanes above it.
+        marginTop: 'var(--space-7)',
         outline: hover ? `2px dashed ${ACCENT}` : 'none',
         outlineOffset: -4,
         borderRadius: 'var(--radius-lg)',
         padding: hover ? 'var(--space-3)' : 0,
         transition: 'padding 0.12s',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-4)',
       }}
     >
-      <header
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'baseline',
-          padding: 'var(--space-3) 0',
-          borderBottom: `1px solid var(--hairline)`,
-          marginBottom: 'var(--space-2)',
-        }}
-      >
-        <h2 className="ig-lane__title" style={{ color: PINK, margin: 0 }}>
-          posted
-        </h2>
-        <span className="eyebrow">{items.length}</span>
-      </header>
+      <SectionHeading label="posted" count={items.length} color={PINK} sub={laneBreakdown(items)} />
       {items.length === 0 ? (
         <p className="ig-lane__empty">drop a reel here to mark it posted (date stamps as today).</p>
       ) : (
@@ -921,6 +1380,15 @@ function EditableStatCol({
   );
 }
 
+// Break a one-block script into sentence beats (blank line between each) so it's
+// easy to film and read the story. Scripts that already have blank-line beats
+// are left as-is.
+function toScriptBeats(s: string): string {
+  const t = (s || '').replace(/\r\n/g, '\n').trim();
+  if (/\n\s*\n/.test(t)) return t;
+  return t.replace(/([.!?])\s+(?=["'A-Z])/g, '$1\n\n');
+}
+
 // ─── Side panel for a reel (script + edit plan + actions) ──────────────────
 
 function ReelPanel({ item, onClose }: { item: IgQueueItem; onClose: () => void }) {
@@ -928,8 +1396,10 @@ function ReelPanel({ item, onClose }: { item: IgQueueItem; onClose: () => void }
   const meta = tagMeta(item.tag);
   const moments = item.source_moments ?? [];
 
+  // Source moments listed by timestamp - identical block reused inside both the
+  // edit-plan and seed-idea boxes so they look the same.
   const update = useMutation({
-    mutationFn: (body: Partial<Pick<IgQueueItem, 'status' | 'posted_url' | 'text' | 'tag' | 'title' | 'posted_at' | 'view_count' | 'share_count' | 'comment_count'>>) => api.updateIgItem(item.id, body),
+    mutationFn: (body: Partial<Pick<IgQueueItem, 'status' | 'posted_url' | 'text' | 'tag' | 'title' | 'posted_at' | 'view_count' | 'share_count' | 'comment_count' | 'script' | 'original_quote' | 'edit_plan' | 'topics'>>) => api.updateIgItem(item.id, body),
     onMutate: async (body) => {
       // Optimistic patch into the ig-queue cache so the panel doesn't flash
       // back to the old value while the network round-trip is in flight.
@@ -991,20 +1461,25 @@ function ReelPanel({ item, onClose }: { item: IgQueueItem; onClose: () => void }
 
   const [panelPickerOpen, setPanelPickerOpen] = useState(false);
   const [bankPickerOpen, setBankPickerOpen] = useState(false);
-  const [scriptEditing, setScriptEditing] = useState(false);
-  const [scriptDraft, setScriptDraft] = useState(item.text);
+  // The single editable script. Stored in `script`; falls back to `text` for
+  // older items that predate the field.
+  const scriptValue = item.script ?? item.text ?? '';
+  // A fresh raw idea (no script written yet) opens straight into edit mode so
+  // you can just start typing the script.
+  const [scriptEditing, setScriptEditing] = useState(item.status === 'idea' && !(item.script ?? '').trim());
+  const [scriptDraft, setScriptDraft] = useState(scriptValue);
   useEffect(() => {
-    if (!scriptEditing) setScriptDraft(item.text);
-  }, [item.text, scriptEditing]);
+    if (!scriptEditing) setScriptDraft(scriptValue);
+  }, [scriptValue, scriptEditing]);
 
   function appendFromBank(bi: BankItem) {
     // Insert a personal story / bank entry into the script. Adds a divider
     // for readability, prefixes with the bank entry's title (if any) so the creator
     // can see what she added at a glance.
-    const sep = item.text.trim().length > 0 ? '\n\n---\n\n' : '';
+    const sep = scriptValue.trim().length > 0 ? '\n\n---\n\n' : '';
     const titlePart = bi.title ? `**${bi.title}**\n\n` : '';
-    const next = `${item.text}${sep}${titlePart}${bi.text}`;
-    update.mutate({ text: next });
+    const next = `${scriptValue}${sep}${titlePart}${bi.text}`;
+    update.mutate({ script: next });
     setBankPickerOpen(false);
   }
 
@@ -1023,207 +1498,212 @@ function ReelPanel({ item, onClose }: { item: IgQueueItem; onClose: () => void }
     setPanelPickerOpen(false);
   }
 
+  // In the raw-idea + ready-to-film stages the script shows open (no toggle) so
+  // you can write/read it; later stages collapse it into a toggle.
+  const scriptOpen = item.status === 'idea' || item.status === 'queued';
+  const scriptBody = (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-3)', flexWrap: 'wrap', marginBottom: 'var(--space-2)' }}>
+        <p className="rep-section__sub" style={{ margin: 0 }}>what you'll say. weave in a personal story to anchor it.</p>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button type="button" className="rep-btn rep-btn--ghost" onClick={() => setBankPickerOpen(true)} title="insert a personal story or framework from your bank">
+            + add from bank
+          </button>
+          {!scriptEditing && (
+            <button type="button" className="rep-btn rep-btn--ghost" onClick={() => setScriptEditing(true)} title="edit the script inline">
+              edit
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="rep-card rep-card--inline">
+        {scriptEditing ? (
+          <>
+            <textarea
+              value={scriptDraft}
+              onChange={(e) => setScriptDraft(e.target.value)}
+              rows={Math.max(8, scriptDraft.split('\n').length + 1)}
+              className="rep-text-input"
+              style={{ width: '100%', minHeight: 160, resize: 'vertical', fontFamily: 'inherit', fontSize: 'var(--body)', lineHeight: 1.55 }}
+              autoFocus
+            />
+            <div className="rep-actions">
+              <button
+                type="button"
+                className="rep-btn rep-btn--primary"
+                onClick={() => { update.mutate({ script: scriptDraft }); setScriptEditing(false); }}
+                disabled={update.isPending}
+              >
+                {update.isPending ? 'saving' : 'save'}
+              </button>
+              <button
+                type="button"
+                className="rep-btn rep-btn--ghost"
+                onClick={() => { setScriptDraft(scriptValue); setScriptEditing(false); }}
+              >
+                cancel
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="ig-script" style={{ whiteSpace: 'pre-wrap' }}>{toScriptBeats(scriptValue)}</p>
+            <div className="rep-actions">
+              <button type="button" className="rep-btn rep-btn--ghost" onClick={copyScript}>copy script</button>
+              {moments.length > 0 && (
+                <button type="button" className="rep-btn rep-btn--primary" onClick={copyDescriptPlan}>
+                  copy descript edit plan
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  );
+  const sourceMomentsBlock = moments.length > 0 ? (
+    <section className="rep-section">
+      <details>
+        <summary style={{ cursor: 'pointer', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+          source moments <span style={{ color: 'var(--muted-2)' }}>{moments.length}</span>
+        </summary>
+        <div className="stack" style={{ gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+          {moments.map((m, i) => (
+            <div key={i} className="ig-moment">
+              <span className="ig-moment__ts">{m.timestamp}</span>
+              <span className="ig-moment__text">"{m.text}"</span>
+            </div>
+          ))}
+        </div>
+      </details>
+    </section>
+  ) : item.original_quote ? (
+    <section className="rep-section">
+      <details>
+        <summary style={{ cursor: 'pointer', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+          source moments
+        </summary>
+        <p style={{ marginTop: 'var(--space-2)', color: 'var(--muted)', fontStyle: 'italic', lineHeight: 1.55 }}>"{item.original_quote}"</p>
+      </details>
+    </section>
+  ) : null;
+
   return (
     <div className="rep-panel-wrap" onClick={onClose}>
       <aside className="rep-panel" style={{ '--dim-c': meta.color } as React.CSSProperties} onClick={(e) => e.stopPropagation()}>
-        <header className="rep-panel__head">
-          <div className="rep-panel__head-l">
-            <span className="rep-eyebrow" style={{ color: meta.color }}>
-              {meta.label}
-            </span>
-            <TitleEditor
-              value={item.title ?? ''}
-              onSave={(v) => update.mutate({ title: v })}
-              placeholder="untitled reel"
-            />
-            {item.source_transcript_filename && (
-              <p className="rep-panel__def">from {item.source_transcript_filename.replace(/\.(md|txt)$/, '')}</p>
-            )}
-          </div>
-          <div className="rep-panel__head-r">
-            <button type="button" className="rep-btn rep-btn--ghost" onClick={onClose}>close</button>
-          </div>
-        </header>
-
-        {/* Stage selector */}
-        <section className="rep-section">
-          <header className="rep-section__head">
-            <h3 className="rep-section__title">stage</h3>
-            <p className="rep-section__sub">mark where this reel is in the pipeline.</p>
-          </header>
-          <div className="ig-stage-buttons" style={{ position: 'relative' }}>
-            {STAGES.map((s) => {
+        {/* Header mirrors the YouTube video detail: eyebrow (left) + stage
+            segmented control (center) + close (right). */}
+        <header style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 'var(--space-3)', padding: 'var(--space-4) var(--space-5)', borderBottom: '1px solid var(--hairline)' }}>
+          <span className="rep-eyebrow" style={{ justifySelf: 'start', color: meta.color }}>reel</span>
+          <div style={{ display: 'inline-flex', justifySelf: 'center', gap: 2, padding: 2, background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 'var(--radius-sm)' }} title="move this reel through the pipeline">
+            {([
+              { status: 'idea', label: 'idea' },
+              { status: 'queued', label: 'to film' },
+              { status: 'filmed', label: 'to edit' },
+              { status: 'ready_to_schedule', label: 'to schedule' },
+              { status: 'posted', label: 'posted' },
+            ] as { status: IgItemStatus; label: string }[]).map((s) => {
               const active = item.status === s.status;
               return (
                 <button
                   key={s.status}
                   type="button"
-                  className={`rep-btn ${active ? 'rep-btn--primary' : 'rep-btn--ghost'}`}
                   onClick={() => setStatus(s.status)}
                   disabled={update.isPending}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: 'none',
+                    background: active ? 'var(--recovery)' : 'transparent',
+                    color: active ? '#06281b' : 'var(--muted)',
+                    fontSize: 10,
+                    fontWeight: active ? 700 : 600,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
                 >
                   {s.label}
                 </button>
               );
             })}
-            <button
-              type="button"
-              className="rep-btn rep-btn--ghost"
-              onClick={() => setStatus('dismissed')}
+          </div>
+          <button type="button" className="rep-btn rep-btn--ghost" onClick={onClose} style={{ justifySelf: 'end' }}>close</button>
+        </header>
+
+        {/* Title + tag + source, below the stage bar (like the video detail). */}
+        <div className="rep-section" style={{ position: 'relative' }}>
+          <TitleEditor value={item.title ?? ''} onSave={(v) => update.mutate({ title: v })} placeholder="untitled reel" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap', marginTop: 'var(--space-2)' }}>
+            <select
+              value={item.tag}
+              onChange={(e) => update.mutate({ tag: e.target.value as QuoteTag })}
               disabled={update.isPending}
-              style={{ marginLeft: 'auto', color: 'var(--muted-2)' }}
+              title="what kind of moment this is"
+              style={{
+                color: meta.color,
+                fontWeight: 600,
+                padding: '6px 12px',
+                borderRadius: 'var(--radius-md)',
+                border: `1px solid color-mix(in srgb, ${meta.color} 40%, var(--hairline))`,
+                background: `color-mix(in srgb, ${meta.color} 12%, transparent)`,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                fontSize: 'var(--body-sm)',
+              }}
             >
-              {item.status === 'dismissed' ? 'dismissed' : 'dismiss'}
-            </button>
-            {panelPickerOpen && (
-              <DatePickerPopover
-                selected={item.posted_at ? new Date(item.posted_at * 1000) : new Date()}
-                onPick={commitPostedWithDate}
-                onClose={() => setPanelPickerOpen(false)}
-                align="left"
-              />
+              {TAG_ORDER.map((t) => (
+                <option key={t} value={t}>{TAG_META[t].label}</option>
+              ))}
+            </select>
+            <TagChips
+              inline
+              topics={item.topics ?? []}
+              onChange={(next) => update.mutate({ topics: next })}
+              color={meta.color}
+            />
+            {item.source_transcript_filename && (
+              <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>from {item.source_transcript_filename.replace(/\.(md|txt)$/, '')}</span>
             )}
           </div>
-        </section>
+          {panelPickerOpen && (
+            <DatePickerPopover selected={item.posted_at ? new Date(item.posted_at * 1000) : new Date()} onPick={commitPostedWithDate} onClose={() => setPanelPickerOpen(false)} align="left" />
+          )}
+        </div>
 
-        {/* Tag selector */}
-        <section className="rep-section">
-          <header className="rep-section__head">
-            <h3 className="rep-section__title">tag</h3>
-            <p className="rep-section__sub">what kind of moment this is. drives the color on the card.</p>
-          </header>
-          <div className="ig-tag-buttons">
-            {TAG_ORDER.map((t) => {
-              const m = TAG_META[t];
-              const active = item.tag === t;
-              return (
-                <button
-                  key={t}
-                  type="button"
-                  className="ig-tag-btn"
-                  onClick={() => update.mutate({ tag: t })}
-                  disabled={update.isPending}
-                  style={{
-                    color: active ? 'var(--bg)' : m.color,
-                    background: active ? m.color : `color-mix(in srgb, ${m.color} 10%, transparent)`,
-                    borderColor: active ? m.color : `color-mix(in srgb, ${m.color} 30%, transparent)`,
-                  }}
-                >
-                  {m.label}
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* Script */}
-        <section className="rep-section">
-          <header
-            className="rep-section__head"
-            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-3)', flexWrap: 'wrap' }}
-          >
-            <div>
-              <h3 className="rep-section__title">reel script</h3>
-              <p className="rep-section__sub">what you'll say. weave in a personal story to anchor it.</p>
-            </div>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <button
-                type="button"
-                className="rep-btn rep-btn--ghost"
-                onClick={() => setBankPickerOpen(true)}
-                title="insert a personal story or framework from your bank"
-              >
-                + add from bank
-              </button>
-              {!scriptEditing && (
-                <button
-                  type="button"
-                  className="rep-btn rep-btn--ghost"
-                  onClick={() => setScriptEditing(true)}
-                  title="edit the script inline"
-                >
-                  edit
-                </button>
-              )}
-            </div>
-          </header>
-          <div className="rep-card rep-card--inline">
-            {scriptEditing ? (
-              <>
-                <textarea
-                  value={scriptDraft}
-                  onChange={(e) => setScriptDraft(e.target.value)}
-                  rows={Math.max(8, scriptDraft.split('\n').length + 1)}
-                  className="rep-text-input"
-                  style={{
-                    width: '100%',
-                    minHeight: 160,
-                    resize: 'vertical',
-                    fontFamily: 'inherit',
-                    fontSize: 'var(--body)',
-                    lineHeight: 1.55,
-                  }}
-                  autoFocus
-                />
-                <div className="rep-actions">
-                  <button
-                    type="button"
-                    className="rep-btn rep-btn--primary"
-                    onClick={() => {
-                      update.mutate({ text: scriptDraft });
-                      setScriptEditing(false);
-                    }}
-                    disabled={update.isPending}
-                  >
-                    {update.isPending ? 'saving' : 'save'}
-                  </button>
-                  <button
-                    type="button"
-                    className="rep-btn rep-btn--ghost"
-                    onClick={() => {
-                      setScriptDraft(item.text);
-                      setScriptEditing(false);
-                    }}
-                  >
-                    cancel
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="ig-script" style={{ whiteSpace: 'pre-wrap' }}>{item.text}</p>
-                <div className="rep-actions">
-                  <button type="button" className="rep-btn rep-btn--ghost" onClick={copyScript}>copy script</button>
-                  {moments.length > 0 && (
-                    <button type="button" className="rep-btn rep-btn--primary" onClick={copyDescriptPlan}>
-                      copy descript edit plan
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </section>
-
-        {/* Source moments */}
-        {moments.length > 0 && (
+        {/* Clip-as-is: the editing brief. */}
+        {item.edit_plan && (
           <section className="rep-section">
             <header className="rep-section__head">
-              <h3 className="rep-section__title">source moments</h3>
-              <p className="rep-section__sub">
-                if editing in descript instead of re-filming, search for these verbatim phrases in the original recording.
-              </p>
+              <h3 className="rep-section__title">edit plan</h3>
+              <p className="rep-section__sub">how to cut the footage you already shot.</p>
             </header>
-            <div className="stack" style={{ gap: 'var(--space-2)' }}>
-              {moments.map((m, i) => (
-                <div key={i} className="ig-moment">
-                  <span className="ig-moment__ts">{m.timestamp}</span>
-                  <span className="ig-moment__text">"{m.text}"</span>
-                </div>
-              ))}
+            <div
+              style={{
+                background: 'var(--surface)',
+                border: '1px solid var(--hairline)',
+                borderRadius: 'var(--radius-md)',
+                padding: 'var(--space-4)',
+                lineHeight: 1.6,
+              }}
+            >
+              <Markdown text={item.edit_plan} />
             </div>
           </section>
         )}
+
+        {/* Render at the top - the carousel preview or the reel video - so it
+            is the first thing you see, no scrolling. */}
+        {item.format === 'carousel' && item.carousel_path && (
+          <section className="rep-section">
+            <header className="rep-section__head">
+              <h3 className="rep-section__title">carousel</h3>
+            </header>
+            <CarouselFrame path={item.carousel_path} title={item.title} height={520} />
+          </section>
+        )}
+        {item.format !== 'carousel' && item.video_path && <ReelProductionSection item={item} />}
 
         {item.context && (
           <section className="rep-section">
@@ -1234,13 +1714,34 @@ function ReelPanel({ item, onClose }: { item: IgQueueItem; onClose: () => void }
           </section>
         )}
 
-        {/* Reel production - shown only for items that have a video dropped
-            into the dropbox. Renders the video preview with live hook overlay,
-            3 editable hook variants, and the copy/mark buttons. */}
-        {item.video_path && <ReelProductionSection item={item} />}
+        {/* Script - open (no toggle) for raw ideas + ready-to-film so you can
+            write/read it; a toggle in later stages. Source moments sit in a
+            toggle directly under it. */}
+        <section className="rep-section">
+          {scriptOpen ? (
+            <>
+              <header className="rep-section__head">
+                <h3 className="rep-section__title">{item.format === 'carousel' ? 'carousel script' : 'reel script'}</h3>
+              </header>
+              {scriptBody}
+            </>
+          ) : (
+            <details>
+              <summary style={{ cursor: 'pointer', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+                {item.format === 'carousel' ? 'carousel script' : 'reel script'}
+              </summary>
+              <div style={{ marginTop: 'var(--space-3)' }}>
+                {scriptBody}
+              </div>
+            </details>
+          )}
+        </section>
 
-        {/* Instagram caption */}
-        <CaptionSection item={item} />
+        {sourceMomentsBlock}
+
+        {/* Instagram caption - not on ready-to-film cards (nothing to caption
+            until it's been filmed); shown from the edit stage onward. */}
+        {item.status !== 'queued' && item.status !== 'idea' && <CaptionSection item={item} />}
 
         {/* Posted URL */}
         {item.status === 'posted' && (
@@ -1261,13 +1762,22 @@ function ReelPanel({ item, onClose }: { item: IgQueueItem; onClose: () => void }
           </section>
         )}
 
-        {/* Danger */}
+        {/* Bottom row: dismiss on the left, remove on the right. */}
         <section className="rep-section">
-          <div className="rep-actions">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
             <button
               type="button"
               className="rep-btn rep-btn--ghost"
-              style={{ color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.3)' }}
+              onClick={() => setStatus('dismissed')}
+              disabled={update.isPending}
+              style={{ color: 'var(--muted-2)' }}
+            >
+              {item.status === 'dismissed' ? 'dismissed' : 'dismiss'}
+            </button>
+            <button
+              type="button"
+              className="rep-btn rep-btn--ghost"
+              style={{ marginLeft: 'auto', color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.3)' }}
               onClick={() => { if (confirm('Remove this reel from the queue entirely?')) remove.mutate(); }}
               disabled={remove.isPending}
             >
@@ -1981,35 +2491,39 @@ export const IG_CSS = `
 
 .ig-add-row {
   display: flex;
-  gap: var(--space-2);
-  align-items: stretch;
+  gap: var(--space-3);
+  align-items: flex-end;
   margin-bottom: var(--space-5);
   flex-wrap: wrap;
 }
 .ig-add-row .ig-idea-input { flex: 1; min-width: 280px; margin-bottom: 0; }
-.ig-add-row__bank { white-space: nowrap; align-self: stretch; }
+.ig-add-row__bank { white-space: nowrap; }
 
+/* Free-text idea entry: no box, just a bottom line. The "add idea" button sits
+   inline at the right (ghost grey until you type, green once there's text). */
 .ig-idea-input {
   display: flex;
-  gap: var(--space-2);
-  align-items: stretch;
-  margin-bottom: var(--space-5);
-  padding: var(--space-3);
-  background: var(--surface);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-md);
+  gap: var(--space-3);
+  align-items: flex-end;
+  margin-bottom: 0;
 }
 .ig-idea-input__field {
   flex: 1;
   background: transparent;
   border: none;
+  border-bottom: 1px solid var(--hairline);
+  border-radius: 0;
   color: var(--ink);
   font-family: inherit;
   font-size: var(--body);
-  padding: 6px 10px;
+  padding: 8px 2px;
   outline: none;
+  transition: border-color var(--duration-fast) var(--ease-out);
 }
+.ig-idea-input__field:focus { border-bottom-color: var(--accent); }
 .ig-idea-input__field::placeholder { color: var(--muted-2); }
+/* Override the global light-mode "grey well" for text inputs - this one stays a bare line. */
+:root[data-theme='light'] input.ig-idea-input__field { background: transparent; }
 
 .ig-empty {
   padding: var(--space-6);
@@ -2022,7 +2536,7 @@ export const IG_CSS = `
   margin-bottom: var(--space-6);
 }
 
-.ig-lane { margin-bottom: var(--space-6); }
+.ig-lane { margin-bottom: var(--space-6); display: flex; flex-direction: column; gap: var(--space-4); }
 .ig-lane__head {
   display: flex;
   align-items: baseline;
@@ -2050,30 +2564,64 @@ export const IG_CSS = `
   line-height: 1.55;
 }
 
+/* List style: the queue used to be a grid of tall cards. The page got too
+   full, so each reel is now a compact horizontal row. */
 .ig-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
 .ig-card {
   background: var(--surface);
   border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
   cursor: pointer;
   display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-4);
   transition: all 0.18s;
   position: relative;
 }
 .ig-card:hover {
-  transform: translateY(-2px);
   border-color: rgba(255,255,255,0.22);
-  box-shadow: 0 12px 32px -20px rgba(0,0,0,0.55);
+  box-shadow: 0 8px 24px -20px rgba(0,0,0,0.55);
 }
-.ig-card__head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); }
+/* Reel row (skill-card style): colored tag tile (left) · main · action (right). */
+.ig-card__tagbox { order: 0; flex: 0 0 auto; position: relative; }
+.ig-card__tagtile {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-md);
+  border: 1px solid;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.12s;
+}
+.ig-card__tagtile:hover { transform: translateY(-1px); }
+/* The middle column of a reel row: title + one-line preview + source. */
+.ig-card__main { order: 1; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ig-count-badge { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--hairline); display: grid; place-items: center; font-weight: 700; font-size: var(--body-sm); color: var(--muted); flex: 0 0 auto; background: var(--surface); }
+.ig-card__action, .ig-card__action-wrap { order: 3; flex: 0 0 auto; }
+.ig-card__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-size: var(--body-sm);
+  font-weight: 600;
+  cursor: pointer;
+  background: #EDEDE9;
+  color: #16140F;
+  border: 1.5px solid #16140F;
+  white-space: nowrap;
+}
+.ig-card__action:disabled { opacity: 0.6; cursor: default; }
 .ig-card__tag {
   font-size: 10px;
   text-transform: uppercase;
@@ -2135,16 +2683,21 @@ export const IG_CSS = `
   margin: 0;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 1.05rem;
+  font-size: 0.98rem;
   letter-spacing: -0.015em;
-  line-height: 1.25;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .ig-card__preview {
   margin: 0;
   font-size: var(--body-sm);
-  line-height: 1.55;
+  line-height: 1.4;
   color: var(--muted);
-  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .ig-card__src {
   margin: 0;
@@ -2152,7 +2705,7 @@ export const IG_CSS = `
   letter-spacing: 0.04em;
   color: var(--muted-2);
 }
-.ig-card__stages { display: flex; gap: 4px; margin-top: auto; }
+.ig-card__stages { display: flex; gap: 4px; flex: 0 0 64px; width: 64px; }
 .ig-stage {
   flex: 1;
   height: 4px;
@@ -2415,8 +2968,8 @@ input.rep-panel__title--edit {
   outline: none;
   transition: border-color 0.15s, background 0.15s;
 }
-input.rep-panel__title--edit:hover { border-color: var(--hairline); }
-input.rep-panel__title--edit:focus { border-color: var(--dim-c); background: rgba(255,255,255,0.03); }
+input.rep-panel__title--edit:hover { border-color: transparent; }
+input.rep-panel__title--edit:focus { border-color: var(--dim-c); background: transparent; }
 input.rep-panel__title--edit::placeholder { color: var(--muted-2); }
 .rep-panel__def { margin: 0; color: var(--muted); font-size: var(--body-sm); line-height: 1.5; }
 .rep-section {

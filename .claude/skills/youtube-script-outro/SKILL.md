@@ -1,6 +1,8 @@
 ---
 name: youtube-script-outro
-description: Write the closing outro section of a YouTube script. Uses the Reinforce Transformation / Curiosity Gap / Next Video structure to keep viewers on the channel rather than clicking off. Identifies the natural next video from the user's existing content. Short and tight - the moment people realise the video is ending, they click away. Use when the user is scripting an outro, or when called by /youtube-script orchestrator at the end of the script.
+description: 'Write the closing outro section of a YouTube script. Uses the Reinforce Transformation / Curiosity Gap / Next Video structure to keep viewers on the channel rather than clicking off. Identifies the natural next video from the user''s existing content. Short and tight - the moment people realise the video is ending, they click away. Use when the user is scripting an outro, or when called by /youtube-script orchestrator at the end of the script.'
+category: Create
+hidden: true
 ---
 
 # YouTube Script Outro
@@ -11,9 +13,8 @@ Writes the closing outro of the video. The job: keep them on the channel. As soo
 
 ## Preflight
 
-1. Read `04_YouTube/core_channel-positioning.md`. If missing, STOP: "Run /youtube-onboarding first to set up channel positioning."
-2. Read `01_Core/core_voice-style.md`.
-3. Scan `05_Assets/Transcripts/` to find existing videos that would make a strong follow-up. Also check `04_YouTube/Archive/` for archived scripts that have been published.
+1. Read `01_Core/core_voice-style.md` (set up in Solo OS onboarding). If your core files aren't set up yet, stop and say: run /solopreneur-onboarding first.
+2. Scan `05_Assets/Transcripts/` to find existing videos that would make a strong follow-up. Also check `04_YouTube/Archive/` for archived scripts that have been published.
 
 ---
 

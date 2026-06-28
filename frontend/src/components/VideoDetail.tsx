@@ -4,6 +4,9 @@ import { api } from '../api';
 import type { BankItem, BankKind, Video, VideoStatus, VideoSuggestions } from '../api';
 import { VideoScriptBuilder, BankPicker, type VideoScriptBuilderHandle } from './VideoScriptBuilder';
 import { useTeleprompter } from './TeleprompterProvider';
+import { useChat } from './ChatProvider';
+import { Icon, PlayIcon, ICON_COLOR } from '../lib/skillVisuals';
+import { solidButtonStyle } from '../lib/ui';
 
 interface VideoDetailProps {
   videoId: string | null;
@@ -597,17 +600,8 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
             type="button"
             onClick={() => void handleClose()}
             aria-label="close"
-            style={{
-              border: '1px solid var(--hairline)',
-              borderRadius: 'var(--radius-pill)',
-              padding: '6px 14px',
-              color: 'var(--muted)',
-              background: 'transparent',
-              cursor: 'pointer',
-              fontSize: 'var(--body-sm)',
-              fontWeight: 500,
-              justifySelf: 'end',
-            }}
+            className="btn btn--ghost"
+            style={{ justifySelf: 'end' }}
           >
             close
           </button>
@@ -775,7 +769,7 @@ export function VideoDetail({ videoId, onClose }: VideoDetailProps) {
                   title="script"
                   sub="fill in the brief for each section. suggest stories pulls from your bank. draft script weaves them all together."
                 />
-                <ClaudeInterviewCallout />
+                <ClaudeInterviewCallout videoId={videoId as string} video={data} />
                 <VideoScriptBuilder
                   ref={scriptBuilderRef}
                   videoId={videoId as string}
@@ -1784,19 +1778,63 @@ function TranscriptPicker({
  * panel doesn't blur into one continuous wall.
  */
 /**
- * Tiny callout above the script builder reminding the creator she doesn't HAVE to
- * fill the briefs in by hand - she can open Claude in this vault and run
- * /youtube-script to be interviewed instead. Both paths write to the same
- * video file so they're interchangeable. Click-to-copy on the command so
- * she can paste it straight into Claude.
+ * Skill card above the script builder. Instead of filling the briefs in by
+ * hand, the creator can run the youtube-script skill in a Claude chat - it interviews
+ * her through the idea and writes back into this same video file. One click
+ * opens the chat pre-scoped to THIS video (passes its source_file as the
+ * skill input) so there's no picker step. Mirrors the run-skill rows on the
+ * Skills page so it reads as the same control.
  */
-function ClaudeInterviewCallout() {
-  const [copied, setCopied] = useState(false);
-  function copyCmd() {
-    navigator.clipboard.writeText('/youtube-script');
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+function ClaudeInterviewCallout({ videoId, video }: { videoId: string; video: Video }) {
+  const { openChat } = useChat();
+  const [opening, setOpening] = useState(false);
+
+  async function run() {
+    if (opening) return;
+    setOpening(true);
+    try {
+      // Resolve the skill id by name - the id is location-derived
+      // (skill-<pack>-youtube-script) and differs between this vault and the
+      // shipped template, so we never hardcode it.
+      const { items } = await api.skills();
+      const summary = items.find((s) => s.name === 'youtube-script');
+      if (!summary) return;
+      const full = await api.getSkill(summary.id);
+
+      // Re-fetch the freshest record so the chat binds to THIS video's current
+      // state (title/goal/status/script that may have changed since the panel
+      // loaded), not a stale closure. Fall back to the prop if the fetch fails.
+      let v = video;
+      try {
+        v = await api.getVideo(videoId);
+      } catch {
+        /* use the prop data */
+      }
+
+      const src = v.source_file;
+      const lines = [`Run the ${full.name} skill. Read and follow its instructions at ${full.location}.`];
+      if (src) lines.push('', 'Use these inputs:', `- Video: ${src}`);
+
+      // Explicitly bind the chat to this exact video and point the skill at its
+      // file for the full current context. The file IS the source of truth -
+      // it carries the goal, the brief sections already filled in, and any
+      // drafted script - so reading it gives the chat everything that's live.
+      lines.push('', `This is for the video "${v.title}".`);
+      if (src) {
+        lines.push(
+          `Its project file is at ${src}. Read that file first for the full current context - the goal, the brief sections already filled in, and any drafted script - and write everything back into that same file. Stay on this video; do not pick or create a different one.`,
+        );
+      }
+      lines.push(`Current state: status ${v.status}${v.goal ? `, goal: "${v.goal}"` : ''}.`);
+
+      openChat({ seed: lines.join('\n'), autosend: true, context: full.title || full.name || v.title });
+    } catch {
+      // skill not found - leave the card as-is, nothing to open
+    } finally {
+      setOpening(false);
+    }
   }
+
   return (
     <div
       style={{
@@ -1807,31 +1845,37 @@ function ClaudeInterviewCallout() {
         borderRadius: 'var(--radius-md)',
         border: '1px solid var(--hairline)',
         background: 'rgba(255,255,255,0.02)',
-        flexWrap: 'wrap',
       }}
     >
-      <span style={{ fontSize: 18, lineHeight: 1 }} aria-hidden>💬</span>
-      <span style={{ fontSize: 'var(--body-sm)', color: 'var(--ink)', flex: 1, minWidth: 240, lineHeight: 1.5 }}>
-        prefer to talk it out? open Claude in this vault and run{' '}
-        <button
-          type="button"
-          onClick={copyCmd}
-          title="copy to clipboard"
-          style={{
-            background: 'rgba(255,255,255,0.06)',
-            border: '1px solid rgba(255,255,255,0.18)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '1px 8px',
-            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-            fontSize: '0.95em',
-            color: 'var(--ink)',
-            cursor: 'pointer',
-          }}
-        >
-          {copied ? '✓ copied' : '/youtube-script'}
-        </button>{' '}
-        - Claude will interview you through your idea and fill these briefs in. either path writes to the same file.
-      </span>
+      <div
+        style={{
+          flex: '0 0 auto',
+          width: 38,
+          height: 38,
+          borderRadius: 'var(--radius-sm)',
+          display: 'grid',
+          placeItems: 'center',
+          color: ICON_COLOR.youtube,
+          background: `color-mix(in srgb, ${ICON_COLOR.youtube} 14%, transparent)`,
+        }}
+      >
+        <Icon kind="youtube" size={20} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 'var(--body)', fontWeight: 600, color: 'var(--ink)' }}>Script a Video</div>
+        <div className="muted" style={{ fontSize: 'var(--body-sm)', lineHeight: 1.45, marginTop: 2 }}>
+          prefer to talk it out? Claude interviews you through the idea and fills these briefs in.
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={run}
+        disabled={opening}
+        title="run the script builder in a Claude chat, scoped to this video"
+        style={{ ...solidButtonStyle, cursor: opening ? 'default' : 'pointer', opacity: opening ? 0.6 : 1 }}
+      >
+        <PlayIcon /> {opening ? 'opening…' : 'run skill'}
+      </button>
     </div>
   );
 }

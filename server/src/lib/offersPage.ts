@@ -12,7 +12,7 @@
  */
 
 import fs from 'node:fs';
-import { abs, loadCollection, loadFile } from '../vault.js';
+import { abs, loadCollection, loadFile, slugify } from '../vault.js';
 
 const FRAMING =
   'Two things happen on this page. One: the richer you build it, the better Claude scripts your sales pages, launch emails, CTAs, walkthrough content - everything that sells this offer. Two: your offer itself gets stronger over time.';
@@ -419,7 +419,7 @@ const VALIDATION_PHASES: ValidationPhaseDef[] = [
   {
     id: 'signature',
     label: 'Signature Offer',
-    description: "Signs you're ready to scale. Consistent results, referrals, premium pricing — the offer has crystallised.",
+    description: "Signs you're ready to scale. Consistent results, referrals, premium pricing - the offer has crystallised.",
     checks: [
       {
         id: 'consistent_outcome',
@@ -603,6 +603,14 @@ type PricingRung = {
   sales_page_visitors_30d: number | null;
   sales_page_buyers_30d: number | null;
 
+  // The written sales page copy lives in its own markdown file
+  // (07_Products/sales-pages/<slug>.md). The rung stores the path; the
+  // dashboard reads/edits the file inline and the sales-page-builder skill
+  // writes it. sales_page_words is a derived read-time count so the offer card
+  // and the offer score can reflect whether a page has actually been written.
+  sales_page_file: string;
+  sales_page_words: number;
+
   vsl_url: string;
   vsl_tracking_slug: string;
   vsl_views_30d: number | null;       // YouTube views in the last 30 days
@@ -682,6 +690,26 @@ function normalizePricingStatus(v: unknown): PricingRung['status'] {
 
 const PRICING_RUNGS_FILE = abs('00_System', 'offer-pricing-rungs.json');
 
+// Where an offer's written sales page lives. Stored on the rung as
+// sales_page_file once set; until then we derive a stable default from the
+// offer name (or id) so the card and the skill always have a target path.
+export function defaultSalesPageRel(rung: { id: string; name?: string | null }): string {
+  const slug = slugify(rung.name || rung.id || 'offer');
+  return `07_Products/sales-pages/${slug}.md`;
+}
+
+// Word count of the sales page file, read-time. 0 when the file is missing or
+// empty. Drives the "written / not yet" signal on the offer card + score.
+function salesPageWordCount(rel: string): number {
+  if (!rel) return 0;
+  try {
+    const txt = fs.readFileSync(abs(...rel.split('/')), 'utf8').trim();
+    return txt ? txt.split(/\s+/).length : 0;
+  } catch {
+    return 0;
+  }
+}
+
 function loadPricingRungs(): PricingRung[] {
   const now = Math.floor(Date.now() / 1000);
   let raw: any[] = [];
@@ -721,6 +749,8 @@ function loadPricingRungs(): PricingRung[] {
     sales_page_url: str(r.sales_page_url),
     sales_page_visitors_30d: num(r.sales_page_visitors_30d),
     sales_page_buyers_30d: num(r.sales_page_buyers_30d),
+    sales_page_file: str(r.sales_page_file) || defaultSalesPageRel(r),
+    sales_page_words: salesPageWordCount(str(r.sales_page_file) || defaultSalesPageRel(r)),
     vsl_url: str(r.vsl_url),
     vsl_tracking_slug: str(r.vsl_tracking_slug),
     // Field rename: vsl_visitors_30d/vsl_buyers_30d -> vsl_views_30d/vsl_link_clicks_30d.

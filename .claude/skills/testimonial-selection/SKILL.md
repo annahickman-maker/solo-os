@@ -1,6 +1,8 @@
 ---
 name: testimonial-selection
-description: Pick which testimonials and proof points to surface for which claim. Match each testimonial to the specific objection it addresses. Use when building a sales page, About page, social post, case study, or any place where proof has to do real work. Avoids the "throw a testimonial wall at it" anti-pattern.
+description: 'Pick which testimonials and proof points to surface for which claim. Match each testimonial to the specific objection it addresses. Use when building a sales page, About page, social post, case study, or any place where proof has to do real work. Avoids the "throw a testimonial wall at it" anti-pattern.'
+category: Create
+hidden: true
 ---
 
 # Testimonial Selection
@@ -9,8 +11,8 @@ A testimonial wall is a marketer's shortcut. It says "we have many happy custome
 
 ## Required vault data
 
-- `proof.md` — case studies, before/afters, specific results, quotes (at root or `01_Core/`)
-- `01_Core/core_audience.md` — the reader's known objections, fears, and doubts
+- `proof.md` - case studies, before/afters, specific results, quotes (at root or `01_Core/`)
+- `01_Core/core_audience.md` - the reader's known objections, fears, and doubts
 
 If `proof.md` doesn't exist or is empty, the page should use specific numbers (revenue, lead count, dates) instead of testimonials. Never invent.
 
@@ -20,12 +22,12 @@ Every testimonial answers a specific doubt. Map doubts to testimonials before pl
 
 | Reader doubt | What testimonial type answers it |
 |---|---|
-| "This won't work for me" | Identity-match testimonial — someone like the reader, with the same starting point |
-| "It's too expensive" | ROI testimonial — specific revenue/saved-time numbers |
-| "I don't have time" | Time-cost testimonial — "I did this in [short timeframe]" |
-| "I've tried things before" | Failure-context testimonial — "I'd tried X, Y, Z and nothing worked, then..." |
-| "Sounds too good to be true" | Specific-number testimonial — exact dates, exact dollars, exact outcomes |
-| "I'm not technical / experienced enough" | Beginner testimonial — "I had zero background in this" |
+| "This won't work for me" | Identity-match testimonial - someone like the reader, with the same starting point |
+| "It's too expensive" | ROI testimonial - specific revenue/saved-time numbers |
+| "I don't have time" | Time-cost testimonial - "I did this in [short timeframe]" |
+| "I've tried things before" | Failure-context testimonial - "I'd tried X, Y, Z and nothing worked, then..." |
+| "Sounds too good to be true" | Specific-number testimonial - exact dates, exact dollars, exact outcomes |
+| "I'm not technical / experienced enough" | Beginner testimonial - "I had zero background in this" |
 
 ## Testimonial quality criteria (ranked)
 
@@ -59,17 +61,17 @@ Examples:
 - "3,000 subscribers, $1M in revenue last year"
 - "Adam's third video: 306,000 views. Doubled his lead flow."
 
-When the user has strong personal numbers, lean on those. Use testimonials sparingly to prove "this works for people like the reader" — your numbers prove "this works."
+When the user has strong personal numbers, lean on those. Use testimonials sparingly to prove "this works for people like the reader" - your numbers prove "this works."
 
 ## Placement rules
 
 | Section | Testimonial role |
 |---|---|
-| Hero (above fold) | One short identity-match quote — "Someone like me did this" |
-| After "Does this sound familiar?" | Failure-context — "I'd tried everything, then..." |
+| Hero (above fold) | One short identity-match quote - "Someone like me did this" |
+| After "Does this sound familiar?" | Failure-context - "I'd tried everything, then..." |
 | After the offer is introduced | ROI or specific-number testimonial |
 | In the FAQ | Embedded answer to a specific doubt |
-| Final CTA | Identity + outcome — "I was scared of X, now I have Y" |
+| Final CTA | Identity + outcome - "I was scared of X, now I have Y" |
 
 Never place testimonials in clusters of 6+ as a "wall." Two strong testimonials > ten weak ones.
 

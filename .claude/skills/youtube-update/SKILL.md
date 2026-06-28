@@ -1,6 +1,8 @@
 ---
 name: youtube-update
-description: System maintenance skill that checks for and installs updates to YouTube skill pack files (skills, scripts, frameworks, asset templates). User personal files - core onboarding output, projects, scripts, transcripts, archived content - are NEVER touched. Shows the user what's changed before applying any update. Use when the user says "update the system", "check for updates", "update YouTube skills", or "install latest".
+description: 'System maintenance skill that checks for and installs updates to YouTube skill pack files (skills, scripts, frameworks, asset templates). User personal files - core onboarding output, projects, scripts, transcripts, archived content - are NEVER touched. Shows the user what''s changed before applying any update. Use when the user says "update the system", "check for updates", "update YouTube skills", or "install latest".'
+category: Meta
+hidden: true
 ---
 
 # YouTube Update
@@ -19,7 +21,6 @@ System maintenance. Updates the YouTube skill pack files to the latest version. 
 ## What is NEVER updated (user-owned files)
 
 - `01_Core/` (user's onboarding output - positioning, audience, story, voice, IP, offer suite)
-- `04_YouTube/core_channel-positioning.md` (user's channel positioning answers)
 - `04_YouTube/video-cue.md` (user's video queue)
 - `04_YouTube/Scripts/`, `04_YouTube/Transcripts/`, `04_YouTube/Archive/`
 - `03_Projects/` (in-progress work)

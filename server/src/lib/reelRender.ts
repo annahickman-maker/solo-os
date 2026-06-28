@@ -16,8 +16,10 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { abs } from '../vault.js';
 
-const FFMPEG = '/Users/the creator/.local/bin/ffmpeg';
-const FONT = '/Library/Fonts/SF-Pro-Display-Heavy.otf';
+// ffmpeg is a tool binary, not vault data: resolve it from the environment
+// (FFMPEG_BIN), then the conventional ~/.local/bin location, then bare PATH.
+const FFMPEG = process.env.FFMPEG_BIN ?? path.join(os.homedir(), '.local', 'bin', 'ffmpeg');
+const FONT = process.env.REEL_FONT ?? '/Library/Fonts/SF-Pro-Display-Heavy.otf';
 
 // Style constants are calibrated for a 1080-wide reel. For higher-res inputs
 // (4K reels are 2160x3840) every pixel value is scaled by frameW/1080 so the
@@ -133,7 +135,7 @@ export async function renderReelWithHook(args: {
   } catch (err) {
     // Best-effort cleanup of the partial output. If ffmpeg was SIGKILLed by
     // a server restart the file might still be there next time the process
-    // boots — see cleanupStalePartials() below.
+    // boots - see cleanupStalePartials() below.
     try { fs.unlinkSync(tmpOutPath); } catch {}
     throw err;
   } finally {

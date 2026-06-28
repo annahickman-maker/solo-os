@@ -8,7 +8,7 @@ Analyze a feature and strategically add animations and micro-interactions that e
 
 Brand: orchestrated page-load sequences, staggered reveals, scroll-driven animation. Motion is part of the voice; one well-rehearsed entrance beats scattered micro-interactions.
 
-Product: 150–250 ms on most transitions. Motion conveys state — feedback, reveal, loading, transitions between views. No page-load choreography; users are in a task and won't wait for it.
+Product: 150–250 ms on most transitions. Motion conveys state - feedback, reveal, loading, transitions between views. No page-load choreography; users are in a task and won't wait for it.
 
 ---
 
@@ -153,12 +153,12 @@ Use appropriate techniques for each animation:
 ```
 
 **NEVER**:
-- Use bounce or elastic easing curves—they feel dated and draw attention to the animation itself
+- Use bounce or elastic easing curves-they feel dated and draw attention to the animation itself
 - Animate layout properties casually (`width`, `height`, `top`, `left`, margins) when transform, FLIP, or grid-based techniques would work
-- Use durations over 500ms for feedback—it feels laggy
-- Animate without purpose—every animation needs a reason
-- Ignore `prefers-reduced-motion`—this is an accessibility violation
-- Animate everything—animation fatigue makes interfaces feel exhausting
+- Use durations over 500ms for feedback-it feels laggy
+- Animate without purpose-every animation needs a reason
+- Ignore `prefers-reduced-motion`-this is an accessibility violation
+- Animate everything-animation fatigue makes interfaces feel exhausting
 - Block interaction during animations unless intentional
 
 ## Verify Quality

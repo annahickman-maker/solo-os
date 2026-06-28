@@ -1,0 +1,132 @@
+<!-- @template
+type: list
+variant: 1
+description: Numbered list with mono numerals, hairline dividers, display-font item titles
+slots:
+  title: required, list heading, supports <em>
+  items: required array of {title, description}, expect 3-5 items
+  footer-left: optional
+@end -->
+
+<style>
+  .slide.list-1 {
+    background: var(--warm, #F9F4EA);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  .slide.list-1 .frame {
+    position: absolute;
+    inset: var(--frame-inset, 56px);
+    border: 1px solid var(--hairline, rgba(26,26,26,0.18));
+    pointer-events: none;
+  }
+  .slide.list-1 .top-bar,
+  .slide.list-1 .bottom-bar {
+    position: absolute;
+    left: var(--edge-padding, 80px);
+    right: var(--edge-padding, 80px);
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: var(--mono, 14px);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted, #7a7367);
+  }
+  .slide.list-1 .top-bar { top: var(--edge-padding, 80px); }
+  .slide.list-1 .bottom-bar { bottom: var(--edge-padding, 80px); }
+  .slide.list-1 .top-bar .brand {
+    color: var(--coal, #1A1A1A);
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .slide.list-1 .top-bar .brand::before {
+    content: "";
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--accent, #A85732);
+  }
+  .slide.list-1 .body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 220px var(--body-padding, 120px) 80px;
+  }
+  .slide.list-1 h2 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: var(--display-md, 56px);
+    line-height: 1.1;
+    margin: 0 0 56px;
+    color: var(--coal, #1A1A1A);
+    max-width: 16ch;
+  }
+  .slide.list-1 h2 em {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-weight: 400;
+  }
+  .slide.list-1 ol {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    counter-reset: item;
+  }
+  .slide.list-1 ol li {
+    counter-increment: item;
+    padding: 26px 0 26px 76px;
+    border-top: 1px solid var(--hairline, rgba(26,26,26,0.18));
+    position: relative;
+    font-size: 22px;
+    line-height: 1.4;
+    color: var(--coal-soft, #3a3a3a);
+  }
+  .slide.list-1 ol li:last-child {
+    border-bottom: 1px solid var(--hairline, rgba(26,26,26,0.18));
+  }
+  .slide.list-1 ol li::before {
+    content: "0" counter(item);
+    position: absolute;
+    left: 0;
+    top: 26px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    letter-spacing: 0.22em;
+    color: var(--accent, #A85732);
+    font-weight: 500;
+  }
+  .slide.list-1 ol li strong {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 26px;
+    color: var(--coal, #1A1A1A);
+    display: block;
+    margin-bottom: 4px;
+  }
+</style>
+
+<article class="slide list-1" id="slide-{{INDEX}}">
+  <div class="frame"></div>
+  <div class="top-bar">
+    <span class="brand">{{BRAND_NAME}}</span>
+    <span>{{BRAND_LOCATION}}</span>
+  </div>
+  <div class="body">
+    <h2>{{TITLE}}</h2>
+    <ol>
+      {{ITEMS}}
+    </ol>
+  </div>
+  <div class="bottom-bar">
+    <span>{{FOOTER_LEFT}}</span>
+    <span>{{INDEX}} / {{TOTAL}}</span>
+  </div>
+</article>
+
+<!-- ITEMS slot expects an HTML string of <li> elements:
+     <li><strong>Item title</strong>item description text</li>
+     <li><strong>...</strong>...</li>
+-->

@@ -1,6 +1,8 @@
 ---
 name: connect-zoom-transcripts
-description: Walk a dashboard user through connecting their Zoom account so cloud-recording transcripts automatically drop into their vault. Triggered by phrases like "connect Zoom to my dashboard", "set up Zoom transcripts", "I want my Zoom recordings to show up in my vault". Guides them through a one-time Zoom Marketplace Server-to-Server OAuth setup, captures their Account ID + Client ID + Client Secret, sends them to the local dashboard server which tests + saves them, then runs a first sync to confirm. All credentials stay on the user's machine. Read this whole file before starting - the steps are linear and the user is doing manual UI work in a browser between every step.
+description: 'Walk a dashboard user through connecting their Zoom account so cloud-recording transcripts automatically drop into their vault. Triggered by phrases like "connect Zoom to my dashboard", "set up Zoom transcripts", "I want my Zoom recordings to show up in my vault". Guides them through a one-time Zoom Marketplace Server-to-Server OAuth setup, captures their Account ID + Client ID + Client Secret, sends them to the local dashboard server which tests + saves them, then runs a first sync to confirm. All credentials stay on the user''s machine. Read this whole file before starting - the steps are linear and the user is doing manual UI work in a browser between every step.'
+category: Create
+hidden: true
 ---
 
 # Connect Zoom transcripts to the dashboard

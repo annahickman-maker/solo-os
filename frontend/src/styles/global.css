@@ -3,17 +3,28 @@
   min-height: 100vh;
 }
 
+/* Outer rail holds the background and stretches to the FULL page height (flex
+   stretch), so the sidebar color fills top-to-bottom with no horizontal split.
+   The inner wrapper is what stays sticky as you scroll. */
 .nav-rail {
   width: 240px;
   flex-shrink: 0;
+  background: var(--nav-bg);
   border-right: 1px solid var(--hairline);
-  padding: var(--space-7) var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-7);
+}
+
+.nav-rail__inner {
   position: sticky;
   top: 0;
   height: 100vh;
+  padding: var(--space-6) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  /* The rail never scrolls. When the viewport is too short to fit everything,
+     NavRail measures the overflow and moves the lowest-priority items (chats,
+     then nav items from the bottom) into the "more" popover instead. */
+  overflow: hidden;
 }
 
 .nav-rail__brand {
@@ -56,7 +67,7 @@
 
 .nav-rail__link--active {
   color: var(--ink);
-  background: var(--surface);
+  background: var(--highlight);
 }
 
 .nav-rail__dot {
@@ -75,6 +86,51 @@
 
 .nav-rail__footer {
   margin-top: auto;
+}
+
+/* "More" overflow control - appears just above Settings only when the rail is
+   too short to show everything inline. Opens a popover upward with the hidden
+   items + chats so nothing ever needs the rail to scroll. */
+.nav-rail__more {
+  position: relative;
+}
+.nav-rail__more-btn {
+  width: 100%;
+  background: none;
+  border: none;
+  font: inherit;
+  cursor: pointer;
+}
+.nav-rail__more-glyph {
+  flex-shrink: 0;
+  width: 6px;
+  display: inline-flex;
+  justify-content: center;
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: 1px;
+  opacity: 0.6;
+}
+.nav-rail__more-pop {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  min-width: 200px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  z-index: 60;
+  max-height: 72vh;
+  overflow-y: auto;
+}
+/* Inside the popover, always show labels even when the rail itself is the
+   narrow icon-only variant (the popover overflows to the right with room). */
+.nav-rail__more-pop .nav-rail__link {
+  justify-content: flex-start;
+}
+.nav-rail__more-pop .nav-rail__link-text {
+  display: inline;
 }
 
 .main {
@@ -139,15 +195,18 @@
   color: var(--muted);
 }
 
+/* Spacing rhythm: pages are a single flex column (.stack) with ONE gap that
+   owns the vertical rhythm (see docs/DESIGN_UI.md, Rule 5). .page-header and
+   .section therefore carry NO outer margin - the stack gap spaces them - so the
+   rhythm can't compound/drift the way it used to. Skills is the reference. */
 .page-header {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  margin-bottom: var(--space-7);
 }
 
 .section {
-  margin-top: var(--space-8);
+  margin-top: 0;
 }
 
 .section__header {
@@ -276,48 +335,55 @@
   font-weight: 700;
 }
 
+/* Canonical button family (see docs/DESIGN_UI.md, Rule 6). radius-md, body-sm,
+   600, soft lift. Reference: the Skills "run skill" + IG card "posted/schedule"
+   buttons. .btn = outline/secondary base; --primary = solid cream/ink; --ghost =
+   quiet. The soft-lift value mirrors SURFACE_LIFT in lib/ui.ts. */
 .btn {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
+  justify-content: center;
+  gap: 7px;
+  padding: var(--space-2) var(--space-4);
   border: 1px solid var(--hairline);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-md);
   font-size: var(--body-sm);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--ink);
-  background: transparent;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(15, 15, 15, 0.06), 0 4px 12px -2px rgba(15, 15, 15, 0.07);
   transition: background var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out);
+    border-color var(--duration-fast) var(--ease-out), filter var(--duration-fast) var(--ease-out);
 }
 
 .btn:hover {
-  background: var(--surface);
+  background: var(--fill-subtle-2);
+  border-color: var(--border-strong, var(--hairline));
 }
 
+/* Primary = solid cream/ink (the "run skill" / "posted" look). */
 .btn--primary {
-  background: var(--accent);
-  color: var(--bg);
-  border-color: var(--accent);
+  background: #EDEDE9;
+  color: #16140F;
+  border: 1.5px solid #16140F;
 }
 
 .btn--primary:hover {
-  background: var(--accent);
-  filter: brightness(1.1);
+  background: #EDEDE9;
+  filter: brightness(1.04);
 }
 
-/* Secondary buttons keep a faint visible outline so they're recognisably
-   clickable next to text and primary CTAs. Don't drop this to transparent -
-   ghost-with-no-border buttons look like links, not buttons. */
+/* Ghost = quiet secondary: transparent fill, hairline border, muted text. */
 .btn--ghost {
-  border-color: rgba(255, 255, 255, 0.18);
+  background: transparent;
+  border-color: var(--hairline);
   color: var(--muted);
 }
 
 .btn--ghost:hover {
   color: var(--ink);
-  background: var(--surface);
-  border-color: rgba(255, 255, 255, 0.36);
+  background: var(--fill-subtle-2);
+  border-color: var(--border-strong, var(--hairline));
 }
 
 /* Inline section action pill (e.g. `+ insert story` next to a section
@@ -354,7 +420,12 @@
 @media (max-width: 1023px) {
   .nav-rail {
     width: 72px;
-    padding: var(--space-7) var(--space-3);
+    /* No padding on the outer rail - the sticky 100vh inner owns the padding.
+       Padding here would push the inner below the fold and clip Settings. */
+  }
+
+  .nav-rail__inner {
+    padding: var(--space-6) var(--space-3);
   }
 
   .nav-rail__brand-text,
@@ -499,4 +570,70 @@ html, body {
 }
 .main__inner {
   min-width: 0;
+}
+
+/* Light mode: lift cards off the warm-grey canvas with a hairline border and a
+   soft shadow, so white cards float and separate the way Eden's do. Dark mode
+   keeps the flat color-separation look (no rule applies there). Inline
+   borders from `bordered` cards still win, which is fine - same hairline. */
+:root[data-theme='light'] .card {
+  border: 1px solid var(--hairline);
+  box-shadow: var(--card-shadow);
+}
+
+/* Light mode: give native text inputs the highlight grey well so fields read
+   as recessed against white cards. Inline-styled inputs keep their own value. */
+:root[data-theme='light'] textarea,
+:root[data-theme='light'] input[type='text'],
+:root[data-theme='light'] input[type='search'],
+:root[data-theme='light'] input[type='url'],
+:root[data-theme='light'] input:not([type]) {
+  background: var(--surface-2);
+}
+
+/* Title inputs read as plain headings, not recessed wells - no grey fill. */
+:root[data-theme='light'] input.rep-panel__title--edit,
+:root[data-theme='light'] input.tx-quote__title-input {
+  background: transparent;
+}
+
+/* Light mode: borderless fields, note blocks, score-bar tracks, and hover
+   states were drawn with faint white-alpha overlays for dark mode - invisible
+   on white cards. Give them the solid highlight grey so they read as distinct,
+   recessed surfaces the way they do in dark mode. One block covers every
+   reused field component (avatar, reputation, offer, CTA, transcripts, etc.). */
+:root[data-theme='light'] .ytav__textarea,
+:root[data-theme='light'] .ytav__textarea:focus,
+:root[data-theme='light'] .ytav__view--empty,
+:root[data-theme='light'] .ytav__view:hover,
+:root[data-theme='light'] .ytav__head:hover,
+:root[data-theme='light'] .ytav__chip-input:focus,
+:root[data-theme='light'] .fce__hint,
+:root[data-theme='light'] .av-name:hover,
+:root[data-theme='light'] .av-name:focus,
+:root[data-theme='light'] .av-chip-input:focus,
+:root[data-theme='light'] .av-brag__head:hover,
+:root[data-theme='light'] .av-brag__row--open,
+:root[data-theme='light'] .rep-textarea:focus,
+:root[data-theme='light'] .rep-card--inline,
+:root[data-theme='light'] .rep-chip--mini,
+:root[data-theme='light'] .rep-chip-input:focus,
+:root[data-theme='light'] .rep-dim__bar,
+:root[data-theme='light'] .rep-panel__title--edit:focus,
+:root[data-theme='light'] .rep-povf__view:hover,
+:root[data-theme='light'] .off-textarea:focus,
+:root[data-theme='light'] .off-check:hover,
+:root[data-theme='light'] .off-inline--empty:hover,
+:root[data-theme='light'] .off-secdim__bar,
+:root[data-theme='light'] .off-vp__bar,
+:root[data-theme='light'] .sb-input:focus,
+:root[data-theme='light'] .sb-section__brief:focus,
+:root[data-theme='light'] .tx-badge--muted,
+:root[data-theme='light'] .tx-quote__text:hover,
+:root[data-theme='light'] .tx-row:hover,
+:root[data-theme='light'] .vphz__check-btn:hover,
+:root[data-theme='light'] .vphz__phase--done,
+:root[data-theme='light'] .vphz__phase-head:hover,
+:root[data-theme='light'] .long-game__col:hover {
+  background: var(--surface-2);
 }

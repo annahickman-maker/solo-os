@@ -1,6 +1,8 @@
 ---
 name: ai-image-prompting
-description: Expert-level prompt engineering for AI image generation, specifically for brand photography, moodboards, strategy deck imagery, website hero images, and persona portraits. Use when generating image prompts for Nano Banana (Gemini), Midjourney, or any image model. Covers cinematic language, photography terminology, composition, lighting, film references, consistency across batches, and avoiding AI artifacts.
+description: 'Expert-level prompt engineering for AI image generation, specifically for brand photography, moodboards, strategy deck imagery, website hero images, and persona portraits. Use when generating image prompts for Nano Banana (Gemini), Midjourney, or any image model. Covers cinematic language, photography terminology, composition, lighting, film references, consistency across batches, and avoiding AI artifacts.'
+category: Create
+hidden: true
 ---
 
 # AI Image Prompting

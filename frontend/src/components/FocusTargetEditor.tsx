@@ -260,7 +260,7 @@ export function FocusTargetEditor({
             />
             <ComputedField
               label="sales needed"
-              value={computedSales != null ? String(computedSales) : '—'}
+              value={computedSales != null ? String(computedSales) : '-'}
               hint={
                 computedSales != null
                   ? 'revenue ÷ price, updates as you type'

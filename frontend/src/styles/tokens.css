@@ -2,6 +2,8 @@
   --bg: #0E1116;
   --surface: #161A21;
   --surface-2: #1C2129;
+  --nav-bg: #0E1116;
+  --highlight: #161A21;
   --ink: #FFFFFF;
   --muted: rgba(255, 255, 255, 0.55);
   --muted-2: rgba(255, 255, 255, 0.38);
@@ -19,6 +21,19 @@
   --info: #29A4FF;
 
   --ring-track: rgba(255, 255, 255, 0.07);
+
+  --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.22);
+  --selection: rgba(22, 224, 161, 0.28);
+
+  /* Subtle fills used by trackers, bars, and hover/selected states. These
+     flip to dark-alpha in light mode so the tracking squares stay visible. */
+  --fill-subtle: rgba(255, 255, 255, 0.04);
+  --fill-subtle-2: rgba(255, 255, 255, 0.06);
+  --heat-future: rgba(255, 255, 255, 0.03);
+  --bar-empty: rgba(255, 255, 255, 0.18);
+
+  color-scheme: dark;
 
   --font-display: 'Inter', system-ui, sans-serif;
   --font-body: 'Inter', system-ui, sans-serif;
@@ -48,6 +63,39 @@
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --duration-fast: 180ms;
   --duration-base: 320ms;
+}
+
+/* ─── Light theme (Eden-style warm two-tone grey). Keeps the green accent
+   and every semantic color; only the greys and alpha tokens change.
+   Applied via data-theme="light" on <html>, toggled from Settings. ─── */
+:root[data-theme='light'] {
+  /* Eden hierarchy: canvas, white cards on top, a distinct sidebar panel,
+     and a highlight grey shared by the active nav item and input wells. */
+  --bg: #f7f8f6;
+  --surface: #fefefe;
+  --surface-2: #e8e7e2;
+  --nav-bg: #f7f8f6;
+  --highlight: #e8e7e2;
+  --ink: #1c1a17;
+  --muted: rgba(28, 26, 23, 0.55);
+  --muted-2: rgba(28, 26, 23, 0.40);
+  --hairline: rgba(28, 26, 23, 0.09);
+  --ring-track: #e8e7e2;
+
+  /* Tracker / bar / hover fills. Empties use the solid highlight grey so the
+     squares read clearly on white cards; hover stays a soft alpha. */
+  --fill-subtle: rgba(28, 26, 23, 0.045);
+  --fill-subtle-2: #e8e7e2;
+  --heat-future: #f0efea;
+  --bar-empty: #e8e7e2;
+
+  /* Soft lift for the floating-card look on the grey canvas. */
+  --card-shadow: 0 1px 2px rgba(28, 26, 23, 0.04), 0 1px 3px rgba(28, 26, 23, 0.05);
+
+  --scrollbar-thumb: rgba(28, 26, 23, 0.18);
+  --scrollbar-thumb-hover: rgba(28, 26, 23, 0.30);
+  --selection: rgba(22, 201, 126, 0.22);
+  color-scheme: light;
 }
 
 *,
@@ -119,16 +167,16 @@ a {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--scrollbar-thumb);
   border-radius: var(--radius-pill);
   border: 2px solid var(--bg);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.22);
+  background: var(--scrollbar-thumb-hover);
 }
 
 ::selection {
-  background: rgba(22, 224, 161, 0.28);
+  background: var(--selection);
   color: var(--ink);
 }

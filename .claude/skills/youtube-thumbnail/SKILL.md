@@ -16,7 +16,7 @@ The skill won't produce on-brand output without the personal layer populated. If
 
 ## Preflight
 
-1. Read `04_YouTube/core_channel-positioning.md`. If missing, STOP: "Run /youtube-onboarding first to set up channel positioning."
+1. Your foundation comes from Solo OS onboarding (the `01_Core/` files). If your core files aren't set up yet, stop and say: run /solopreneur-onboarding first.
 2. Read the bundled universal layer (relative paths from this skill folder):
    - `design-principles.md` - what makes a thumbnail click
    - `prompting-patterns.md` - nano banana technical patterns + thumbnail prompt structure

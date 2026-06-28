@@ -106,14 +106,14 @@ function loadPinnedProof(): string {
     const pinnedIds: string[] = Array.isArray(rawIds)
       ? (rawIds as unknown[]).filter((x): x is string => typeof x === 'string')
       : [];
-    if (pinnedIds.length === 0) return '(no proof pinned yet — encourage the creator to pin proof items on the Proof tab)';
+    if (pinnedIds.length === 0) return '(no proof pinned yet - encourage the creator to pin proof items on the Proof tab)';
     const lines: string[] = [];
     // Wins
     try {
       const wins = JSON.parse(fs.readFileSync(abs('00_System', 'wins.json'), 'utf8')) as any[];
       for (const w of wins) {
         if (!pinnedIds.includes(w.id)) continue;
-        lines.push(`- [win:${w.kind}] ${w.title}${w.body ? ` — ${w.body}` : ''}`);
+        lines.push(`- [win:${w.kind}] ${w.title}${w.body ? ` - ${w.body}` : ''}`);
       }
     } catch {}
     // Proof bank

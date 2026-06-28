@@ -1,6 +1,8 @@
 ---
 name: youtube-script-intro
-description: Write the spoken intro for a YouTube video using the 3 Cs check (Clarity, Credibility, Curiosity in the first 30 seconds) and the 5-part framework as one possible delivery (Context, Baseline Belief, Contrarian Flip, Proof, Plan). Use whenever the user asks to write, draft, script, or rework a YouTube intro, opener, hook, or first 30 seconds. The 3 Cs are the outcome - the 5 parts are one way to deliver them, not the only way.
+description: 'Write the spoken intro for a YouTube video using the 3 Cs check (Clarity, Credibility, Curiosity in the first 30 seconds) and the 5-part framework as one possible delivery (Context, Baseline Belief, Contrarian Flip, Proof, Plan). Use whenever the user asks to write, draft, script, or rework a YouTube intro, opener, hook, or first 30 seconds. The 3 Cs are the outcome - the 5 parts are one way to deliver them, not the only way.'
+category: Create
+hidden: true
 ---
 
 # YouTube Script Intro
@@ -13,15 +15,15 @@ The intro must hit the **3 Cs** in the first 30 seconds (or first 3 sentences). 
 
 ## Preflight
 
-1. Read `04_YouTube/core_channel-positioning.md`. If missing, STOP and tell user: "Run /youtube-onboarding first to set up channel positioning."
-2. Read these in order before writing a single word:
-   - `01_Core/core_voice-style.md` — opening patterns, sentence rhythm, never-do list. **Read first. Voice overrides framework.**
-   - `01_Core/core_audience.md` — the "who it's for" half of Clarity
-   - `01_Core/core_positioning.md` — how the user frames themselves (powers Credibility)
-   - `01_Core/core_ip.md` — the core method this video should connect to
-   - `04_YouTube/core_channel-positioning.md` — the channel's transformation and target viewer
-3. Check `05_Assets/Stories/` and `05_Assets/Transcripts/` for real proof points. Never invent.
-4. Read the project note for this video if one exists in `03_Projects/`.
+1. Read these in order before writing a single word (set up in Solo OS onboarding):
+   - `01_Core/core_voice-style.md` - opening patterns, sentence rhythm, never-do list. **Read first. Voice overrides framework.**
+   - `01_Core/core_audience.md` - the "who it's for" half of Clarity
+   - `01_Core/core_positioning.md` - how the user frames themselves (powers Credibility) and the transformation
+   - `01_Core/core_ip.md` - the core method this video should connect to
+2. Load your content focus avatar - the specific person this video is for. Read `content_focus_avatar` from `00_System/state.md` (a path to an avatar file) and read that avatar in `05_Assets/Avatars/`. If none is set, fall back to `core_audience.md`.
+3. If your core files aren't set up yet, stop and say: run /solopreneur-onboarding first.
+4. Check `05_Assets/Stories/` and `05_Assets/Transcripts/` for real proof points. Never invent.
+5. Read the project note for this video if one exists in `03_Projects/`.
 
 ---
 

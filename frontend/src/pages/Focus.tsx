@@ -9,6 +9,8 @@ import { YearGrid } from '../components/YearGrid';
 import { MonthGrid } from '../components/MonthGrid';
 import { FocusTargetEditor } from '../components/FocusTargetEditor';
 import { EditableHeading } from '../components/EditableHeading';
+import { FilterTabs } from '../components/FilterTabs';
+import { createButtonStyle, filledPillStyle } from '../lib/ui';
 import { daysBetween, formatDate } from '../lib/format';
 
 // Ordered highest-strain-first to match the activity-tracker picker.
@@ -271,7 +273,7 @@ export function Focus() {
   const mrrProgress = mrrTarget && mrrTarget > 0 ? Math.min(1, currentMrr / mrrTarget) : progress;
 
   return (
-    <div className="stack" style={{ gap: 'var(--space-5)' }}>
+    <div className="stack" style={{ gap: 'var(--space-6)' }}>
       {/* "Set target" pill sits flush to the right with no left-side eyebrow.
           The "90-day focus" label now lives inside the goal block below, so
           this top row is just the action affordance. Tighter bottom margin
@@ -468,6 +470,15 @@ export function Focus() {
           the page rhythm. */}
       <div style={{ height: 'var(--space-3)' }} />
 
+      {/* Full-width task composer, above the planner/master-todo split so it
+          has room to breathe instead of being crammed into the master-todo
+          column. Adds straight to the master todo. */}
+      <TaskComposer
+        projectOptions={projectOptions}
+        onCreate={(body) => createTask.mutate(body)}
+        pending={createTask.isPending}
+      />
+
       {/* Split: sticky vertical Mon-Fri planner on the LEFT, master
           todo list on the RIGHT. Drag any row from the master todo
           across to a day, or use the + on each day to pick from a
@@ -501,36 +512,13 @@ export function Focus() {
           </div>
         </header>
 
-        {/* Inline task composer. Sits just under the section header.
-            Title + category + (optional) project. Saves to /api/tasks. */}
-        <TaskComposer
-          projectOptions={projectOptions}
-          onCreate={(body) => createTask.mutate(body)}
-          pending={createTask.isPending}
-        />
-
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 'var(--space-2)',
-            marginBottom: 'var(--space-5)',
-          }}
-        >
-          {CATEGORIES.map((c) => (
-            <button
-              key={c}
-              onClick={() => setFilter(c)}
-              className="btn"
-              style={{
-                background: filter === c ? 'var(--ink)' : 'transparent',
-                color: filter === c ? 'var(--bg)' : 'var(--muted)',
-                borderColor: filter === c ? 'var(--ink)' : 'var(--hairline)',
-              }}
-            >
-              {CATEGORY_DISPLAY[c] ?? c}
-            </button>
-          ))}
+        <div style={{ marginBottom: 'var(--space-5)' }}>
+          <FilterTabs
+            value={filter}
+            onChange={(v) => setFilter(v as TaskCategory | 'all')}
+            ariaLabel="task categories"
+            options={CATEGORIES.map((c) => ({ value: c, label: CATEGORY_DISPLAY[c] ?? c }))}
+          />
         </div>
 
         {isLoading ? (
@@ -560,6 +548,7 @@ export function Focus() {
                     >
                       <TaskRow
                         task={t}
+                        outlined
                         showCategory={false}
                         onToggle={(status) => toggleTask.mutate({ id: t.id, status })}
                         onSetEnergy={(energy) => setEnergy.mutate({ id: t.id, energy })}
@@ -832,18 +821,32 @@ function FocusTargetToggle({
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
+  // "Filled in" once a 90-day MRR or member target exists - mirrors the
+  // ghost -> light-green "set" state of the Content target/CTA pills.
+  const targetSet = ((targets?.mrr_target_usd ?? 0) > 0) || ((targets?.member_target ?? 0) > 0);
+
   return (
     <>
+      {/* Same outline-pill style as the Content "positioning" button, with a
+          target icon; goes light-green (filledPillStyle) once a target is set. */}
       <button
         type="button"
-        className="ytav-trigger"
         onClick={() => setOpen(true)}
         aria-label="set target"
+        title="set your 90-day MRR + member targets"
+        style={{
+          ...(targetSet ? filledPillStyle : createButtonStyle),
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+        }}
       >
-        <span className="ytav-trigger__icon">
-          <TargetIcon />
-        </span>
-        <span className="ytav-trigger__label">set target</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <circle cx="12" cy="12" r="9" />
+          <circle cx="12" cy="12" r="5" />
+          <circle cx="12" cy="12" r="1.5" />
+        </svg>
+        set target
       </button>
 
       {open && (
@@ -891,21 +894,6 @@ function FocusTargetToggle({
         </div>
       )}
     </>
-  );
-}
-
-function TargetIcon() {
-  // Concentric-circle "target" mark. Outer circle is the same 48-unit
-  // viewBox container that the AvatarSvg uses so the .ytav-trigger button
-  // renders it at the matching 28px size. Inner rings are kept small so
-  // the icon reads lighter in the pill, not maxed-out to the edge.
-  return (
-    <svg viewBox="0 0 48 48" aria-hidden>
-      <circle cx="24" cy="24" r="23" fill="rgba(255,255,255,0.04)" stroke="var(--hairline)" />
-      <circle cx="24" cy="24" r="10" fill="none" stroke="var(--recovery)" strokeWidth="1.6" />
-      <circle cx="24" cy="24" r="5" fill="none" stroke="var(--recovery)" strokeWidth="1.4" />
-      <circle cx="24" cy="24" r="1.8" fill="var(--recovery)" />
-    </svg>
   );
 }
 
@@ -1260,11 +1248,11 @@ function TaskComposer({
         display: 'grid',
         gridTemplateColumns: '1fr auto auto auto',
         gap: 'var(--space-2)',
-        padding: 'var(--space-2) var(--space-3)',
-        background: 'rgba(255,255,255,0.02)',
+        padding: 'var(--space-3) var(--space-4)',
+        background: 'var(--surface)',
         border: '1px solid var(--hairline)',
-        borderRadius: 'var(--radius-md)',
-        marginBottom: 'var(--space-3)',
+        borderRadius: 'var(--radius-lg)',
+        marginBottom: 'var(--space-5)',
         alignItems: 'stretch',
       }}
     >
@@ -1279,7 +1267,7 @@ function TaskComposer({
         style={{
           background: 'transparent',
           border: 'none',
-          color: 'var(--text)',
+          color: 'var(--ink)',
           fontSize: 14,
           padding: '6px 8px',
           minWidth: 0,
@@ -1291,8 +1279,8 @@ function TaskComposer({
         onChange={(e) => setCategory(e.target.value as TaskCategory)}
         title="category"
         style={{
-          background: 'rgba(255,255,255,0.04)',
-          color: 'var(--text)',
+          background: 'var(--surface-2)',
+          color: 'var(--ink)',
           border: '1px solid var(--hairline)',
           borderRadius: 'var(--radius-md)',
           padding: '4px 8px',
@@ -1309,8 +1297,8 @@ function TaskComposer({
         onChange={(e) => setProjectId(e.target.value)}
         title="project or client (optional)"
         style={{
-          background: 'rgba(255,255,255,0.04)',
-          color: 'var(--text)',
+          background: 'var(--surface-2)',
+          color: 'var(--ink)',
           border: '1px solid var(--hairline)',
           borderRadius: 'var(--radius-md)',
           padding: '4px 8px',
@@ -1332,7 +1320,7 @@ function TaskComposer({
         disabled={!title.trim() || pending}
         className="btn"
         style={{
-          background: title.trim() && !pending ? 'var(--recovery)' : 'rgba(255,255,255,0.04)',
+          background: title.trim() && !pending ? 'var(--recovery)' : 'var(--surface-2)',
           color: title.trim() && !pending ? 'var(--bg)' : 'var(--muted)',
           border: '1px solid',
           borderColor: title.trim() && !pending ? 'var(--recovery)' : 'var(--hairline)',

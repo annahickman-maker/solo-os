@@ -26,10 +26,20 @@ echo ""
 
 # ─── 1. npm install in all three subfolders ────────────────────────────────
 
+# Install all three in parallel - the wait is bounded by the slowest one, not
+# the sum of all three (cuts a big chunk off first-time setup).
+pids=()
 for sub in server frontend claude-bridge; do
-  echo "→ npm install in $sub/"
-  (cd "$DASH_DIR/$sub" && npm install --silent --no-audit --no-fund 2>&1 | tail -5)
+  echo "→ npm install in $sub/ (running in parallel)"
+  ( cd "$DASH_DIR/$sub" && npm install --silent --no-audit --no-fund ) >/dev/null 2>&1 &
+  pids+=($!)
 done
+install_failed=0
+for pid in "${pids[@]}"; do wait "$pid" || install_failed=1; done
+if [ "$install_failed" = 1 ]; then
+  echo "✗ One or more npm installs failed. Re-run ./setup.sh (check your internet connection)."
+  exit 1
+fi
 
 echo ""
 echo "✓ Dependencies installed."

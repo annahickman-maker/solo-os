@@ -1,6 +1,8 @@
 ---
 name: website-sections-cheatsheet
 description: Section-by-section guide for designing and writing website copy. Auto-loads when generating any website copy, designing website layouts, planning sitemaps, or critiquing website design. Covers navigation, hero sections, authority building, problem solving, offers, about sections, how-it-works, testimonials, portfolios, what's included, newsletters, pricing, FAQs, who-is-this-for, final CTAs, and footers. The single reference for what every website section should contain and how to write it.
+category: Create
+hidden: true
 ---
 
 # Website Sections Cheatsheet

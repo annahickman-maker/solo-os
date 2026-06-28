@@ -9,6 +9,7 @@
 
 import { Hono } from 'hono';
 import fs from 'node:fs';
+import path from 'node:path';
 import { abs, loadFile, saveFile } from '../vault.js';
 import { normalizeQuoteTag } from '../lib/extractQuotes.js';
 import { loadPosts, syncInstagram } from '../lib/instagramSync.js';
@@ -37,7 +38,7 @@ type IgItem = {
   source_moments?: Array<{ text: string; timestamp: string }>;
   kind?: 'story' | 'quote';
   title?: string;
-  status: 'queued' | 'editing' | 'ready_to_schedule' | 'scheduled' | 'filmed' | 'posted' | 'dismissed' | 'failed';
+  status: 'idea' | 'queued' | 'editing' | 'ready_to_schedule' | 'scheduled' | 'filmed' | 'posted' | 'dismissed' | 'failed';
   queued_at: number;
   editing_at?: number;
   ready_at?: number;
@@ -58,6 +59,19 @@ type IgItem = {
   caption?: string;
   caption_hashtags?: string[];
   caption_generated_at?: number;
+  // Reel-clipper producer fields:
+  //   seed idea  (ready to film) -> original_quote + script (editable)
+  //   clip-as-is (ready to edit) -> edit_plan
+  original_quote?: string;
+  script?: string;
+  edit_plan?: string;
+  topics?: string[];
+  reel_origin?: 'clip' | 'film';
+  // Format of the piece: a single reel/video (default) or a multi-slide
+  // carousel. Carousels carry carousel_path (the rendered slides.html) instead
+  // of video_path.
+  format?: 'reel' | 'carousel';
+  carousel_path?: string;     // vault-rel path to the carousel's slides.html
   // Auto-post pipeline fields.
   video_path?: string;        // absolute path on disk to the .mp4 dropped by the creator
   thumbnail_path?: string;    // absolute path to a .jpg frame for dashboard preview
@@ -84,7 +98,7 @@ function readQueue(): IgItem[] {
         }
       }
       if (mutated) {
-        try { fs.writeFileSync(IG_QUEUE, JSON.stringify(arr, null, 2)); } catch {}
+        try { writeQueue(arr); } catch {}
       }
       return arr as IgItem[];
     }
@@ -92,8 +106,14 @@ function readQueue(): IgItem[] {
   return [];
 }
 
+// Atomic write: serialize to a temp file then rename. A crash (or another
+// process reading) mid-write can never see a half-written / corrupt queue -
+// the rename is atomic on the same filesystem. The pid in the temp name keeps
+// concurrent writers (server + archive-posted-reels.py) from sharing a tmp.
 function writeQueue(items: IgItem[]): void {
-  fs.writeFileSync(IG_QUEUE, JSON.stringify(items, null, 2));
+  const tmp = `${IG_QUEUE}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tmp, JSON.stringify(items, null, 2));
+  fs.renameSync(tmp, IG_QUEUE);
 }
 
 const app = new Hono();
@@ -111,6 +131,12 @@ app.post('/queue', async (c) => {
     source_moments?: Array<{ text: string; timestamp: string }>;
     kind?: 'story' | 'quote';
     quote_id?: string;
+    status?: IgItem['status'];
+    original_quote?: string;
+    script?: string;
+    edit_plan?: string;
+    topics?: string[];
+    reel_origin?: 'clip' | 'film';
   } | null;
   const title = body?.title?.trim();
   const text = body?.text?.trim();
@@ -119,21 +145,31 @@ app.post('/queue', async (c) => {
   const items = readQueue();
   const now = Math.floor(Date.now() / 1000);
   const id = `ig-idea-${now}-${Math.random().toString(36).slice(2, 8)}`;
+  // status drives the lane: 'idea' = raw idea (unscripted), 'queued' = ready to
+  // film, 'filmed' = ready to edit.
+  const allowedStatus = ['idea', 'queued', 'filmed'] as const;
+  const status = body?.status && (allowedStatus as readonly string[]).includes(body.status) ? body.status : 'queued';
   const item: IgItem = {
     id,
     text: text ?? title ?? '',
     title: title ?? undefined,
     tag: body?.tag ? normalizeQuoteTag(String(body.tag), text ?? title ?? '') : 'pov',
     kind: body?.kind ?? 'quote',
-    status: 'queued',
+    status,
     queued_at: now,
   };
+  if (status === 'filmed') item.filmed_at = now;
   if (body?.context) item.context = body.context;
   if (body?.timestamp) item.timestamp = body.timestamp;
   if (body?.source_transcript_id) item.source_transcript_id = body.source_transcript_id;
   if (body?.source_transcript_filename) item.source_transcript_filename = body.source_transcript_filename;
   if (Array.isArray(body?.source_moments)) item.source_moments = body.source_moments;
   if (body?.quote_id) item.quote_id = body.quote_id;
+  if (body?.original_quote) item.original_quote = body.original_quote;
+  if (body?.script) item.script = body.script;
+  if (body?.edit_plan) item.edit_plan = body.edit_plan;
+  if (Array.isArray(body?.topics)) item.topics = body.topics;
+  if (body?.reel_origin === 'clip' || body?.reel_origin === 'film') item.reel_origin = body.reel_origin;
   items.push(item);
   writeQueue(items);
   return c.json({ ok: true, item });
@@ -176,6 +212,14 @@ app.patch('/queue/:id', async (c) => {
     if (body.status === 'ready_to_schedule' && !it.ready_at) it.ready_at = now;
     if (body.status === 'scheduled' && !it.scheduled_at) it.scheduled_at = now;
     if (body.status === 'filmed' && !it.filmed_at) it.filmed_at = now;
+    // Marking a reel filmed from the queue means it was filmed from a script -
+    // tag its origin so ready-to-edit groups it by filmed date, not by the
+    // transcript its seed idea originally came from. Also refresh filmed_at so
+    // the group is keyed by when it was actually filmed.
+    if (body.status === 'filmed' && prev !== 'filmed') {
+      it.reel_origin = 'film';
+      it.filmed_at = now;
+    }
     if (body.status === 'posted' && !it.posted_at) it.posted_at = now;
     if (body.status === 'dismissed' && !it.dismissed_at) it.dismissed_at = now;
     if (body.status === 'failed' && !it.failed_at) it.failed_at = now;
@@ -190,8 +234,18 @@ app.patch('/queue/:id', async (c) => {
   if (typeof body.posted_at === 'number' && Number.isFinite(body.posted_at)) {
     it.posted_at = body.posted_at;
   }
+  // Target publish date from the "schedule" button on the ready-to-schedule
+  // lane (defaults to the next free slot, editable).
+  if (typeof body.scheduled_for === 'number' && Number.isFinite(body.scheduled_for)) {
+    it.scheduled_for = body.scheduled_for;
+  }
   if (typeof body.text === 'string') it.text = body.text;
   if (typeof body.title === 'string') it.title = body.title;
+  // Reel-clipper producer fields - editable from the reel panel.
+  if (typeof body.script === 'string') it.script = body.script;
+  if (typeof body.original_quote === 'string') it.original_quote = body.original_quote;
+  if (typeof body.edit_plan === 'string') it.edit_plan = body.edit_plan;
+  if (Array.isArray(body.topics)) it.topics = body.topics;
   if (typeof body.posted_url === 'string') it.posted_url = body.posted_url;
   if (typeof body.queue_order === 'number') it.queue_order = body.queue_order;
   if (typeof body.view_count === 'number') it.view_count = Math.max(0, Math.floor(body.view_count));
@@ -200,6 +254,8 @@ app.patch('/queue/:id', async (c) => {
   if (typeof body.tag === 'string') {
     it.tag = normalizeQuoteTag(body.tag, it.text);
   }
+  if (body.format === 'reel' || body.format === 'carousel') it.format = body.format;
+  if (typeof body.carousel_path === 'string') it.carousel_path = body.carousel_path;
   if (typeof body.caption === 'string') it.caption = body.caption;
   if (Array.isArray(body.caption_hashtags)) {
     it.caption_hashtags = body.caption_hashtags
@@ -230,12 +286,15 @@ app.delete('/queue/:id', (c) => {
 });
 
 /**
- * GET /api/instagram/output - daily post counts for the last 4 calendar months,
- * grouped by month. Used to render the MonthGrid at the top of the IG page.
+ * GET /api/instagram/output - daily post counts across a 4-month forward
+ * window (current month + next 3), grouped by month. Used to render the
+ * MonthGrid at the top of the IG page. Forward-looking because the creator pre-marks
+ * scheduled reels as posted with future dates, so the calendar needs to show
+ * upcoming months to track the queue against the cadence target.
  *
  * Source of truth = the IG queue entries with status === 'posted' and a
  * posted_at timestamp. That field is set when the creator marks a reel posted via
- * the panel.
+ * the panel (or when the Graph API sync pulls real posts).
  */
 app.get('/output', (c) => {
   // Prefer Graph-API-synced posts when available; fall back to queue's posted_at.
@@ -243,10 +302,11 @@ app.get('/output', (c) => {
   const useSynced = syncedPosts.length > 0;
   const items = readQueue();
   const now = new Date();
-  // Build last 4 months including current, oldest first then we'll reverse in UI.
+  // Build current month + next 3 months, oldest first. The frontend grid
+  // expects newest first and reverses again to display - so we reverse below.
   const months: Array<{ year: number; month: number; label: string; days_in_month: number; days: Array<{ day: number; count: number }> }> = [];
-  for (let offset = 3; offset >= 0; offset--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+  for (let offset = 0; offset <= 3; offset++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
     const year = d.getFullYear();
     const month = d.getMonth() + 1; // 1-12
     const daysInMonth = new Date(year, month, 0).getDate();
@@ -281,14 +341,15 @@ app.get('/output', (c) => {
   // fall back to short_form_per_week (set by the Focus Target Editor) so the
   // two fields stay in lock-step from either direction. Default 3/wk.
   let target = 3;
+  let targetSet = false; // true only when the creator explicitly stored a target
   try {
     const stateFile = loadFile(abs(STATE_FILE_REL[0], STATE_FILE_REL[1]));
     if (stateFile?.frontmatter) {
       const fm = stateFile.frontmatter as any;
       const igVal = fm.instagram_target_per_week;
       const sfVal = fm.short_form_per_week;
-      if (typeof igVal === 'number' && igVal > 0) target = igVal;
-      else if (typeof sfVal === 'number' && sfVal > 0) target = sfVal;
+      if (typeof igVal === 'number' && igVal > 0) { target = igVal; targetSet = true; }
+      else if (typeof sfVal === 'number' && sfVal > 0) { target = sfVal; targetSet = true; }
     }
   } catch {}
 
@@ -296,6 +357,7 @@ app.get('/output', (c) => {
   return c.json({
     months: months.reverse(),
     target_per_week: target,
+    target_set: targetSet,
     source: useSynced ? 'instagram_graph_api' : 'manual_posted_status',
     synced_post_count: syncedPosts.length,
   });
@@ -372,7 +434,7 @@ app.post('/queue/reorder', async (c) => {
 // ─── Caption generation ────────────────────────────────────────────────────
 
 function stripEmDashes(s: string): string {
-  return s.replace(/—/g, ' - ').replace(/–/g, '-');
+  return s.replace(/\u2014/g, ' - ').replace(/\u2013/g, '-');
 }
 
 function getCtaFromState(): { text: string; url: string } {
@@ -436,22 +498,34 @@ OUTPUT FORMAT - return a JSON object only, no commentary, no markdown fences:
 }`;
 
 async function callBridge(system: string, user: string, maxTokens = 1500): Promise<string> {
-  const res = await fetch(BRIDGE_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      type: 'instagramCaption',
-      system,
-      user,
-      maxTokens,
-      expectJson: true,
-    }),
-  });
-  if (!res.ok) throw new Error(`claude-bridge ${res.status}: ${await res.text()}`);
-  const data = (await res.json()) as { text?: string; error?: string };
-  if (data.error) throw new Error(`claude-bridge: ${data.error}`);
-  if (!data.text) throw new Error('claude-bridge: no text in response');
-  return data.text;
+  // The bridge is a single supervised process; a crash restarts it in ~2s. To
+  // ride out that window (and transient network blips) retry on connection
+  // failures and 5xx, with backoff. 4xx are caller errors - fail fast.
+  const body = JSON.stringify({ type: 'instagramCaption', system, user, maxTokens, expectJson: true });
+  const MAX_ATTEMPTS = 3;
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch(BRIDGE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+      if (res.status >= 500) throw new Error(`claude-bridge ${res.status}: ${await res.text()}`);
+      if (!res.ok) throw new Error(`claude-bridge ${res.status}: ${await res.text()}`); // 4xx: not retried (rethrown below)
+      const data = (await res.json()) as { text?: string; error?: string };
+      if (data.error) throw new Error(`claude-bridge: ${data.error}`);
+      if (!data.text) throw new Error('claude-bridge: no text in response');
+      return data.text;
+    } catch (err: any) {
+      lastErr = err;
+      const msg = String(err?.message ?? err);
+      const retryable = /ECONNREFUSED|fetch failed|network|claude-bridge 5\d\d/.test(msg);
+      if (!retryable || attempt === MAX_ATTEMPTS) throw err;
+      await new Promise((r) => setTimeout(r, attempt * 1500)); // 1.5s, 3s
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('claude-bridge: failed');
 }
 
 function parseCaptionJson(raw: string): { caption: string; hashtags: string[] } {
@@ -515,11 +589,16 @@ app.post('/queue/:id/caption', async (c) => {
     const raw = await callBridge(CAPTION_SYSTEM, userPrompt);
     const parsed = parseCaptionJson(raw);
     if (!parsed.caption) return c.json({ error: 'empty caption from model' }, 502);
-    it.caption = parsed.caption;
-    it.caption_hashtags = parsed.hashtags;
-    it.caption_generated_at = Math.floor(Date.now() / 1000);
-    writeQueue(items);
-    return c.json({ ok: true, item: it });
+    // Re-read after the await: another writer may have changed the queue while
+    // the bridge ran. Merge onto the fresh copy so we don't clobber their edit.
+    const fresh = readQueue();
+    const fIt = fresh.find((i) => i.id === id);
+    if (!fIt) return c.json({ error: 'not found' }, 404);
+    fIt.caption = parsed.caption;
+    fIt.caption_hashtags = parsed.hashtags;
+    fIt.caption_generated_at = Math.floor(Date.now() / 1000);
+    writeQueue(fresh);
+    return c.json({ ok: true, item: fIt });
   } catch (err: any) {
     console.error('caption generation failed:', err);
     return c.json({ error: err?.message ?? 'caption generation failed' }, 500);
@@ -766,8 +845,12 @@ app.post('/queue/:id/hooks', async (c) => {
     const raw = await callBridge(HOOK_SYSTEM, userPrompt, 500);
     const hooks = parseHookJson(raw);
     if (hooks.length === 0) return c.json({ error: 'no hooks returned' }, 502);
-    it.hook_variants = hooks;
-    writeQueue(items);
+    // Re-read after the await so a concurrent edit during the bridge call isn't lost.
+    const fresh = readQueue();
+    const fIt = fresh.find((i) => i.id === id);
+    if (!fIt) return c.json({ error: 'not found' }, 404);
+    fIt.hook_variants = hooks;
+    writeQueue(fresh);
     return c.json({ ok: true, hooks });
   } catch (err: any) {
     console.error('hook generation failed:', err);
@@ -859,5 +942,140 @@ app.get('/due-now', (c) => {
   });
   return c.json({ items: due });
 });
+
+// ─── Carousels (rendered slides.html from the carousel skill) ───────────────
+// The carousel skill writes slides.html into
+// `Channel - Instagram/carousels/<date>-<slug>/`. These endpoints let the
+// dashboard list them and render them in an in-app iframe instead of spawning a
+// separate browser window.
+const CAROUSELS_REL = 'Channel - Instagram/carousels';
+const CAROUSELS_DIR = abs('Channel - Instagram', 'carousels');
+
+// APPROVE (authed) - the user approved a rendered carousel in the chat preview.
+// Create a `ready_to_schedule` queue item flagged as a carousel, pointing at
+// the slides.html. Reads the sibling source-script.md (if any) as caption
+// material so the existing caption generator has something to work from.
+app.post('/carousels/approve', async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { path?: string; title?: string } | null;
+  const relPath = (body?.path ?? '').trim();
+  if (
+    !relPath ||
+    relPath.includes('..') ||
+    relPath.startsWith('/') ||
+    !relPath.startsWith(CAROUSELS_REL + '/') ||
+    !relPath.endsWith('slides.html')
+  ) {
+    return c.json({ error: 'invalid carousel path' }, 400);
+  }
+  const slidesAbs = abs(...relPath.split('/'));
+  if (!fs.existsSync(slidesAbs)) return c.json({ error: 'carousel not found' }, 404);
+
+  // Idempotent: if this carousel is already in the queue, return the existing one.
+  const items = readQueue();
+  const existing = items.find((i) => i.carousel_path === relPath);
+  if (existing) return c.json({ ok: true, item: existing, already: true });
+
+  const slug = relPath.split('/').slice(-2, -1)[0] ?? '';
+  const m = slug.match(/^(\d{4}-\d{2}-\d{2})-(.+)$/);
+  const titleSlug = m ? m[2] : slug;
+  const title =
+    (body?.title?.trim()) || titleSlug.replace(/-/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+
+  // Caption material: the source script saved next to slides.html.
+  let scriptText = '';
+  try {
+    const srcAbs = path.join(path.dirname(slidesAbs), 'source-script.md');
+    if (fs.existsSync(srcAbs)) scriptText = fs.readFileSync(srcAbs, 'utf8');
+  } catch {
+    /* no source script - caption gen falls back to the title */
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const id = `ig-carousel-${now}-${Math.random().toString(36).slice(2, 8)}`;
+  const item: IgItem = {
+    id,
+    text: scriptText.trim() || title,
+    title,
+    tag: 'pov',
+    kind: 'story',
+    status: 'ready_to_schedule',
+    format: 'carousel',
+    carousel_path: relPath,
+    script: scriptText.trim() || undefined,
+    queued_at: now,
+    ready_at: now,
+  };
+  items.push(item);
+  writeQueue(items);
+  return c.json({ ok: true, item });
+});
+
+// FILE + ASSET are mounted PUBLICLY in index.ts (above auth) because an iframe
+// can't send the dashboard-password header. They do their own ?pw= check / are
+// path-locked to the carousels dir. Modeled on the deck serving routes.
+export function serveCarouselFile(reqUrl: string): Response {
+  const url = new URL(reqUrl);
+  const pw = url.searchParams.get('pw') ?? '';
+  const expected = process.env.DASHBOARD_PASSWORD ?? 'dev';
+  if (pw !== expected) return new Response('unauthorized', { status: 401 });
+  const relPath = url.searchParams.get('path') ?? '';
+  if (
+    relPath.includes('..') ||
+    relPath.startsWith('/') ||
+    !relPath.startsWith(CAROUSELS_REL + '/') ||
+    !relPath.endsWith('.html')
+  ) {
+    return new Response('not allowed', { status: 403 });
+  }
+  const full = abs(...relPath.split('/'));
+  if (!fs.existsSync(full)) return new Response('not found', { status: 404 });
+  let html = fs.readFileSync(full, 'utf8');
+  // Inject a <base href> so any relative asset (e.g. before/after photos) in the
+  // carousel resolves through the carousel-asset route. CDN scripts + Google
+  // fonts are absolute URLs and are unaffected.
+  const dir = relPath.split('/').slice(0, -1).join('/');
+  const baseHref = '/api/instagram/carousel-asset/' + dir.split('/').map(encodeURIComponent).join('/') + '/';
+  html = html.replace(/<head[^>]*>/i, (m) => m + `<base href="${baseHref}" data-role="carousel-base">`);
+  return new Response(html, {
+    status: 200,
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+  });
+}
+
+export function serveCarouselAsset(reqUrl: string): Response {
+  const url = new URL(reqUrl);
+  const m = url.pathname.match(/^\/api\/instagram\/carousel-asset\/(.+)$/);
+  if (!m) return new Response('not found', { status: 404 });
+  const relPath = decodeURIComponent(m[1]);
+  if (relPath.includes('..') || relPath.startsWith('/') || !relPath.startsWith(CAROUSELS_REL + '/')) {
+    return new Response('not allowed', { status: 403 });
+  }
+  const resolved = path.resolve(abs(...relPath.split('/')));
+  if (!resolved.startsWith(path.resolve(CAROUSELS_DIR) + path.sep)) {
+    return new Response('not allowed', { status: 403 });
+  }
+  let buf: Buffer;
+  try {
+    buf = fs.readFileSync(resolved);
+  } catch {
+    return new Response('not found', { status: 404 });
+  }
+  const ext = path.extname(resolved).toLowerCase();
+  const mime =
+    ext === '.png' ? 'image/png'
+    : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
+    : ext === '.webp' ? 'image/webp'
+    : ext === '.gif' ? 'image/gif'
+    : ext === '.svg' ? 'image/svg+xml'
+    : ext === '.mp4' ? 'video/mp4'
+    : ext === '.mov' ? 'video/quicktime'
+    : ext === '.webm' ? 'video/webm'
+    : ext === '.woff2' ? 'font/woff2'
+    : ext === '.woff' ? 'font/woff'
+    : ext === '.css' ? 'text/css; charset=utf-8'
+    : ext === '.js' ? 'application/javascript'
+    : 'application/octet-stream';
+  return new Response(buf, { status: 200, headers: { 'Content-Type': mime, 'Cache-Control': 'no-cache' } });
+}
 
 export default app;

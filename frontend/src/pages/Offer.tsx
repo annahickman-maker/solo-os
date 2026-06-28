@@ -20,6 +20,9 @@ import type {
   OfferShortFormLink,
 } from '../api';
 import { Ring } from '../components/Ring';
+import { useChat } from '../components/ChatProvider';
+import { Icon, PlayIcon, skillIconKind, skillColor } from '../lib/skillVisuals';
+import { Markdown } from '../lib/Markdown';
 
 // Offer Strength v2.
 // Mirrors the Reputation v4 layout: hero ring + framing, profile card,
@@ -219,7 +222,7 @@ function OfferCardsList({
   }
 
   return (
-    <div className="stack" style={{ gap: 'var(--space-5)', marginTop: 'var(--space-7)' }}>
+    <div className="stack" style={{ gap: 'var(--space-6)', marginTop: 'var(--space-7)' }}>
       <header className="stack" style={{ gap: 4 }}>
         <span className="off-eyebrow">your offers</span>
         <h2
@@ -426,7 +429,7 @@ function OfferCard({
   // the honest answer for a brand-new offer.
   const { value: completion, perSection: sectionScores } = overallScore(rung);
   const STRAIN = 'var(--strain)';
-  const [perOfferPanel, setPerOfferPanel] = useState<'avatar' | 'pricing' | 'content' | 'score' | 'validation' | 'proof' | null>(null);
+  const [perOfferPanel, setPerOfferPanel] = useState<'avatar' | 'pricing' | 'content' | 'score' | 'validation' | 'proof' | 'salespage' | null>(null);
 
   // Sizing toggles for the bigger featured card.
   const ringSize = isFeatured ? 110 : 72;
@@ -467,7 +470,7 @@ function OfferCard({
             top: 12,
             right: 12,
             zIndex: 2,
-            background: 'rgba(0,0,0,0.35)',
+            background: 'var(--surface)',
             border: '1px solid color-mix(in srgb, var(--recovery) 45%, var(--hairline))',
             borderRadius: 999,
             padding: '4px 10px',
@@ -603,10 +606,11 @@ function OfferCard({
               avatar={attachedAvatar}
               onClick={() => setPerOfferPanel('avatar')}
             />
-            {/* The five "shape of the offer" sub-cards (avatar / pricing /
-                proof / validation / conversions) all share the sleep
-                blue. Only the 6th — Overall Offer Score — stays recovery
-                green so it visually pops as the rollup metric. */}
+            {/* The six "shape of the offer" sub-cards (avatar / pricing /
+                proof / validation / conversions / sales page) all share the
+                sleep blue and sit in a 2x3 grid. The Overall Offer Score is
+                pulled out below the grid as a full-width recovery-green bar so
+                it reads as the rollup of everything above it. */}
             <OfferSubCard
               eyebrow="pricing"
               title={rung.goal_price_label ? `goal: ${rung.goal_price_label}` : 'set a price strategy'}
@@ -644,16 +648,19 @@ function OfferCard({
               score={sectionScores.content}
               onClick={() => setPerOfferPanel('content')}
             />
-            {/* ─── 6th sub-card: Overall Offer Score (with Claude) ─── */}
+            {/* ─── 6th sub-card: Sales page (write it with Claude) ─── */}
             <OfferSubCard
-              eyebrow="overall offer score"
-              title={`${Math.round(completion * 100)} / 100`}
-              definition="How strong this offer is overall, scored across 25 self-rated questions."
-              color="var(--recovery)"
-              score={completion}
-              onClick={() => setPerOfferPanel('score')}
+              eyebrow="sales page"
+              title={(rung.sales_page_words ?? 0) > 0 ? `${rung.sales_page_words} words written` : 'write your sales page'}
+              definition="Talk to Claude to write this offer's sales page, then read and edit it right here."
+              color="var(--sleep)"
+              score={(rung.sales_page_words ?? 0) > 0 ? 1 : 0}
+              onClick={() => setPerOfferPanel('salespage')}
             />
           </div>
+
+          {/* ─── Overall Offer Score - full-width rollup beneath the grid ─── */}
+          <OfferScoreBar score={completion} onClick={() => setPerOfferPanel('score')} />
 
           {/* Per-offer panels - open over the page when a sub-card is clicked. */}
           {perOfferPanel === 'avatar' && (
@@ -694,6 +701,13 @@ function OfferCard({
           {perOfferPanel === 'proof' && (
             <PerOfferProofPanel
               rung={rung}
+              onClose={() => setPerOfferPanel(null)}
+            />
+          )}
+          {perOfferPanel === 'salespage' && (
+            <PerOfferSalesPagePanel
+              rung={rung}
+              avatars={avatars}
               onClose={() => setPerOfferPanel(null)}
             />
           )}
@@ -1089,6 +1103,316 @@ function OfferSubCard({
         <OpenArrow />
       </div>
     </button>
+  );
+}
+
+// The overall offer score, rendered as a full-width thin rollup beneath the
+// six sub-section cards (avatar / pricing / proof / validation / conversions /
+// sales page). The ring carries the number; the row stays low and wide so the
+// grid above reads as a clean 2x3.
+function OfferScoreBar({ score, onClick }: { score: number; onClick: () => void }) {
+  const color = 'var(--recovery)';
+  return (
+    <button
+      type="button"
+      className="off-scorebar"
+      onClick={onClick}
+      style={{ '--sec-c': color } as React.CSSProperties}
+    >
+      <div style={{ width: 52, height: 52, flexShrink: 0 }}>
+        <Ring value={score} label="" bigNumber={`${Math.round(score * 100)}`} unit="" size="tiny" color={color} />
+      </div>
+      <div className="off-scorebar__mid">
+        <span className="off-eyebrow" style={{ color }}>overall offer score</span>
+        <p className="off-secdim__def" style={{ margin: 0 }}>How strong this offer is overall, across 25 self-rated questions.</p>
+      </div>
+      <OpenArrow />
+    </button>
+  );
+}
+
+// The sales page panel. Two things in one place: a "script it with Claude" card
+// (pre-scoped to THIS offer + its attached avatar, saving to the offer's own
+// sales page file) and an inline editor of that file so the finished page lives
+// right here on the offer - never in a folder you have to go find.
+function PerOfferSalesPagePanel({
+  rung,
+  avatars,
+  onClose,
+}: {
+  rung: OfferPricingRung;
+  avatars: OfferAvatar[];
+  onClose: () => void;
+}) {
+  const { openChat } = useChat();
+  const qc = useQueryClient();
+  const [draft, setDraft] = useState<string | null>(null);
+  const [opening, setOpening] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const page = useQuery({ queryKey: ['rung-sales-page', rung.id], queryFn: () => api.getRungSalesPage(rung.id) });
+  useEffect(() => {
+    if (page.data && draft === null) setDraft(page.data.content);
+  }, [page.data, draft]);
+  const save = useMutation({
+    mutationFn: (content: string) => api.saveRungSalesPage(rung.id, content),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['offers'] }),
+  });
+  const attachedAvatar = avatars.find((a) => a.id === rung.avatar_id) ?? null;
+
+  // The skill summary drives the card so it looks exactly like its Skills-page
+  // row (icon, color, title, card line, custom/built-in badge).
+  const skillsQuery = useQuery({ queryKey: ['skills'], queryFn: api.skills });
+  const spSkill = skillsQuery.data?.items.find((s) => s.name === 'sales-page-builder') ?? null;
+
+  // Auto-grow the editor with its content instead of scrolling inside it. The
+  // panel itself scrolls, so the textarea always shows the whole page.
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = taRef.current;
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = `${el.scrollHeight}px`;
+    }
+  }, [draft, page.isLoading, editing]);
+
+  async function scriptIt() {
+    if (opening) return;
+    setOpening(true);
+    try {
+      // Resolve the skill id by name (id is location-derived, differs in the template).
+      const { items } = await api.skills();
+      const summary = items.find((s) => s.name === 'sales-page-builder');
+      if (!summary) return;
+      const full = await api.getSkill(summary.id);
+      const target = page.data?.path || '';
+
+      // Everything filled in for THIS offer on the offer page, auto-attached so
+      // there's nothing to re-enter. Only non-empty fields are included.
+      const a = attachedAvatar;
+      const num = (n: number | null | undefined) => (n == null ? '' : String(n));
+      const offer = [
+        `the offer "${rung.name || 'this offer'}"${rung.price_label ? ` (${rung.price_label})` : ''}`,
+        rung.promise && `promise: ${rung.promise}`,
+        rung.proof_required && `what it is: ${rung.proof_required}`,
+        rung.status && `stage: ${rung.status}`,
+        rung.tier && `tier: ${rung.tier}`,
+        rung.goal_price_label && `goal price: ${rung.goal_price_label}`,
+        rung.pricing_plan && `pricing plan: ${rung.pricing_plan}`,
+        num(rung.target_customers_per_month) && `target: ${num(rung.target_customers_per_month)} customers/mo`,
+        num(rung.target_revenue_per_month_usd) && `target revenue: $${num(rung.target_revenue_per_month_usd)}/mo`,
+        rung.audience_journey && `audience journey: ${rung.audience_journey}`,
+        rung.cta_locations && `CTA locations: ${rung.cta_locations}`,
+        rung.cta_frequency && `CTA frequency: ${rung.cta_frequency}`,
+        rung.sales_page_url && `current sales page URL: ${rung.sales_page_url}`,
+        'full offer detail in 01_Core/core_offer-suite.md',
+      ]
+        .filter(Boolean)
+        .join('. ');
+      const avatar = a
+        ? [
+            `the audience avatar "${a.name || 'this avatar'}"`,
+            a.source_file && `read its full profile at ${a.source_file}`,
+            a.one_line && `one-line: ${a.one_line}`,
+            a.before_state && `before: ${a.before_state}`,
+            a.after_state && `after: ${a.after_state}`,
+            a.demographics && `who: ${a.demographics}`,
+            a.price_point && `price point: ${a.price_point}`,
+            a.struggles?.length ? `struggles: ${a.struggles.join('; ')}` : '',
+            a.outcomes?.length ? `wants: ${a.outcomes.join('; ')}` : '',
+          ]
+            .filter(Boolean)
+            .join('. ')
+        : '';
+
+      const lines = [
+        `Run the ${full.name} skill. Read and follow its instructions at ${full.location}.`,
+        '',
+        'Use these inputs (already filled in on the offer page - use them, do not ask me to re-enter anything):',
+        `- Offer: ${offer}`,
+      ];
+      if (avatar) lines.push(`- Audience avatar: ${avatar}`);
+      lines.push(
+        `- Proof: use this offer's real proof - read 00_System/proof-points.json and 05_Assets/Proof/ for testimonials, results, and wins relevant to this offer.`,
+        '',
+        `This is the sales page for the offer "${rung.name || 'this offer'}". Stay on this offer; do not pick a different one.${target ? ` Always save the finished page to ${target}` : ' Save the finished page to this offer'} (the sales page box on this offer reads from there) AND paste the full sales page into the chat.`,
+      );
+      openChat({ seed: lines.join('\n'), autosend: true, context: `sales page - ${rung.name || 'offer'}` });
+    } catch {
+      // skill not found - nothing to open
+    } finally {
+      setOpening(false);
+    }
+  }
+
+  return (
+    <PanelShell
+      eyebrow="sales page"
+      title={`sales page for ${rung.name || 'this offer'}`}
+      subtitle="write it with Claude, then read and edit it right here. it saves to this offer, so your offer score can see it."
+      color="var(--sleep)"
+      onClose={onClose}
+    >
+      {/* Script-a-sales-page card - styled like its Skills-page row (minus the
+          schedule button). One click runs the skill, auto-scoped to this offer
+          + avatar, saving back to this offer's sales page. */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-4)',
+          padding: 'var(--space-4)',
+          borderRadius: 'var(--radius-lg)',
+          border: '1px solid var(--hairline)',
+          background: 'var(--surface)',
+        }}
+      >
+        {spSkill && (
+          <div
+            style={{
+              flex: '0 0 auto',
+              width: 42,
+              height: 42,
+              borderRadius: 'var(--radius-md)',
+              display: 'grid',
+              placeItems: 'center',
+              color: skillColor(spSkill),
+              background: `color-mix(in srgb, ${skillColor(spSkill)} 14%, transparent)`,
+            }}
+          >
+            <Icon kind={skillIconKind(spSkill)} />
+          </div>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 'var(--body)', fontWeight: 600, color: 'var(--ink)' }}>
+              {spSkill?.title || 'Write a Sales Page'}
+            </span>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: 'var(--muted)',
+                border: '1px solid var(--hairline)',
+                borderRadius: 'var(--radius-pill)',
+                padding: '2px 8px',
+              }}
+            >
+              {spSkill && !spSkill.builtIn ? 'custom' : 'built-in'}
+            </span>
+          </div>
+          <div className="off-section__sub" style={{ margin: '3px 0 0' }}>
+            {spSkill?.summary || "Write your landing page copy from this offer and audience."}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={scriptIt}
+          disabled={opening}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 7,
+            flex: '0 0 auto',
+            padding: '8px 16px',
+            borderRadius: 'var(--radius-md)',
+            fontSize: 'var(--body-sm)',
+            fontWeight: 600,
+            cursor: opening ? 'default' : 'pointer',
+            opacity: opening ? 0.6 : 1,
+            background: '#EDEDE9',
+            color: '#16140F',
+            border: '1.5px solid #16140F',
+          }}
+        >
+          <PlayIcon /> {opening ? 'opening…' : 'run skill'}
+        </button>
+      </div>
+
+      {/* The page lives here on the offer. Rendered as clean markdown by
+          default (no raw # or **); click edit to get the raw textbox. */}
+      {page.isLoading ? (
+        <span className="off-section__sub">loading…</span>
+      ) : editing ? (
+        <div className="stack" style={{ gap: 'var(--space-2)' }}>
+          <textarea
+            ref={taRef}
+            value={draft ?? ''}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="write your sales page here, or run the skill above."
+            style={{
+              width: '100%',
+              minHeight: 160,
+              // Grows with its content (see the auto-grow effect); the panel
+              // scrolls, not the box. overflow hidden so no inner scrollbar.
+              overflow: 'hidden',
+              background: 'var(--surface)',
+              border: '1px solid var(--hairline)',
+              borderRadius: 'var(--radius-md)',
+              color: 'var(--ink)',
+              padding: 'var(--space-4)',
+              fontFamily: 'var(--font-body)',
+              fontSize: 'var(--body)',
+              lineHeight: 1.6,
+              resize: 'none',
+              outline: 'none',
+              whiteSpace: 'pre-wrap',
+            }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', alignItems: 'center' }}>
+            <button
+              type="button"
+              className="off-btn off-btn--ghost"
+              onClick={() => { setDraft(page.data?.content ?? ''); setEditing(false); }}
+            >
+              cancel
+            </button>
+            <button
+              type="button"
+              className="off-btn off-btn--primary"
+              onClick={() => save.mutate(draft ?? '', { onSuccess: () => setEditing(false) })}
+              disabled={save.isPending}
+            >
+              {save.isPending ? 'saving…' : 'save'}
+            </button>
+          </div>
+        </div>
+      ) : draft && draft.trim() ? (
+        <div className="stack" style={{ gap: 'var(--space-2)' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button type="button" className="off-btn off-btn--ghost" onClick={() => setEditing(true)}>edit</button>
+          </div>
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--hairline)',
+              borderRadius: 'var(--radius-md)',
+              padding: 'var(--space-4) var(--space-5)',
+              fontSize: 'var(--body)',
+              lineHeight: 1.6,
+            }}
+          >
+            <Markdown text={draft} />
+          </div>
+        </div>
+      ) : (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 'var(--space-3)',
+            padding: 'var(--space-4) var(--space-5)',
+            border: '1px dashed var(--hairline)',
+            borderRadius: 'var(--radius-md)',
+          }}
+        >
+          <span className="off-section__sub" style={{ margin: 0 }}>no sales page yet. run the skill above, or write one yourself.</span>
+          <button type="button" className="off-btn off-btn--ghost" onClick={() => setEditing(true)}>write it here</button>
+        </div>
+      )}
+    </PanelShell>
   );
 }
 
@@ -6660,7 +6984,7 @@ export const OFF_CSS = `
 .off-text-input:focus { border-color: var(--recovery); }
 
 .off-btn { padding: 6px 14px; border-radius: var(--radius-md); border: 1px solid transparent; font-family: inherit; font-size: var(--body-sm); font-weight: 600; cursor: pointer; }
-.off-btn--primary { background: var(--recovery); color: var(--bg); }
+.off-btn--primary { background: #EDEDE9; color: #16140F; border: 1.5px solid #16140F; box-shadow: 0 1px 3px rgba(15,15,15,0.06), 0 4px 12px -2px rgba(15,15,15,0.07); }
 .off-btn--primary:disabled { opacity: 0.4; cursor: not-allowed; }
 .off-btn--ghost { background: transparent; color: var(--muted); border-color: var(--hairline); }
 .off-btn--ghost:hover { color: var(--ink); border-color: var(--ink); }
@@ -6798,6 +7122,29 @@ export const OFF_CSS = `
   font-weight: 600;
   letter-spacing: 0.04em;
 }
+
+/* Full-width thin rollup card for the overall offer score, below the grid. */
+.off-scorebar {
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  transition: all 0.18s;
+  color: inherit;
+  font-family: inherit;
+}
+.off-scorebar:hover {
+  border-color: var(--sec-c);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px -16px var(--sec-c);
+}
+.off-scorebar__mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 
 .off-panel-wrap {
   position: fixed;

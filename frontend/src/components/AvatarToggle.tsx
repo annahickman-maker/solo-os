@@ -3,9 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import type { OfferAvatar } from '../api';
 import { AV_BANK_CSS } from '../pages/Offer';
+import { createButtonStyle } from '../lib/ui';
 
 /**
- * Avatar editor — "who this is for".
+ * Avatar editor - "who this is for".
  *
  * Renders as a small pill button (icon + label) intended to live in the
  * top-right of the page header, in line with the page title. Clicking opens
@@ -41,11 +42,36 @@ export function AvatarToggle() {
   });
   const avatars: OfferAvatar[] =
     offersData?.sections.find((s) => s.id === 'avatar')?.avatars ?? [];
+
+  // The persisted content focus avatar - the one the YouTube + Instagram
+  // skills read as "who this content is for". Stored as the avatar's
+  // source-file path (id as fallback) in state.md via /api/settings.
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
+  const focusRef = settings?.content_focus_avatar ?? null;
+  const focusAvatar =
+    avatars.find((a) => a.source_file && a.source_file === focusRef) ??
+    avatars.find((a) => a.id === focusRef) ??
+    null;
+  const saveFocus = useMutation({
+    mutationFn: (ref: string) => api.updateSettings({ content_focus_avatar: ref }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  });
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // On open, default the in-panel preview to the persisted focus avatar (or
+  // the first avatar if none is set yet).
   useEffect(() => {
-    if (open && !selectedId && avatars.length > 0) setSelectedId(avatars[0]!.id);
-  }, [open, selectedId, avatars]);
+    if (open && !selectedId && avatars.length > 0) {
+      setSelectedId(focusAvatar?.id ?? avatars[0]!.id);
+    }
+  }, [open, selectedId, avatars, focusAvatar]);
   const selected = avatars.find((a) => a.id === selectedId) ?? null;
+
+  // Clicking a card previews it AND persists it as the content focus avatar.
+  const pickAvatar = (a: OfferAvatar) => {
+    setSelectedId(a.id);
+    saveFocus.mutate(a.source_file || a.id);
+  };
 
   // Lock body scroll while the slide-over is open, same pattern as ReelPanel.
   useEffect(() => {
@@ -67,14 +93,15 @@ export function AvatarToggle() {
     <>
       <button
         type="button"
-        className="ytav-trigger"
         onClick={() => setOpen(true)}
-        aria-label="open avatar / who this is for"
+        aria-label="open positioning / who this is for"
+        style={{ ...createButtonStyle, display: 'inline-flex', alignItems: 'center', gap: 6 }}
       >
-        <span className="ytav-trigger__icon">
-          <AvatarSvg />
-        </span>
-        <span className="ytav-trigger__label">your avatar</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1" />
+        </svg>
+        positioning
       </button>
 
       {open && (
@@ -159,7 +186,7 @@ export function AvatarToggle() {
                     your avatars
                   </span>
                   <p className="muted" style={{ margin: '2px 0 0', fontSize: 11 }}>
-                    each specific avatar inside that positioning. click one to see their full profile.
+                    each specific avatar inside that positioning. click one to set it as your content focus - the person your YouTube and Instagram skills write for.
                   </p>
                 </div>
                 {/* Card grid - same .av-card pattern as the per-offer
@@ -169,6 +196,7 @@ export function AvatarToggle() {
                   <div className="av-cards">
                     {avatars.map((a) => {
                       const isSelected = a.id === selectedId;
+                      const isFocus = focusAvatar?.id === a.id;
                       const imgUrl = a.image_path
                         ? `/api/vault-asset/${encodeURI(a.image_path)}`
                         : null;
@@ -181,7 +209,7 @@ export function AvatarToggle() {
                           key={a.id}
                           type="button"
                           className={`av-card ${isSelected ? 'av-card--open' : ''}`}
-                          onClick={() => setSelectedId(a.id)}
+                          onClick={() => pickAvatar(a)}
                           style={{ ['--av-card-accent' as any]: 'var(--recovery)' }}
                         >
                           <div className={`av-card__img ${imgUrl ? '' : 'av-card__img--empty'}`}>
@@ -195,7 +223,7 @@ export function AvatarToggle() {
                             <span className="av-card__name">{a.name ?? '(unnamed)'}</span>
                             <p className="av-card__desc">{short}</p>
                           </div>
-                          <span className="av-card__caret">{isSelected ? '✓' : '→'}</span>
+                          <span className="av-card__caret">{isFocus ? '✓ focus' : isSelected ? '→' : '→'}</span>
                         </button>
                       );
                     })}
@@ -306,21 +334,6 @@ function ProfileBlock({
   );
 }
 
-function AvatarSvg() {
-  return (
-    <svg viewBox="0 0 48 48" aria-hidden>
-      <circle cx="24" cy="24" r="23" fill="rgba(255,255,255,0.04)" stroke="var(--hairline)" />
-      <circle cx="24" cy="19" r="6.5" fill="none" stroke="var(--recovery)" strokeWidth="1.6" />
-      <path
-        d="M11 39c2.6-6 7.5-9 13-9s10.4 3 13 9"
-        fill="none"
-        stroke="var(--recovery)"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
 
 // ─── Positioning helpers (used by the top section of the panel) ──────────
 // Same shape as the older Field/Side/Tags helpers - powered the click-to-
@@ -470,7 +483,7 @@ const YTAV_CSS = `
 /* ─── Legacy .ytav (collapsible block) ─────────────────────────────────
    Kept because <FocusCtaEditor /> still uses the collapsible pattern
    (.ytav .ytav__head .ytav__head--open .ytav__icon-wrap .ytav__caret).
-   AvatarToggle itself no longer renders these — it uses .ytav-trigger
+   AvatarToggle itself no longer renders these - it uses .ytav-trigger
    + .ytav-panel below. */
 .ytav {
   background: var(--surface);
@@ -647,7 +660,7 @@ const YTAV_CSS = `
   font-weight: 600;
   cursor: pointer;
 }
-.ytav__btn--primary { background: var(--recovery); color: var(--bg); }
+.ytav__btn--primary { background: #EDEDE9; color: #16140F; border: 1.5px solid #16140F; box-shadow: 0 1px 3px rgba(15,15,15,0.06), 0 4px 12px -2px rgba(15,15,15,0.07); }
 .ytav__btn--ghost { background: transparent; color: var(--muted); border-color: var(--hairline); }
 .ytav__btn--ghost:hover { color: var(--ink); border-color: var(--ink); }
 

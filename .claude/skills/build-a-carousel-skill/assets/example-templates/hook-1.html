@@ -1,0 +1,115 @@
+<!-- @template
+type: hook
+variant: 1
+description: Cream background, large display headline with italic accent. Eyebrow above. Hairline underline below.
+slots:
+  eyebrow: optional
+  headline: required, supports <em> for italic accent
+  footer-left: optional, default "swipe"
+@end -->
+
+<style>
+  .slide.hook-1 {
+    background: var(--cream, #F5EFE3);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  .slide.hook-1 .frame {
+    position: absolute;
+    inset: var(--frame-inset, 56px);
+    border: 1px solid var(--hairline, rgba(26,26,26,0.18));
+    pointer-events: none;
+  }
+  .slide.hook-1 .top-bar,
+  .slide.hook-1 .bottom-bar {
+    position: absolute;
+    left: var(--edge-padding, 80px);
+    right: var(--edge-padding, 80px);
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: var(--mono, 14px);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted, #7a7367);
+  }
+  .slide.hook-1 .top-bar { top: var(--edge-padding, 80px); }
+  .slide.hook-1 .bottom-bar { bottom: var(--edge-padding, 80px); }
+  .slide.hook-1 .top-bar .brand {
+    color: var(--coal, #1A1A1A);
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .slide.hook-1 .top-bar .brand::before {
+    content: "";
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--accent, #A85732);
+  }
+  .slide.hook-1 .body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 80px var(--body-padding, 120px);
+  }
+  .slide.hook-1 .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted, #7a7367);
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 48px;
+  }
+  .slide.hook-1 .eyebrow::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent, #A85732);
+  }
+  .slide.hook-1 h1 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: var(--display-xl, 96px);
+    line-height: 1.04;
+    margin: 0;
+    color: var(--coal, #1A1A1A);
+    letter-spacing: -0.01em;
+  }
+  .slide.hook-1 h1 em {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-weight: 400;
+    color: var(--accent, #A85732);
+  }
+  .slide.hook-1 .underline {
+    width: 80px;
+    height: 1px;
+    background: var(--coal, #1A1A1A);
+    margin-top: 48px;
+  }
+</style>
+
+<article class="slide hook-1" id="slide-{{INDEX}}">
+  <div class="frame"></div>
+  <div class="top-bar">
+    <span class="brand">{{BRAND_NAME}}</span>
+    <span>{{BRAND_LOCATION}}</span>
+  </div>
+  <div class="body">
+    <span class="eyebrow">{{EYEBROW}}</span>
+    <h1>{{HEADLINE}}</h1>
+    <div class="underline"></div>
+  </div>
+  <div class="bottom-bar">
+    <span>{{FOOTER_LEFT}}</span>
+    <span>{{INDEX}} / {{TOTAL}}</span>
+  </div>
+</article>

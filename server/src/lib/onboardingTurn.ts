@@ -135,7 +135,7 @@ function parseJson(raw: string): any {
 }
 
 function clean(s: string): string {
-  return s.replace(/—/g, '-').replace(/–/g, '-').trim();
+  return s.replace(/-/g, '-').replace(/–/g, '-').trim();
 }
 
 const VALID_TAGS = new Set<OnboardingTag>([

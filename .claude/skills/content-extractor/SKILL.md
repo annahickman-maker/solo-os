@@ -1,130 +1,85 @@
 ---
 name: content-extractor
-description: Mine the creator's transcripts and notes for distinct ideas, then rewrite the approved ones as Instagram carousels - slide-by-slide written copy, caption, hashtags, and a structured carousel.json + human-readable carousel.md. The source provides raw thinking and verbatim phrasing; the carousel is freshly written for IG. Use when the user wants to turn workshop teaching, voice notes, Q&A calls, video transcripts (as idea fodder, not for clipping), or any rough material into IG-native carousel content. Reads brand context files first and pauses for human approval on the content plan before writing final assets.
+description: Mine transcripts for distinct ideas that you can save to your bank or queue as content
+title: Idea Extractor
+card: Mine your transcripts for distinct ideas to use in your content
+category: Ideas
+inputs:
+  - type: transcript
+    multiple: true
 ---
 
-# Content Extractor
+# Idea Extractor
 
-Turn raw transcripts and notes into shippable Instagram carousels. Source = ideas and verbatim phrasing. Output = freshly written IG-native copy.
+Mine your transcripts for distinct, reusable ideas. This is a starting point: it surfaces the ideas worth keeping, helps you shape them, and saves or queues them ONLY when you ask. It never saves automatically.
+
+(The automatic transcript extraction with save buttons in your vault is a separate dashboard feature and still works as before. This skill is the conversational version you run yourself.)
 
 ## Required vault data
 
-The skill ERRORS OUT and names the missing file if any of these are absent:
+Read these for context. Skim what's there; don't hard-error if one is missing.
 
-- `03_Projects/instagram/instagram-context.md` - the IG-specific positioning, audience, CTAs, voice deltas, hard nos, hashtag pool
-- `01_Core/core_voice-style.md` - master voice rules
-- `01_Core/core_audience.md` - master audience persona
-- `01_Core/core_my-story.md` - for proof / personal anecdote sourcing
-- `05_Assets/POVs/` - the creator's IP library (read titles, load specific POVs if relevant to a chosen atom)
-- `frameworks.md` (alongside this SKILL.md) - content categories, carousel formulas, title angle bank, caption skeleton, voice anti-patterns, hook patterns
-
-Additionally, the skill ALSO ERRORS OUT if `instagram-context.md` still contains any `<FILL IN>` placeholders. the creator must fill it before first real run.
-
-## Quick start
-
-```
-/content-extractor 05_Assets/Transcripts/Live-Workshops/lesson-1-positioning.md
-/content-extractor 05_Assets/Transcripts/QA-Calls/qa_2026-05-28.md
-/content-extractor 05_Assets/Transcripts/Live-Workshops/   # batch mode
-```
+- `01_Core/core_voice-style.md` - so ideas and verbatim lines stay in your voice
+- `01_Core/core_audience.md` - who each idea has to land for
+- `01_Core/core_my-story.md` - skim, for matching stories and anecdotes
+- Existing banks, so you don't re-surface ideas already saved: `00_System/micro-stories.json`, `00_System/teaching-frameworks.json`, `00_System/proof-points.json`, and the POV titles in `05_Assets/POVs/`
 
 ## Workflow
 
 ### Step 1 - Load context
 
-Read all required vault files in this order: instagram-context, core_voice-style, core_audience, core_my-story (skim), POV titles list, frameworks.md (full). Hold the IG context as the strictest constraint - it overrides the master where they conflict. frameworks.md provides the structural taxonomy and voice anti-patterns - the bones, not the words.
+Read the files above. Skim the existing banks so you don't surface ideas that are already saved.
 
 ### Step 2 - Read the transcript(s)
 
-For a single file: read the full transcript.
-For a folder: list .md / .txt files, process each one in turn (or ask which subset if more than 5).
+Single file: read it fully. Folder or batch: list the files and work through each (ask which subset if there are more than 5).
 
-### Step 3 - Extract atoms
+### Step 3 - Find the ideas
 
-For each transcript, identify distinct "content atoms." An atom is one self-contained, shareable idea. Valid atom shapes:
+Pull distinct, self-contained ideas. Shapes worth keeping:
 
-- A claim + its supporting reasoning
-- A framework or step-by-step method
-- A specific story or anecdote with a clear takeaway
-- A data point or proof receipt
-- A hot take or contrarian flip
-- A "before-and-after" transformation moment
+- a claim + its reasoning (a POV)
+- a framework or step-by-step method
+- a story or anecdote with a clear takeaway
+- a proof point, result, or data receipt
+- a hot take or contrarian flip
+- a before-and-after moment
 
-For each atom, tag it with the best-fit category from `frameworks.md` Part 1 (one of 23). The category determines which carousel formula gets used in Step 5 - this happens internally and is NOT surfaced in the user-facing plan.
+Preserve strong VERBATIM lines - the user's phrasing is the signal. Skip filler, anything that needs 3+ paragraphs of setup to land, and anything already in the banks.
 
-Also pull strong verbatim lines. the creator's phrasing is the voice signal - preserve any line that already sings (mark these as `verbatim:` in the plan).
+### Step 4 - Present the ideas (the starting point)
 
-Anti-patterns - do NOT create an atom for:
-- Pure filler / connective tissue
-- An idea that needs 3+ paragraphs of setup to land
-- Anything already in the published 04_Channel YouTube backlog with the same framing (skim titles to check)
-- An idea that maps to the Engagement Invitations category - default away from these unless `instagram-context.md` explicitly says they fit
-
-### Step 4 - CHECKPOINT 1: Content plan
-
-Present a numbered list to the user. STOP and WAIT for approval. The internally-selected category and formula are NOT shown - the plan reads naturally.
-
-For each proposed hook, draw on the hook patterns in `frameworks.md` Part 6 and the angle bank in Part 3 for the atom's category. Generate hooks that match the creator's voice (no enthusiasm filler, no rhetorical questions that need the body to make sense).
+Show a numbered list. This is where the conversation starts: the user picks what's worth keeping and you develop it together. Nothing is saved yet.
 
 ```
-1. Atom: <one-line summary>
-   Proposed hook: "<one-line cover slide line>"
-   Source: <transcript path>, around <rough location/quote>
-   Strong verbatim: "<line from transcript>" (if any)
+1. Idea: <one-line summary>
+   Type: story | framework | proof | POV
+   Source: <transcript>, around <rough location>
+   Strong verbatim: "<exact line>" (if any)
 
 2. ...
 ```
 
-Ask: "Which atoms do you want as carousels? Want to tweak any hooks before I write?"
+### Step 5 - Develop, then save or queue ON REQUEST
 
-Wait for explicit selection. Do not proceed without it.
+Help shape the ideas the user wants to keep. Save or queue ONLY when they ask - never on your own. When they ask, route each idea to the right place:
 
-### Step 5 - Write each approved carousel
+- story / anecdote -> append to `00_System/micro-stories.json`
+- framework / method -> append to `00_System/teaching-frameworks.json`
+- proof / result / data -> append to `00_System/proof-points.json`
+- POV / claim / hot take -> a POV note at `05_Assets/POVs/asset_pov-<slug>.md`
+- "make this a video / post" -> queue to the YouTube queue (`04_Channel/04_Projects/project_<slug>.md`, `status: idea`) or the Instagram queue (`00_System/instagram-queue.json`)
 
-For each approved atom:
-
-1. Generate a slug: kebab-case, max 5 words, from the hook.
-2. Create folder: `03_Projects/instagram/<YYYY-MM-DD>-<slug>/`
-3. Pick the carousel formula. The atom's category (set in Step 3) maps to one of the 16 formulas in `frameworks.md` Part 2. Follow the bone-only skeleton for slide roles. The skeleton is structural - do not lift any phrasing from it (it has none) or from external sources.
-4. Write `carousel.json` matching the schema in REFERENCE.md (strict JSON, validated before write).
-5. Write `carousel.md` - a human-readable preview of the same content.
-6. Copy or symlink the source transcript snippet as `source-excerpt.md` (the relevant section only, not the whole transcript).
-
-Slide rules:
-- 1 hook + 4-8 body + 1 CTA. Total 6-10 slides.
-- One idea per slide. If a slide tries to do two things, split it.
-- `headline` ≤ 8 words, punchy.
-- `body` ≤ 30 words. Often much less.
-- `visual_note` = short instruction for the renderer (e.g. "big number left-aligned", "two-column before/after", "quote on solid colour, no photo").
-- CTA slide uses the main CTA from instagram-context.md verbatim, or a near-paraphrase. Never invent a new CTA.
-- Every slide passes the voice anti-patterns kill list in `frameworks.md` Part 5. If a draft slide hits any item on that list, rewrite it.
-
-Caption rules:
-- Follow the 7-part skeleton in `frameworks.md` Part 4 (hook → relatability → context → pivot → body → synthesis → CTA). Keep it tight - short captions for low-friction posts, longer only when the teaching demands it.
-- The hook line on the caption complements slide 1, doesn't repeat it.
-- Pull 8-15 hashtags from the pool in instagram-context.md. Do not invent new tags. Hashtags in their own block below the caption, never inline.
+For the JSON banks: read an existing entry FIRST to match its exact shape (`id`, `text`, `title`, `context`, `source_transcript`, `source_timestamp`, `tags`, `created_at`), then append your new entry. Never overwrite the file.
 
 ### Step 6 - Report
 
-End every run by printing:
-
-```
-Wrote N carousels:
-- 03_Projects/instagram/2026-06-01-positioning-myth/carousel.json
-- 03_Projects/instagram/2026-06-01-positioning-myth/carousel.md
-- 03_Projects/instagram/2026-06-01-positioning-myth/source-excerpt.md
-- ...
-```
+After any save, confirm in one line what went where.
 
 ## Hard rules
 
+- Never auto-save. Saving and queuing are always on request.
 - No em dashes anywhere. Hyphens only.
-- No engagement bait, no fake urgency, no guru language.
-- Voice MUST come from the creator's files - if a slide sounds generic, rewrite it.
-- Verbatim phrases from the transcript are GOLD - use them on the hook slide whenever possible.
-- Never invent a CTA. Pull from instagram-context.md.
-- If instagram-context.md has unfilled placeholders, ERROR. Do not generate.
-
-## Advanced
-
-See `REFERENCE.md` for the exact `carousel.json` schema, slide-role taxonomy, carousel.md preview format, and slug rules.
+- Verbatim lines are gold - keep the user's exact phrasing.
+- Ideas and voice come from the user's own files and transcript, never fabricated.
+- Dedupe against the existing banks before surfacing an idea.

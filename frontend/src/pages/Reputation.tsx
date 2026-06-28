@@ -14,6 +14,7 @@ import type {
 } from '../api';
 import { Ring } from '../components/Ring';
 import { TagChips } from '../components/TagChips';
+import { FilterTabs } from '../components/FilterTabs';
 
 // Reputation page v4.
 //   • Hero: score ring + "what this is for" line + maturity chip. No big headline.
@@ -1443,22 +1444,16 @@ function MicroStoriesBank({ stories }: { stories: ReputationMicroStory[] }) {
 
   return (
     <div className="rep-list">
-      <div className="rep-filter">
-        {(['candidate', 'confirmed', 'all'] as const).map((s) => {
-          const count = s === 'candidate' ? candidateCount : s === 'confirmed' ? confirmedCount : stories.length;
-          return (
-            <button
-              key={s}
-              type="button"
-              className={`rep-filter__btn ${filter === s ? 'rep-filter__btn--on' : ''}`}
-              onClick={() => setFilter(s)}
-            >
-              {s}
-              <span className="rep-filter__count">{count}</span>
-            </button>
-          );
-        })}
-      </div>
+      <FilterTabs
+        value={filter}
+        onChange={(v) => setFilter(v as 'candidate' | 'confirmed' | 'all')}
+        ariaLabel="story filter"
+        options={[
+          { value: 'candidate', label: 'candidate', count: candidateCount },
+          { value: 'confirmed', label: 'confirmed', count: confirmedCount },
+          { value: 'all', label: 'all', count: stories.length },
+        ]}
+      />
 
       {filtered.length === 0 && <p className="rep-empty">nothing in this view.</p>}
 
@@ -2333,8 +2328,8 @@ const REP_CSS = `
   gap: var(--space-5);
   align-items: center;
   padding: var(--space-5);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--recovery) 6%, transparent), var(--surface));
-  border: 1px solid color-mix(in srgb, var(--recovery) 18%, transparent);
+  background: var(--surface);
+  border: 2px solid var(--recovery);
   border-radius: var(--radius-lg);
 }
 .rep-hero__ring { display: flex; justify-content: center; }
@@ -2532,7 +2527,7 @@ const REP_CSS = `
   cursor: pointer;
   transition: all 0.15s;
 }
-.rep-btn--primary { background: var(--recovery); color: var(--bg); }
+.rep-btn--primary { background: #EDEDE9; color: #16140F; border: 1.5px solid #16140F; box-shadow: 0 1px 3px rgba(15,15,15,0.06), 0 4px 12px -2px rgba(15,15,15,0.07); }
 .rep-btn--primary:hover { transform: translateY(-1px); }
 .rep-btn--primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 .rep-btn--ghost { background: transparent; color: var(--muted); border-color: var(--hairline); }
@@ -2971,8 +2966,8 @@ const REP_CSS = `
 .rep-showup {
   margin-top: var(--space-3);
   padding: var(--space-5);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--recovery) 5%, transparent), var(--surface));
-  border: 1px solid color-mix(in srgb, var(--recovery) 18%, var(--hairline));
+  background: var(--surface);
+  border: 2px solid var(--recovery);
   border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;

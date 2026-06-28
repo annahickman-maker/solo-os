@@ -1,6 +1,8 @@
 ---
 name: youtube-analytics
-description: Ongoing channel-wide analytics that constantly keeps up with what's working and what isn't across all the user's YouTube videos. Run on a cadence (weekly, monthly, whenever) - it pulls the latest data, identifies patterns across the whole channel, updates 06_Swipe/asset_content-analytics.md with the current learnings, and surfaces actions to take. Not a one-video review - a continuous learning loop that informs content strategy, titles, thumbnails, and topic decisions over time. Use when the user says "run analytics", "check my channel performance", "what's working on my channel", or wants to refresh their analytics learnings.
+description: 'Ongoing channel-wide analytics that constantly keeps up with what''s working and what isn''t across all the user''s YouTube videos. Run on a cadence (weekly, monthly, whenever) - it pulls the latest data, identifies patterns across the whole channel, updates 06_Swipe/asset_content-analytics.md with the current learnings, and surfaces actions to take. Not a one-video review - a continuous learning loop that informs content strategy, titles, thumbnails, and topic decisions over time. Use when the user says "run analytics", "check my channel performance", "what''s working on my channel", or wants to refresh their analytics learnings.'
+card: Analyse your content for the metrics that truly matter.
+category: Research
 ---
 
 # YouTube Analytics
@@ -20,41 +22,43 @@ The asset file is the channel's living memory. Every other skill (titles, ideas,
 
 ## Preflight
 
-1. Read `04_YouTube/core_channel-positioning.md`. If missing, STOP: "Run /youtube-onboarding first to set up channel positioning."
-2. Read `01_Core/core_audience.md`, `01_Core/core_positioning.md`.
+1. Read `01_Core/core_audience.md`, `01_Core/core_positioning.md` (set up in Solo OS onboarding). If your core files aren't set up yet, stop and say: run /solopreneur-onboarding first.
+2. Load your content focus avatar - the specific person your channel is for. Read `content_focus_avatar` from `00_System/state.md` (a path to an avatar file) and read that avatar in `05_Assets/Avatars/`. If none is set, fall back to `core_audience.md`.
 
 ---
 
-## Soft setup gate - analytics setup
+## Step 1 - Pull the latest data (from the dashboard, not a spreadsheet)
 
-Check whether `00_System/system_analytics-config.md` exists.
+Every per-video metric lives in the dashboard now - one file per published video at
+`04_Channel/04_Projects/yt-<id>.md` (or any project file linked by `youtube_id`).
+The metrics are in the frontmatter:
 
-If it doesn't, STOP and ask:
+- `view_count` - views (synced from YouTube)
+- `ctr_pct` - impression click-through rate
+- `sub_rate_pct` - subscribers gained / views
+- `subscribers_gained`, `impressions` - supporting context
+- `conversion_pct` - from the dashboard's own `/go/` link tracking (where wired)
 
-> "The YouTube API connection isn't set up yet.
->
-> Without it, I can't pull your YouTube data automatically - so I can't run the channel-wide loop. The dashboard's API connection is what lets me read your channel stats and video performance live.
->
-> Want to run /youtube-setup-api first (about 10-15 minutes)? It's a one-time setup that powers all YouTube features in the system."
+How those get populated (so you can guide the user if data is missing):
+- Views sync automatically: Content page -> "sync from youtube".
+- CTR + sub rate come from a YouTube Studio export. CTR and impressions are
+  Studio-only - NO YouTube API exposes them - so the user exports Studio ->
+  Analytics -> Content -> "Table data.csv" and drops it on the Content page
+  ("import analytics csv"). That fills `ctr_pct` / `sub_rate_pct` per video.
+- Conversion comes from the dashboard's tracking links, not from YouTube.
 
-Wait for choice. If they want to proceed manually, OK - they'll have to paste data each time, which works for one ad-hoc run but isn't sustainable for the ongoing loop.
+Read every published video file and collect these metrics. Then read the existing
+`06_Swipe/asset_content-analytics.md` (create if missing) so this run compares the
+latest data against what's already logged.
 
----
+**Freshness gate.** If most published videos have a null `ctr_pct`, the Studio
+export hasn't been imported yet. STOP and tell the user:
 
-## Step 1 - Pull the latest data
-
-If setup is complete:
-- Open the Google Sheet (URL in `00_System/system_analytics-config.md`)
-- Read the YouTube tab
-- Confirm the data is fresh (when did the Apps Script last run? Should be within the last week.)
-
-If it's stale or hasn't run, tell the user:
-> "The sheet hasn't updated since [date]. Run the Apps Script to refresh, or proceed with the older data?"
-
-If manual run:
-- Ask the user to paste the latest data (CTR, views, subs gained per video)
-
-Then read the existing `06_Swipe/asset_content-analytics.md` (create if missing) so you can see what's already been logged. This run is comparing the latest data against the existing learnings.
+> "I don't have CTR or sub-rate data on your videos yet - and CTR is Studio-only,
+> so no API can pull it. Export YouTube Studio -> Analytics -> Content -> the
+> 'Table data.csv' file, drop it on the dashboard's Content page ('import analytics
+> csv'), then run me again. (Hit 'sync from youtube' first if recent videos are
+> missing.)"
 
 ---
 

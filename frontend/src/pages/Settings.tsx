@@ -2,14 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, clearStoredPassword, type MembershipStatus, type ZoomStatus } from '../api';
 import { Card } from '../components/Card';
-
-// Slash-command prompts the user pastes into Claude to set up each integration.
-const PROMPTS = {
-  google: 'Connect my Google Calendar to the dashboard',
-  zoom: 'Connect Zoom transcripts to my dashboard',
-  youtube: 'Set up the YouTube API',
-  tracking: 'Set up conversion tracking',
-} as const;
+import { ConnectAppCard } from '../components/ConnectAppCard';
 
 export function Settings() {
   const qc = useQueryClient();
@@ -20,7 +13,7 @@ export function Settings() {
   };
 
   return (
-    <div className="stack" style={{ gap: 'var(--space-7)' }}>
+    <div className="stack" style={{ gap: 'var(--space-6)' }}>
       <header className="page-header">
         <span className="eyebrow">settings</span>
         <h1 className="h2">house keeping</h1>
@@ -34,7 +27,10 @@ export function Settings() {
       {/* 2. CONNECT YOUR APPS - unified integrations card */}
       <ConnectYourAppsCard />
 
-      {/* 3. PASSWORD / LOG OUT - at the bottom */}
+      {/* 3. APPEARANCE - light / dark theme */}
+      <AppearanceCard />
+
+      {/* 4. PASSWORD / LOG OUT - at the bottom */}
       <Card eyebrow="auth" title="password">
         <p className="muted" style={{ margin: 0 }}>
           clears the cached password and reloads the gate
@@ -46,6 +42,49 @@ export function Settings() {
         </div>
       </Card>
     </div>
+  );
+}
+
+// ─── Appearance / theme card ─────────────────────────────────────────────
+
+type Theme = 'dark' | 'light';
+
+function AppearanceCard() {
+  const [theme, setTheme] = useState<Theme>(
+    () => ((document.documentElement.getAttribute('data-theme') as Theme) || 'dark'),
+  );
+
+  const apply = (next: Theme) => {
+    setTheme(next);
+    document.documentElement.setAttribute('data-theme', next);
+    try {
+      localStorage.setItem('solo-os-theme', next);
+    } catch {
+      // storage unavailable - the theme still applies for this session
+    }
+  };
+
+  return (
+    <Card eyebrow="appearance" title="theme">
+      <p className="muted" style={{ margin: 0 }}>
+        switch between the dark interface and the light warm-grey one
+      </p>
+      <div className="row" style={{ gap: 'var(--space-3)', marginTop: 'var(--space-3)' }}>
+        {(['dark', 'light'] as Theme[]).map((t) => (
+          <button
+            key={t}
+            className="btn"
+            onClick={() => apply(t)}
+            style={{
+              outline: theme === t ? '2px solid var(--accent)' : '1px solid var(--hairline)',
+              outlineOffset: theme === t ? '0' : '-1px',
+            }}
+          >
+            {t} mode
+          </button>
+        ))}
+      </div>
+    </Card>
   );
 }
 
@@ -278,6 +317,11 @@ function ConnectYourAppsCard() {
     queryFn: api.getTrackingSetupStatus,
     refetchInterval: 60_000,
   });
+  const nanobanana = useQuery({
+    queryKey: ['nano-banana-status'],
+    queryFn: api.nanoBananaStatus,
+    refetchInterval: 60_000,
+  });
 
   const zoomSync = useMutation({
     mutationFn: api.zoomSync,
@@ -292,143 +336,98 @@ function ConnectYourAppsCard() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['google-status'] }),
   });
 
-  async function connectGoogle() {
-    try {
-      const { url } = await api.googleConnectUrl();
-      window.location.href = url;
-    } catch (err) {
-      window.alert(`could not start connect flow: ${(err as Error).message}`);
-    }
-  }
-
   const googleConnected = !!google.data?.connected;
-  const googleConfigured = !!google.data?.configured;
   const zoomConnected = !!zoom.data?.connected;
   const youtubeConnected = !!youtube.data?.configured;
-  const trackingConnected = !!tracking.data?.ok;
+  const trackingConnected = !!(tracking.data?.manifest_exists && tracking.data?.worker_exists);
+  const nanobananaConnected = !!nanobanana.data?.connected;
 
   return (
     <Card eyebrow="connections" title="connect your apps">
       <p className="muted" style={{ margin: 0, lineHeight: 1.55 }}>
         each integration runs entirely on your machine. credentials are stored locally
-        and never sent to a third party server. if a row is grey, paste its prompt
-        into claude to walk through the one-time setup.
+        and never sent to a third party server. run the setup on any card below - it
+        disappears here once that app is connected and live.
       </p>
 
-      <ConnectRow
-        label="Google Calendar"
-        sub="meetings on the Today page"
-        live={googleConnected}
-        liveLabel={
-          googleConnected
-            ? `live · ${google.data?.email ?? 'connected'}`
-            : googleConfigured
-              ? 'credentials set · grant access'
-              : null
-        }
-        prompt={PROMPTS.google}
-        primaryAction={
-          googleConfigured && !googleConnected
-            ? { label: 'grant access', onClick: connectGoogle }
-            : googleConnected
-              ? { label: 'disconnect', onClick: () => googleDisconnect.mutate(), variant: 'ghost' }
-              : null
-        }
-      />
+      {/* Each app shows the connect card until it's live, then flips to a live
+          management row (disconnect / sync / review). */}
+      {googleConnected ? (
+        <ConnectRow
+          label="Google Calendar"
+          liveLabel={`live · ${google.data?.email ?? 'connected'}`}
+          primaryAction={{ label: 'disconnect', onClick: () => googleDisconnect.mutate(), variant: 'ghost' }}
+        />
+      ) : (
+        <ConnectAppCard app="google" />
+      )}
 
-      <ConnectRow
-        label="Zoom"
-        sub="cloud recording transcripts auto-synced into the vault"
-        live={zoomConnected}
-        liveLabel={
-          zoomConnected
-            ? `live · account ${zoom.data?.account_id_preview ?? ''} · ${formatZoomLastSync(zoom.data ?? null)}`
-            : null
-        }
-        prompt={PROMPTS.zoom}
-        primaryAction={
-          zoomConnected
-            ? {
-                label: zoomSync.isPending ? 'syncing…' : 'sync now',
-                onClick: () => zoomSync.mutate(),
-                disabled: zoomSync.isPending,
-              }
-            : null
-        }
-        secondaryAction={
-          zoomConnected ? { label: 'disconnect', onClick: () => zoomDisconnect.mutate() } : null
-        }
-        afterStatus={
-          zoomConnected && zoom.data?.last_sync_error ? (
-            <span style={{ fontSize: 11, color: 'var(--danger)' }}>
-              last sync error: {zoom.data.last_sync_error}
-            </span>
-          ) : null
-        }
-      />
+      {zoomConnected ? (
+        <ConnectRow
+          label="Zoom"
+          liveLabel={`live · account ${zoom.data?.account_id_preview ?? ''} · ${formatZoomLastSync(zoom.data ?? null)}`}
+          primaryAction={{
+            label: zoomSync.isPending ? 'syncing…' : 'sync now',
+            onClick: () => zoomSync.mutate(),
+            disabled: zoomSync.isPending,
+          }}
+          secondaryAction={{ label: 'disconnect', onClick: () => zoomDisconnect.mutate() }}
+          afterStatus={
+            zoom.data?.last_sync_error ? (
+              <span style={{ fontSize: 11, color: 'var(--danger)' }}>
+                last sync error: {zoom.data.last_sync_error}
+              </span>
+            ) : null
+          }
+        />
+      ) : (
+        <ConnectAppCard app="zoom" />
+      )}
 
-      <ConnectRow
-        label="YouTube Analytics"
-        sub="channel stats + title radar + analytics review"
-        live={youtubeConnected}
-        liveLabel={
-          youtubeConnected
-            ? `live${youtube.data?.yt_channel_handle ? ` · @${youtube.data.yt_channel_handle}` : ''}${youtube.data?.last_sync ? ' · ' + formatRelativeTime(youtube.data.last_sync) : ''}`
-            : null
-        }
-        prompt={PROMPTS.youtube}
-        primaryAction={null}
-      />
+      {youtubeConnected ? (
+        <ConnectRow
+          label="YouTube Analytics"
+          liveLabel={`live${youtube.data?.yt_channel_handle ? ` · @${youtube.data.yt_channel_handle.replace(/^@/, '')}` : ''}${youtube.data?.last_sync ? ' · ' + formatRelativeTime(youtube.data.last_sync) : ''}`}
+        />
+      ) : (
+        <ConnectAppCard app="youtube" />
+      )}
 
-      <ConnectRow
-        label="Conversion Tracking"
-        sub="/go/<slug> branded short links + click counts feeding the Offer page"
-        live={trackingConnected}
-        liveLabel={
-          trackingConnected
-            ? `live · worker deployed`
-            : tracking.data
-              ? `${tracking.data.manifest_exists ? 'manifest ready' : 'manifest missing'} · ${tracking.data.worker_exists ? 'worker ready' : 'worker missing'}`
-              : null
-        }
-        prompt={PROMPTS.tracking}
-        primaryAction={null}
-      />
+      {trackingConnected ? (
+        <ConnectRow label="Conversion Tracking" liveLabel="live · worker deployed" />
+      ) : (
+        <ConnectAppCard app="tracking" />
+      )}
+
+      {nanobananaConnected ? (
+        <ConnectRow
+          label="Nano Banana"
+          liveLabel={`live · key ${nanobanana.data?.key_preview ?? 'saved'}`}
+        />
+      ) : (
+        <ConnectAppCard app="nanobanana" />
+      )}
     </Card>
   );
 }
 
 interface ConnectRowProps {
   label: string;
-  sub: string;
-  live: boolean;
-  liveLabel: string | null;
-  prompt: string;
-  primaryAction: { label: string; onClick: () => void; disabled?: boolean; variant?: 'ghost' } | null;
+  liveLabel: string;
+  primaryAction?: { label: string; onClick: () => void; disabled?: boolean; variant?: 'ghost' } | null;
   secondaryAction?: { label: string; onClick: () => void } | null;
   afterStatus?: React.ReactNode;
 }
 
+// Live management row for a connected integration (status + disconnect / sync /
+// review). The disconnected state is handled by <ConnectAppCard>, not here.
 function ConnectRow({
   label,
-  sub,
-  live,
   liveLabel,
-  prompt,
   primaryAction,
   secondaryAction,
   afterStatus,
 }: ConnectRowProps) {
-  const [copied, setCopied] = useState(false);
-  async function copyPrompt() {
-    try {
-      await navigator.clipboard.writeText(prompt);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      window.prompt('copy this prompt:', prompt);
-    }
-  }
   return (
     <div
       style={{
@@ -442,12 +441,10 @@ function ConnectRow({
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
         <span
           style={{
-            fontSize: 10,
             width: 6,
             height: 6,
             borderRadius: '50%',
-            background: live ? 'var(--recovery)' : 'var(--muted)',
-            opacity: live ? 1 : 0.4,
+            background: 'var(--recovery)',
             flexShrink: 0,
             alignSelf: 'center',
             marginRight: 4,
@@ -460,20 +457,20 @@ function ConnectRow({
             fontSize: 11,
             textTransform: 'uppercase',
             letterSpacing: '0.08em',
-            color: live ? 'var(--recovery)' : 'var(--muted)',
+            color: 'var(--recovery)',
             fontWeight: 600,
           }}
         >
-          {live ? 'live' : 'setup'}
+          live
         </span>
       </div>
 
       <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-        {liveLabel ?? sub}
+        {liveLabel}
       </span>
       {afterStatus}
 
-      {live ? (
+      {(primaryAction || secondaryAction) && (
         <div className="row" style={{ gap: 'var(--space-3)', marginTop: 4 }}>
           {primaryAction && (
             <button
@@ -490,31 +487,6 @@ function ConnectRow({
               {secondaryAction.label}
             </button>
           )}
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', marginTop: 4 }}>
-          {primaryAction && (
-            <button type="button" className="btn" onClick={primaryAction.onClick} disabled={primaryAction.disabled}>
-              {primaryAction.label}
-            </button>
-          )}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--space-2)',
-              padding: 'var(--space-2) var(--space-3)',
-              background: 'rgba(255,255,255,0.04)',
-              borderRadius: 'var(--radius-sm)',
-              fontFamily: 'var(--font-mono, monospace)',
-              fontSize: 'var(--body-sm)',
-            }}
-          >
-            <span style={{ flex: 1, color: 'var(--ink)' }}>{prompt}</span>
-            <button type="button" className="btn btn--ghost" onClick={copyPrompt}>
-              {copied ? 'copied' : 'copy'}
-            </button>
-          </div>
         </div>
       )}
     </div>

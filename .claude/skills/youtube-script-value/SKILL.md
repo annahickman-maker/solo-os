@@ -1,6 +1,8 @@
 ---
 name: youtube-script-value
-description: Write one value section of a YouTube script using the WHY/WHAT/HOW/PAYOFF+REHOOK structure. Each value section is one teaching point. Called once per value point in the video. The PAYOFF+REHOOK ending pulls the viewer into the next section. Use when the user is scripting a single value section, or repeatedly when called by /youtube-script orchestrator (once per teaching point).
+description: 'Write one value section of a YouTube script using the WHY/WHAT/HOW/PAYOFF+REHOOK structure. Each value section is one teaching point. Called once per value point in the video. The PAYOFF+REHOOK ending pulls the viewer into the next section. Use when the user is scripting a single value section, or repeatedly when called by /youtube-script orchestrator (once per teaching point).'
+category: Create
+hidden: true
 ---
 
 # YouTube Script Value
@@ -13,8 +15,8 @@ The job of a value section: over-deliver on the value promised in the intro. Nev
 
 ## Preflight
 
-1. Read `04_YouTube/core_channel-positioning.md`. If missing, STOP: "Run /youtube-onboarding first to set up channel positioning."
-2. Read `01_Core/core_voice-style.md`, `01_Core/core_ip.md`.
+1. Read `01_Core/core_voice-style.md`, `01_Core/core_ip.md` (set up in Solo OS onboarding). If your core files aren't set up yet, stop and say: run /solopreneur-onboarding first.
+2. Load your content focus avatar - the specific person this video is for. Read `content_focus_avatar` from `00_System/state.md` (a path to an avatar file) and read that avatar in `05_Assets/Avatars/`. If none is set, fall back to `core_audience.md`.
 3. Check `05_Assets/POVs/` and `05_Assets/Stories/` for relevant material on this teaching point.
 4. Read `06_Swipe/` to see if anything relevant is in there - if so, surface it to the user with attribution. Do not use swipe content directly.
 

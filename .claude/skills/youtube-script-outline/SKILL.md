@@ -1,6 +1,8 @@
 ---
 name: youtube-script-outline
-description: Build the structural skeleton of a YouTube video script - the outline, not the full word-for-word script. Lays out the intro placeholder, mindset shift section, value sections (one per teaching point), CTA, and outro. Each section is bullet-pointed with the key beats and placeholders for personal stories. Use when the user wants the structural skeleton before writing the full script, or as the first step inside /youtube-script.
+description: 'Build the structural skeleton of a YouTube video script - the outline, not the full word-for-word script. Lays out the intro placeholder, mindset shift section, value sections (one per teaching point), CTA, and outro. Each section is bullet-pointed with the key beats and placeholders for personal stories. Use when the user wants the structural skeleton before writing the full script, or as the first step inside /youtube-script.'
+category: Create
+hidden: true
 ---
 
 # YouTube Script Outline
@@ -11,8 +13,8 @@ Builds the structural skeleton of the video. Not the full script - the bones. Ea
 
 ## Preflight
 
-1. Read `04_YouTube/core_channel-positioning.md`. If missing, STOP: "Run /youtube-onboarding first to set up channel positioning."
-2. Read `01_Core/core_voice-style.md`, `01_Core/core_audience.md`, `01_Core/core_positioning.md`, `01_Core/core_ip.md`, `01_Core/core_offer-suite.md`.
+1. Read `01_Core/core_voice-style.md`, `01_Core/core_audience.md`, `01_Core/core_positioning.md`, `01_Core/core_ip.md`, `01_Core/core_offer-suite.md` (set up in Solo OS onboarding). If your core files aren't set up yet, stop and say: run /solopreneur-onboarding first.
+2. Load your content focus avatar - the specific person this video is for. Read `content_focus_avatar` from `00_System/state.md` (a path to an avatar file) and read that avatar in `05_Assets/Avatars/`. If none is set, fall back to `core_audience.md`.
 3. Check `05_Assets/` for relevant stories, proof points, and POVs.
 
 ---
@@ -27,7 +29,7 @@ Confirm before building. If missing, ask.
 - The contrarian flip (what the user actually believes)
 - One strong proof point from the user's experience
 - 3-5 value points with enough depth to outline (each: WHAT it is, WHY it matters, HOW to apply it)
-- CTA (default to channel CTA from `core_channel-positioning.md` unless this video drives to a different one)
+- CTA (default to your YouTube CTA - `youtube_cta_text` + `youtube_cta_url` in `00_System/state.md` - unless this video drives to a different one)
 - Next video to link in the outro (search `05_Assets/Transcripts/` or ask the user)
 
 If the user wants help gathering these, point them to /youtube-script (the orchestrator).
@@ -103,7 +105,7 @@ Use the structure below. Each section is bullet-pointed. Do not write full sente
 - Alignment: [how it connects to what was just taught]
 - Casual invite: [where to get it]
 
-CTA points to: [primary CTA from `core_channel-positioning.md` unless overridden]
+CTA points to: [your YouTube CTA from `00_System/state.md` (`youtube_cta_text` + `youtube_cta_url`) unless overridden]
 
 ---
 

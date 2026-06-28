@@ -2,6 +2,9 @@ interface YearGridProps {
   data: (number | null)[];
   targetPerWeeks?: number;
   onEditTarget?: () => void;
+  // When false, hides the internal "X weeks posted / target" summary row (the
+  // content-output box renders that itself as a heading). Default true.
+  showSummary?: boolean;
 }
 
 function targetLabel(weeks: number): string {
@@ -25,12 +28,13 @@ const MONTH_TICKS = [
   { label: 'dec', week: 47 },
 ];
 
-export function YearGrid({ data, targetPerWeeks = 1, onEditTarget }: YearGridProps) {
+export function YearGrid({ data, targetPerWeeks = 1, onEditTarget, showSummary = true }: YearGridProps) {
   const weeks = Array.from({ length: 52 }, (_, i) => data[i] ?? null);
   const published = weeks.filter((v) => typeof v === 'number' && v > 0).length;
 
   return (
     <div className="stack" style={{ gap: 'var(--space-3)' }}>
+      {showSummary && (
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
         <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
           {published} {published === 1 ? 'week' : 'weeks'} you posted this year
@@ -55,6 +59,7 @@ export function YearGrid({ data, targetPerWeeks = 1, onEditTarget }: YearGridPro
           </span>
         )}
       </div>
+      )}
       <div
         style={{
           display: 'grid',
@@ -65,9 +70,9 @@ export function YearGrid({ data, targetPerWeeks = 1, onEditTarget }: YearGridPro
         {weeks.map((value, i) => {
           const isFuture = value === null;
           const posted = typeof value === 'number' && value > 0;
-          let bg = 'rgba(255,255,255,0.06)';
+          let bg = 'var(--fill-subtle-2)';
           if (posted) bg = 'var(--accent)';
-          else if (isFuture) bg = 'rgba(255,255,255,0.03)';
+          else if (isFuture) bg = 'var(--heat-future)';
           return (
             <div
               key={i}

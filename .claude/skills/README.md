@@ -2,8 +2,8 @@
 
 All skills live flat in this directory. Naming convention groups them visually:
 
-- `solopreneur-*` — Solopreneur OS foundation pack
-- `youtube-*` — YouTube skill pack
+- `solopreneur-*` - Solopreneur OS foundation pack
+- `youtube-*` - YouTube skill pack
 - (future packs follow the same prefix pattern: `web-design-*`, `client-os-*`, etc.)
 
 ---
@@ -74,7 +74,7 @@ Channel-specific skills. Requires Solopreneur OS onboarding to be complete first
 
 ## Adding a new skill
 
-1. Create `.claude/skills/<your-skill-name>/SKILL.md` (flat, one level deep — Claude Code's skill discovery is one level)
+1. Create `.claude/skills/<your-skill-name>/SKILL.md` (flat, one level deep - Claude Code's skill discovery is one level)
 2. Use the prefix convention to group with the right pack (e.g., `youtube-*` for YouTube pack)
 3. Add an entry to the table above
 4. The skill is immediately invokable as `/<your-skill-name>`

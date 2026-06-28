@@ -1,6 +1,8 @@
 ---
 name: youtube-script-context
-description: Write the context section that comes right after the intro - the part that sets up the value. Uses judgment to decide whether this video actually needs a full mindset-shift section, just light additional setup, or no context section at all (if the intro already did the work). When a section is needed, strongly prefers anchoring it to a personal story or experience from the user that demonstrates the AHA. Use when the user is scripting the section between intro and value, or when called by /youtube-script orchestrator after the intro is locked.
+description: 'Write the context section that comes right after the intro - the part that sets up the value. Uses judgment to decide whether this video actually needs a full mindset-shift section, just light additional setup, or no context section at all (if the intro already did the work). When a section is needed, strongly prefers anchoring it to a personal story or experience from the user that demonstrates the AHA. Use when the user is scripting the section between intro and value, or when called by /youtube-script orchestrator after the intro is locked.'
+category: Create
+hidden: true
 ---
 
 # YouTube Script Context
@@ -15,8 +17,8 @@ When the section IS needed, the strongest version anchors to a personal story fr
 
 ## Preflight
 
-1. Read `04_YouTube/core_channel-positioning.md`. If missing, STOP: "Run /youtube-onboarding first to set up channel positioning."
-2. Read `01_Core/core_voice-style.md`, `01_Core/core_audience.md`, `01_Core/core_my-story.md`, `01_Core/core_ip.md`.
+1. Read `01_Core/core_voice-style.md`, `01_Core/core_audience.md`, `01_Core/core_my-story.md`, `01_Core/core_ip.md` (set up in Solo OS onboarding).
+2. Load your content focus avatar - the specific person this video is for. Read `content_focus_avatar` from `00_System/state.md` (a path to an avatar file) and read that avatar in `05_Assets/Avatars/`. If none is set, fall back to `core_audience.md`. If your core files aren't set up yet, stop and say: run /solopreneur-onboarding first.
 3. Check `05_Assets/Stories/` for relevant personal stories that could anchor the AHA moment.
 4. Read the project note for this video if one exists in `03_Projects/` or `04_YouTube/Scripts/`.
 5. Read the LOCKED INTRO for this video - this is critical for the judgment call below.

@@ -1,6 +1,20 @@
 ---
 name: youtube-ideas
-description: Take a raw video idea and develop it into a packaged concept ready for the title generator and script builder. Bridges the gap between what the user wants to teach (often tactical) and what their audience actually wants (the desirable result). Sharpens the angle, validates the audience would click, defines the transformation, and connects to the user's core method. A raw idea is not a video - this skill turns it into one. Use whenever the user has a raw idea they want to develop, or wants to pull an idea from the video cue and shape it into something filmable.
+description: 'Take a raw video idea and develop it into a packaged concept ready for the title generator and script builder. Bridges the gap between what the user wants to teach (often tactical) and what their audience actually wants (the desirable result). Sharpens the angle, validates the audience would click, defines the transformation, and connects to the user''s core method. A raw idea is not a video - this skill turns it into one. Use whenever the user has a raw idea they want to develop, or wants to pull an idea from the video cue and shape it into something filmable.'
+title: Idea Sharpener
+card: Turn a raw idea into a fully-fleshed video concept
+category: Ideas
+inputs:
+  - type: idea
+    optional: true
+  - type: text
+    optional: true
+    label: Or start from scratch
+outputs:
+  - type: content
+    description: a new video concept added to the YouTube queue
+icon: youtube
+color: '#FF4D4D'
 ---
 
 # YouTube Ideas
@@ -11,19 +25,23 @@ The most important job: bridge between **what the user wants to teach** (often t
 
 ---
 
-## Preflight
+## Before you start
 
-1. Read `04_YouTube/core_channel-positioning.md`. If missing, STOP: "Run /youtube-onboarding first to set up channel positioning."
-2. Read `01_Core/core_positioning.md`, `01_Core/core_audience.md`, `01_Core/core_ip.md`.
-3. Read `04_YouTube/core_channel-positioning.md` for the channel transformation, target person, and value-share/don't-share lists.
+Open warm and human - lead with something like "Hey [first name], let's sharpen this idea." Then load your context quietly in the background. Never narrate file reads or paths; the person just sees the conversation.
 
----
+Read your foundation (set up in Solo OS onboarding):
 
-## Required input
+- `01_Core/core_positioning.md` - who you help and the transformation
+- `01_Core/core_audience.md` - your audience
+- `01_Core/core_ip.md` - your core method, to see what this idea connects to
 
-- The raw idea (one line is enough)
+Then load your content focus avatar - the specific person this video is for. Read `content_focus_avatar` from `00_System/state.md` (it's a path to an avatar file), then read that avatar in `05_Assets/Avatars/`. It's the one you've selected on your Content page. If none is set, fall back to `core_audience.md`.
 
-If the user wants to pull from `04_YouTube/video-cue.md`, read the raw ideas section and let them pick one.
+If your core files aren't set up yet, stop and say: run /solopreneur-onboarding first.
+
+## The raw idea
+
+One line is enough. If they'd rather start from something they've already jotted down, offer what's in their idea bank.
 
 ---
 
@@ -42,7 +60,7 @@ Check internally:
 
 The audience clicks on videos framed around what they WANT, not on whatever the user wants to teach. Sometimes those are the same thing. Sometimes they're not. This step uses judgment to figure out which case applies, and only does the bridging work when it's needed.
 
-Read the channel transformation, "where you're taking them," and "from A to B" sections of `core_channel-positioning.md`, plus `core_audience.md`. These tell you what the audience actually wants.
+Your `core_positioning.md` (the transformation, where you're taking people) and your focus avatar (their before/after, what they're really after) tell you what the audience actually wants.
 
 ### First - judgment call
 
@@ -180,9 +198,20 @@ Once confirmed:
 
 > "This is ready. Take this into /youtube-title to write your title (the title generator will frame around the desirable result), then into /youtube-script to build the outline and intro."
 
-If the user wants to keep this concept, save to `03_Projects/project_[slug].md` (slug = 2-3 words from the working title).
+If they want to keep this concept, add it to their YouTube queue so it shows up on the dashboard. Save it as a new video project at `04_Channel/04_Projects/project_<slug>.md` (slug = 2-3 words from the working title), with this frontmatter:
 
-If the idea came from `04_YouTube/video-cue.md`, offer to move it from "raw ideas" to "in development" in that file.
+    ---
+    id: <slug>
+    type: video
+    title: <working title>
+    status: idea
+    queued: true
+    created: '<today, YYYY-MM-DD>'
+    ---
+
+Put the packaged concept in the body. The `status: idea` + `queued: true` pair is what makes it show up in the YouTube queue on your Content page.
+
+Create a brand-new per-row file with its own `project_<slug>.md` name. Do NOT append the concept to `_video-queue.md` or any other list/markdown file - the dashboard reads individual `type: video` files, so a list entry will never appear in the queue.
 
 ---
 
@@ -191,6 +220,6 @@ If the idea came from `04_YouTube/video-cue.md`, offer to move it from "raw idea
 - Never package a vague idea - push for specificity first.
 - Never let the framing stay tactical when it should be result-driven. The audience clicks on results.
 - Never invent demand signals, audience desires, or audience traits.
-- Pull from `01_Core/` and `04_YouTube/` for context - especially the channel transformation and audience profile.
+- Pull from your core files and your focus avatar for context - especially the transformation and who this video is for.
 - Never use - (em dash). Use - instead.
 - Respect every STOP condition.

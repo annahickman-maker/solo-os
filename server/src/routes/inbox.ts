@@ -22,6 +22,7 @@ import { Hono } from 'hono';
 import fs from 'node:fs';
 import path from 'node:path';
 import { abs, slugify, VAULT_ROOT } from '../vault.js';
+import { scanTranscripts } from './archive.js';
 
 const ARCHIVE_DIR_REL = path.join('00_System', 'inbox', '_archive');
 
@@ -29,13 +30,16 @@ const ARCHIVE_DIR_REL = path.join('00_System', 'inbox', '_archive');
 // without a transform layer.
 type InboxItem = {
   id: string;
-  source: 'skool_reply' | 'zoom_transcript' | 'flagged_review' | 'manual';
+  source: 'skool_reply' | 'zoom_transcript' | 'flagged_review' | 'manual' | 'transcript';
   title: string;
   body: string;
   status: 'pending' | 'done' | 'dismissed';
   link: string | null;
   source_file: string;
   created_at: number; // unix seconds
+  // For source 'transcript': the transcript id so the UI opens the same vault
+  // view (TranscriptPanel) instead of rendering an inline blob.
+  transcript_id?: string;
 };
 
 function archivePath(id: string): string {
@@ -210,12 +214,68 @@ function parseZoomTranscripts(): InboxItem[] {
   return items;
 }
 
+// ─── source 4: new vault transcripts (openable, mined for stories) ─────────
+// Surfaces transcripts ADDED since the baseline (set on first run) so the
+// existing backlog never floods the inbox. Each item carries the transcript id
+// so the UI opens the same vault view (TranscriptPanel). Kept SEPARATE from the
+// zoom-summary items above by design - processing a summary and mining the
+// transcript for stories are two different tasks, each with its own done state.
+const TRANSCRIPT_BASELINE_FILE = abs('00_System', 'inbox', '.transcript-baseline');
+
+function transcriptBaseline(): number {
+  try {
+    const v = parseInt(fs.readFileSync(TRANSCRIPT_BASELINE_FILE, 'utf8').trim(), 10);
+    if (Number.isFinite(v)) return v;
+  } catch {}
+  // First run: pin the baseline to now so only transcripts added from here on
+  // surface. The existing backlog stays in the vault only.
+  const now = Math.floor(Date.now() / 1000);
+  try {
+    fs.mkdirSync(path.dirname(TRANSCRIPT_BASELINE_FILE), { recursive: true });
+    fs.writeFileSync(TRANSCRIPT_BASELINE_FILE, String(now));
+  } catch {}
+  return now;
+}
+
+const TRANSCRIPT_TYPE_LABEL: Record<string, string> = {
+  qa: 'Q&A call',
+  workshop: 'Live workshop',
+  video: 'Video',
+  client: 'Client call',
+  'solo-os': 'Solo OS walkthrough',
+  untagged: 'Zoom call',
+};
+
+function parseTranscripts(): InboxItem[] {
+  const baseline = transcriptBaseline();
+  const items: InboxItem[] = [];
+  for (const t of scanTranscripts()) {
+    if ((t.created_at ?? 0) <= baseline) continue; // only transcripts added since baseline
+    const label = TRANSCRIPT_TYPE_LABEL[t.type] ?? 'Transcript';
+    const niceDate = t.created_at
+      ? new Date(t.created_at * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+      : '';
+    items.push({
+      id: `inbox-transcript-${t.id}`,
+      source: 'transcript',
+      transcript_id: t.id,
+      title: `New transcript - ${label}${niceDate ? ` - ${niceDate}` : ''}`,
+      body: (t.summary || t.excerpt || '').slice(0, 600),
+      status: 'pending',
+      link: null,
+      source_file: t.filename,
+      created_at: t.created_at ?? 0,
+    });
+  }
+  return items;
+}
+
 function listInbox(): InboxItem[] {
   const dismissed = dismissedIds();
   // Preserve the existing Skool QA-Calls parser (your manual workflow files)
-  // AND add the new zoom-summary parser (output of the auto-sync). Both can
-  // coexist - they read different filename patterns in the same folders.
-  const all = [...parseSkoolReplyDrafts(), ...parseQaTranscripts(), ...parseZoomTranscripts()];
+  // AND the zoom-summary parser (output of the auto-sync) AND the new
+  // openable-transcript source. All coexist.
+  const all = [...parseSkoolReplyDrafts(), ...parseQaTranscripts(), ...parseZoomTranscripts(), ...parseTranscripts()];
   return all
     .filter((it) => !dismissed.has(it.id))
     .sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));

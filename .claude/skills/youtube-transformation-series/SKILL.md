@@ -1,6 +1,22 @@
 ---
 name: youtube-transformation-series
-description: Plan a 5-video transformation series mapped to the user's core IP (the 5-step method). Each video maps 1:1 to one step and delivers the full value of that step in the audience's own words. Video 1 has extra framing duty (sets up the overall transformation while teaching step 1) but every video stands alone with real value. CTA placement is contextual - drops where the offer is naturally relevant, not formulaic. Outputs a series overview and 5 individual project notes ready for scripting. Use when the user wants to plan their first 5 videos, says "plan my transformation series", or after onboarding completes.
+description: 'Plan a 5-video transformation series mapped to the user''s core IP (the 5-step method). Each video maps 1:1 to one step and delivers the full value of that step in the audience''s own words. Video 1 has extra framing duty (sets up the overall transformation while teaching step 1) but every video stands alone with real value. CTA placement is contextual - drops where the offer is naturally relevant, not formulaic. Outputs a series overview and 5 individual project notes ready for scripting. Use when the user wants to plan their first 5 videos, says "plan my transformation series", or after onboarding completes.'
+title: YouTube Transformation Series
+card: Plan a 5-video transformation series mapped to your offer
+category: Strategy
+inputs:
+  - type: offer
+    optional: true
+  - type: avatar
+    optional: true
+  - type: text
+    optional: true
+    label: Theme
+outputs:
+  - type: content
+    description: 5 video projects created in the queue
+icon: youtube
+color: '#FF4D4D'
 ---
 
 # YouTube Transformation Series
@@ -39,10 +55,10 @@ The skill uses judgment to shape the series to fit the user's specific channel -
 
 ## Preflight
 
-1. Read `04_YouTube/core_channel-positioning.md`. If missing, STOP: "Run /youtube-onboarding first to set up channel positioning."
-2. Read `01_Core/core_ip.md` - this is the spine of the series. If missing or empty: STOP and tell user to complete /solopreneur-onboarding (specifically phase 4, core IP) first.
-3. Read `01_Core/core_positioning.md`, `01_Core/core_audience.md`, `01_Core/core_offer-suite.md`.
-4. Read `04_YouTube/core_channel-positioning.md` for the channel transformation, target person, and CTA.
+1. Read the 6 core files: `01_Core/core_positioning.md`, `core_audience.md`, `core_my-story.md`, `core_ip.md`, `core_offer-suite.md`, `core_voice-style.md`. If any are missing, STOP: "Run /solopreneur-onboarding first to set up your foundation."
+2. `core_ip.md` is the spine of the series. If it's missing or empty, STOP: "Run /solopreneur-onboarding (phase 4, core IP) first - the series maps to your 5 steps."
+3. Load the content focus avatar: read `content_focus_avatar` from `00_System/state.md` (a path), then read that avatar file in `05_Assets/Avatars/`. This is the target person the series speaks to.
+4. Read the YouTube CTA: `youtube_cta_text` and `youtube_cta_url` from `00_System/state.md` (the CTA box on your Content page) - this is the CTA the series drives toward. The overall transformation comes from `core_positioning.md` + `core_audience.md` + the focus avatar.
 
 ---
 
@@ -132,7 +148,7 @@ If the Video 1 outline doesn't reflect both the overall framing AND step 1's val
 
 ## Step 4b - CTA placement across the series
 
-The series CTA is the channel CTA from `core_channel-positioning.md`. Where it lands across the 5 videos depends on what's most naturally relevant to the user.
+The series CTA is the YouTube CTA from your Content page (`youtube_cta_text` / `youtube_cta_url` in `00_System/state.md`). Where it lands across the 5 videos depends on what's most naturally relevant to the user.
 
 The principle: place the CTA where the user is naturally referencing the thing the offer delivers. Don't force it into all 5 videos. Don't reserve it for the last video. Drop it where it makes sense.
 
@@ -210,10 +226,10 @@ aliases:
 # Transformation Series
 
 ## Series result
-[The full transformation - matches channel transformation from `core_channel-positioning.md`]
+[The full transformation - from `core_positioning.md` + `core_audience.md` + the focus avatar]
 
 ## CTA
-[Pulled from `core_channel-positioning.md` - the single action each video drives toward]
+[The YouTube CTA from `00_System/state.md` - the single action each video drives toward]
 
 ## Videos
 1. [Video 1 title] → `03_Projects/project_video-1-[slug].md`
@@ -298,7 +314,7 @@ If they want it, add a note to the series overview: "Optional 6th: combined long
 - Goal: give everything away free, sell the implementation. The CTA earns its place by being the natural next step from what was just taught.
 - Use judgment to shape the series to the user's specific channel (their content style, delivery style, offer, method). Don't apply a template blindly.
 - The result of the full series must match the channel transformation.
-- The CTA is the channel CTA from `core_channel-positioning.md`.
+- The CTA is the YouTube CTA from `00_System/state.md` (your Content page).
 - Never invent content points - only what comes from the user's IP and POV.
 - Results in the AUDIENCE'S language, not the marketing version.
 - Titles lowercase, no emojis.

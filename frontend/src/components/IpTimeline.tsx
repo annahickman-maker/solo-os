@@ -9,6 +9,7 @@ const STEPS = [
 export function IpTimeline() {
   return (
     <div
+      className="card"
       style={{
         padding: 'var(--space-5)',
         background: 'var(--surface)',

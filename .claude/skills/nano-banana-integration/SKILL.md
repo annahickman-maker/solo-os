@@ -1,6 +1,8 @@
 ---
 name: nano-banana-integration
-description: Technical integration patterns for generating images with Google's Nano Banana (Gemini 2.5 Flash Image) model via the Gemini API. Use when generating brand photography, moodboard imagery, strategy deck images, or any image generation task. Covers curl-based API calls, authentication, request structure, response parsing, saving images, error handling, and batch generation. Used together with the ai-image-prompting skill.
+description: 'Technical integration patterns for generating images with Google''s Nano Banana (Gemini 2.5 Flash Image) model via the Gemini API. Use when generating brand photography, moodboard imagery, strategy deck images, or any image generation task. Covers curl-based API calls, authentication, request structure, response parsing, saving images, error handling, and batch generation. Used together with the ai-image-prompting skill.'
+category: Create
+hidden: true
 ---
 
 # Nano Banana Integration

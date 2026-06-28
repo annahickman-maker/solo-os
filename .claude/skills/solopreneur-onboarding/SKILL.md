@@ -1,11 +1,18 @@
 ---
 name: solopreneur-onboarding
-description: One-time foundational onboarding for the Solopreneur OS skill pack. Walks the user through 6 sequential phases - positioning, audience, my story, core IP, offer suite, and voice and style - and produces the core files that every other skill (in this pack and in any skill pack installed on top, like YouTube OS) reads from. Use whenever a user starts the system, when they ask to "onboard" or "set up", or when any other skill detects that core files are missing.
+description: 'One-time foundational onboarding for Solopreneur OS. Walks the user through 6 sequential phases - positioning, audience, my story, core IP, offer suite, and voice and style - and produces the core files that every other skill in the system reads from. Use whenever a user starts the system, when they ask to "onboard" or "set up", or when any other skill detects that core files are missing.'
+title: Personal Brand Strategy
+card: 'Map your core files: positioning, voice, audience, offer'
+category: Strategy
+inputs:
+  - type: transcript
+    multiple: true
+    optional: true
 ---
 
 # Solopreneur Onboarding
 
-This is the foundational onboarding for any user installing the Solopreneur OS skill pack. It produces 6 core files that every other skill on the system reads.
+This is the foundational onboarding for the system. It produces 6 core files that every other skill reads.
 
 This is a coaching conversation, not a form. One question at a time. Listen to answers. Build on what they give you. Push for specificity. Never invent or suggest answers - draw them out.
 
@@ -35,7 +42,7 @@ For each existing file, READ it and use judgment to decide whether it contains a
 
 Treat as **DONE** (skip the phase) only if the file has real, substantive user-written content under each section - not headings without bodies, not bracketed placeholders, not auto-generated marker text.
 
-This is critical for migrating YouTube OS users - they often have all 6 core files from YTOS auto-creation, but none of them are actually filled in (different files use different placeholder styles - some use bracketed text, some use empty section bodies, some use auto-generated marker prose). Mistakenly skipping those phases would leave the user with empty foundation files, breaking every downstream skill.
+This matters because a vault can have all 6 core files present but empty - placeholder templates that were auto-created and never filled in (different files use different placeholder styles: bracketed text, empty section bodies, or auto-generated marker prose). Mistakenly skipping those phases would leave the user with empty foundation files, breaking every downstream skill.
 
 When in doubt, ask the user: "I see your `core_X.md` file but it doesn't look filled in - want to do that phase, or skip it?"
 
@@ -44,11 +51,11 @@ Branch based on what's actually done (not just what exists):
 **All 6 exist:**
 > "Looks like your onboarding is complete - all 6 core files are saved.
 >
-> Want to refresh any specific phase, or are you good to move on to a skill pack? (Say 'refresh phase X' to redo one, or just tell me what you want to do.)"
+> Want to refresh any specific phase, or are you good to start using the system? (Say 'refresh phase X' to redo one, or just tell me what you want to do.)"
 
 Wait for user input. If they want to refresh a specific phase, run that phase only. Otherwise exit.
 
-**Some exist (most common case for migrating YouTube OS users):**
+**Some exist (some core files filled in, others not):**
 
 Build a list of which phases are done and which are missing. Then say:
 
@@ -66,20 +73,12 @@ Wait for confirmation. Then run ONLY the missing phases in order.
 
 Show the full welcome message below and run all 6 phases.
 
-**Special case for migrating YouTube OS users:**
-
-Many migrating users will have all 6 legacy YTOS files present but most or all of them empty (just templates). Run the empty-template detection above to see which are actually filled in, and treat empty ones as "not done." Don't assume a migrating user has phases 1-4 + 6 complete just because the files exist.
-
-For migrating users who DID actually complete YTOS onboarding (rare but possible), phases 1, 2, 3, 4, 6 will be done, leaving only phase 5 (Offer suite) to do. In that case, call it out:
-
-> "I see you've migrated from YouTube OS - your existing positioning, audience, story, core IP, and voice style are all preserved. The only new phase in Solopreneur OS is phase 5 (Offer suite), so we just need to do that one. About 10 minutes. Ready?"
-
 ---
 
 ## When to run
 
 Run this skill when:
-- The user has just installed Solopreneur OS or a skill pack that depends on it (YouTube OS, etc)
+- The user is setting up the system for the first time
 - The user asks to "onboard", "set up", or "get started"
 - Another skill detects that one or more core files are missing and tells the user to run /solopreneur-onboarding
 
@@ -104,7 +103,7 @@ Open with this exactly, before doing anything else:
 
 > "Welcome to Solopreneur OS.
 >
-> Before you can use anything else in this system - or any skill pack you install on top of it - we need to set up your foundation.
+> Before you can use anything else in the system, we need to set up your foundation.
 >
 > This is a one-time process. About 60-90 minutes total - and you can absolutely break it across multiple sessions. Just say 'I need to take a break' at any point and I'll save your progress so you can come back exactly where you left off. Everything you build here gets used every time you create content. The more specific you are, the better the system works.
 >
@@ -134,6 +133,22 @@ Then add:
 > Ready?"
 
 Wait for confirmation before continuing.
+
+---
+
+## If the user brought context
+
+The user may have attached context about themselves before starting - their YouTube transcripts, a website or about page, documents they dropped in. The run will list the files. If there are any:
+
+1. Read them all first.
+2. From what's there, draft an initial read of the three things content actually reveals: their **positioning** (who they help and how), their **audience** (who they're talking to, in their words), and their **voice** (how they naturally talk - words, rhythm, tone).
+3. Present that draft back in plain language: "Here's what I'm picking up about you so far." Keep it short and specific - quote their own phrases where you can.
+4. Ask if it feels right: "Does this land, or is something off?" Take their corrections.
+5. Then go deeper. Use the draft as a head start, not a finish line - the real depth (their stories, their turning points, the exact quotes) only comes from the conversation. Run the 6 phases below, but where the draft already nailed something, confirm it fast and spend the time on what's missing.
+
+If the user brought nothing, skip this and run the 6 phases from scratch.
+
+Either way the 6-phase interview still happens. The draft never replaces it - it just means they never start from a blank page.
 
 ---
 
@@ -199,9 +214,9 @@ Do not mention this rule to the user. Just listen and note.
 
 Once all 6 core files are saved, confirm:
 
-> "Onboarding is done. Your 6 core files are saved to `01_Core/`. Every skill in every skill pack on this system reads from these files.
+> "Onboarding is done. Your 6 core files are saved to `01_Core/`. Every skill in the system reads from these files - this is the foundation everything else is built on.
 >
-> If you have skill packs installed on top of Solopreneur OS - like YouTube OS or Web Design OS - they each have their own onboarding to layer their channel-specific or service-specific configuration on top of these files. Run those next when you're ready."
+> The only channel-specific pieces left are your content focus avatar and your YouTube CTA, which you set on the Content page whenever you're ready. That's it - you're set up."
 
 ---
 

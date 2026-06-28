@@ -112,6 +112,10 @@ app.get('/', (c) => {
         conversion_pct: fm.conversion_pct ?? null,
         archived: false,
         queued: fm.queued ?? 0,
+        // Does this video have a transcript to work from? (published YT videos
+        // get one on sync; filmed drafts can have one too.) The Description
+        // Generator picker filters on this.
+        has_transcript: fm.has_transcript === true || !!fm.transcript_path || /##\s+Transcript/i.test(e.body),
         source_file: e.relPath,
         updated_at: e.mtimeSec,
       };

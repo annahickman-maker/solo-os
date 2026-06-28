@@ -335,47 +335,62 @@ export const VideoScriptBuilder = forwardRef<VideoScriptBuilderHandle, {
         )}
 
         {/* Section boxes. "+ add value point" is rendered right after the
-            last value section (before CTA/outro) so it sits where it
-            naturally belongs visually. */}
+            last non-closing section (intro / context / value) so it always
+            shows up - even when every value section has been removed and
+            sections is just intro → context → cta → outro. Previously it was
+            anchored to the last value section, which vanished when there
+            were no value sections left. */}
         <div className="sb-sections">
-          {sections.map((section, idx) => {
-            const next = sections[idx + 1];
-            const isLastValue = section.kind === 'value' && (!next || next.kind !== 'value');
-            return (
-              <Fragment key={section.id}>
-                <SectionBox
-                  section={section}
-                  videoId={videoId}
-                  byId={byId}
-                  proofItems={proofItems}
-                  canRemove={section.kind === 'value'}
-                  isHovered={hoverSection === section.id}
-                  isDragging={!!dragging}
-                  onBriefChange={(brief) => patchSection(section.id, { brief })}
-                  onRemoveAnchor={(aid) => removeAnchor(section.id, aid)}
-                  onPick={() => setPickerForSection(section.id)}
-                  onRemoveSection={() => removeSection(section.id)}
-                  onDragStart={(anchorId) => setDragging({ anchorId, fromSection: section.id })}
-                  onDragEnd={() => { setDragging(null); setHoverSection(null); }}
-                  onDragOver={() => setHoverSection(section.id)}
-                  onDrop={(beforeAnchorId) => {
-                    if (dragging) {
-                      moveAnchor(dragging.fromSection, section.id, dragging.anchorId, beforeAnchorId);
-                      setDragging(null);
-                      setHoverSection(null);
-                    }
-                  }}
-                />
-                {isLastValue && (
-                  <div className="sb-add-section">
-                    <button type="button" className="btn btn--ghost" onClick={addValueSection}>
-                      + add value point
-                    </button>
-                  </div>
-                )}
-              </Fragment>
-            );
-          })}
+          {(() => {
+            // Index of the last section that isn't cta/outro. The add button
+            // lands right after this row when no value sections exist, so the
+            // user can re-seed.
+            let lastNonClosing = -1;
+            sections.forEach((s, i) => {
+              if (s.kind !== 'cta' && s.kind !== 'outro') lastNonClosing = i;
+            });
+            const hasAnyValue = sections.some((s) => s.kind === 'value');
+            return sections.map((section, idx) => {
+              const next = sections[idx + 1];
+              const isLastValue = section.kind === 'value' && (!next || next.kind !== 'value');
+              const isInsertSlot = !hasAnyValue && idx === lastNonClosing;
+              const showAddButton = isLastValue || isInsertSlot;
+              return (
+                <Fragment key={section.id}>
+                  <SectionBox
+                    section={section}
+                    videoId={videoId}
+                    byId={byId}
+                    proofItems={proofItems}
+                    canRemove={section.kind === 'value'}
+                    isHovered={hoverSection === section.id}
+                    isDragging={!!dragging}
+                    onBriefChange={(brief) => patchSection(section.id, { brief })}
+                    onRemoveAnchor={(aid) => removeAnchor(section.id, aid)}
+                    onPick={() => setPickerForSection(section.id)}
+                    onRemoveSection={() => removeSection(section.id)}
+                    onDragStart={(anchorId) => setDragging({ anchorId, fromSection: section.id })}
+                    onDragEnd={() => { setDragging(null); setHoverSection(null); }}
+                    onDragOver={() => setHoverSection(section.id)}
+                    onDrop={(beforeAnchorId) => {
+                      if (dragging) {
+                        moveAnchor(dragging.fromSection, section.id, dragging.anchorId, beforeAnchorId);
+                        setDragging(null);
+                        setHoverSection(null);
+                      }
+                    }}
+                  />
+                  {showAddButton && (
+                    <div className="sb-add-section">
+                      <button type="button" className="btn btn--ghost" onClick={addValueSection}>
+                        + add value point
+                      </button>
+                    </div>
+                  )}
+                </Fragment>
+              );
+            });
+          })()}
         </div>
 
         {/* Bottom action: draft the whole script from every section's stories

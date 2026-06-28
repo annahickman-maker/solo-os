@@ -120,7 +120,7 @@ function safeStr(s: string | null | undefined): string {
 }
 
 function stripEmDashes(s: string): string {
-  return s.replace(/—/g, '-').replace(/–/g, '-');
+  return s.replace(/-/g, '-').replace(/–/g, '-');
 }
 
 function bullet(items: string[], max = 12): string {

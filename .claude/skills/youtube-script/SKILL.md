@@ -1,6 +1,17 @@
 ---
 name: youtube-script
-description: Orchestrator skill that takes a raw video idea to a finished script through a 3-phase flow - interview, prompt sheet, optional full script. Phase 1 is a casual conversation that draws out the user's thinking, stories, value points, and context. Phase 2 produces the prompt sheet (intro/CTA/outro word-for-word, context and value as bullets) - 1-4 pages max, ready to film off-the-cuff. Phase 3 is optional full word-for-word scripting if the user wants it. Save and resume capable. Use when the user wants to script a video end-to-end, or says "run the script builder", "script this video", or "let's build the script".
+description: 'Orchestrator skill that takes a raw video idea to a finished script through a 3-phase flow - interview, prompt sheet, optional full script. Phase 1 is a casual conversation that draws out the user''s thinking, stories, value points, and context. Phase 2 produces the prompt sheet (intro/CTA/outro word-for-word, context and value as bullets) - 1-4 pages max, ready to film off-the-cuff. Phase 3 is optional full word-for-word scripting if the user wants it. Save and resume capable. Use when the user wants to script a video end-to-end, or says "run the script builder", "script this video", or "let''s build the script".'
+title: Script a Video
+card: Script a YouTube video with Claude
+category: Create
+inputs:
+  - type: video
+  - type: text
+    optional: true
+    label: Or a video idea
+outputs:
+  - type: content
+    description: the script attached to the selected video
 ---
 
 # YouTube Script (Orchestrator)
@@ -15,19 +26,38 @@ Takes a raw video idea to a finished script through a 3-phase flow.
 
 ---
 
-## Preflight
+## Before you start
 
-1. Read `04_YouTube/core_channel-positioning.md`. If missing, STOP: "Run /youtube-onboarding first to set up channel positioning."
-2. Read `01_Core/core_voice-style.md`, `01_Core/core_audience.md`, `01_Core/core_positioning.md`, `01_Core/core_ip.md`, `01_Core/core_offer-suite.md`.
-3. Check for an existing script project in `04_YouTube/Scripts/` matching the user's video. If one exists, load it and offer to resume from where they left off.
+Open warm - "Hey [first name], let's build this script." Then load your context quietly in the background; never narrate file reads or paths.
+
+Read your foundation (from Solo OS onboarding):
+
+- `01_Core/core_voice-style.md`, `01_Core/core_positioning.md`, `01_Core/core_audience.md`, `01_Core/core_ip.md`, `01_Core/core_offer-suite.md`
+
+Then load your content focus avatar - the specific person this video is for. Read `content_focus_avatar` from `00_System/state.md` (a path to an avatar file) and read that avatar in `05_Assets/Avatars/`. It's the one selected on your Content page. If none is set, fall back to `core_audience.md`.
+
+Your channel CTA is your YouTube CTA - `youtube_cta_text` + `youtube_cta_url` in `00_System/state.md` (the "what you point viewers to" box on your Content page). The mid-video CTA points there.
+
+If your core files aren't set up yet, stop and say: run /solopreneur-onboarding first.
+
+Then check the linked video's project file for a script already in progress. If there's one, load it and offer to resume from where they left off.
 
 ---
+
+## Where everything saves
+
+The script lives inside the video it belongs to - the same project file the dashboard reads, so it shows up on the video and the built-in script builder can pick it up too.
+
+- **If a video was linked:** save into that video's project file (the path you read at the start, e.g. `04_Channel/04_Projects/<file>.md`). Keep its frontmatter; write the script into the body. When the script is done, set `status: scripted`.
+- **If the user started from a fresh idea** (no video linked): the first time you save, create a new `04_Channel/04_Projects/project_<slug>.md` with `type: video`, `status: idea`, `queued: true`, the title, and the concept in the body - then keep saving into that same file.
+
+Throughout, "the video's project file" means whichever of those applies. Never save the script to a separate scripts folder - it would never show on the dashboard.
 
 ## Save and resume
 
 This is a long workflow. Save aggressively.
 
-After each significant chunk (interview complete, title locked, prompt sheet ready, full script done), save progress to `04_YouTube/Scripts/[slug].md` with:
+After each significant chunk (interview complete, title locked, prompt sheet ready, full script done), save progress to the video's project file with:
 - Everything captured so far
 - Which phase the user is in
 - What's next
@@ -37,7 +67,7 @@ If the user says "stop", "take a break", or "come back later":
 2. Tell them: "Saved. When you come back, just say **continue script** and I'll pick up at [next step]."
 
 When they return and say "continue script":
-1. Read `04_YouTube/Scripts/[slug].md`
+1. Read the video's project file
 2. Summarise what's locked
 3. Resume from the next step
 
@@ -49,9 +79,16 @@ This is a flowing conversation. Not rigid steps. Your job: ask questions, listen
 
 Ask one or two questions at a time. Never stack a list. Pull from the user's vault to prompt them.
 
-### Before starting the interview
+### Start with the linked video - this is the most important step
 
-Scan for relevant material:
+If a video was linked to this run, READ ITS PROJECT FILE COMPLETELY before anything else (the file path is in the run inputs). Everything the user already worked out lives in there: the title, the outline and teaching points in the body, the angle, the transformation, the goal, and any existing `script_sections` from the dashboard's script builder.
+
+That file is your foundation. Build the script FROM what's already there. Do NOT re-derive the topic from the title, and do NOT pull a different outline from the vault - the user linked this video specifically so you'd use what they put in it. If the outline is already solid, reflect it back, confirm it, and move forward; only ask about genuine gaps.
+
+If no video was linked (the user typed a fresh idea instead), there's nothing to read yet - run the full interview below to build the concept from scratch.
+
+### Scan for supporting material
+
 - `05_Assets/Stories/` - personal stories
 - `05_Assets/POVs/` - developed POVs
 - `05_Assets/Transcripts/` - existing content on this topic
@@ -61,9 +98,11 @@ Read `01_Core/core_voice-style.md` so your draft language and prompts match the 
 
 ### Open the interview
 
-> "Let's build this script. I'm going to walk you through it like a conversation - I'll ask questions, you talk through your thinking, and I'll pull from your stories and POVs as we go. Don't worry about being structured - I'll handle that on the way out.
->
-> What's the video idea?"
+When a video is linked, open by reflecting back what's already in it - prove you read it - then ask the most useful gap-filling question. For example: "I've read through your [title] - you've already mapped out [the outline / teaching points / angle]. Let's build the script from that. The one thing I want to lock first is [genuine gap]."
+
+When it's a fresh idea with nothing linked yet, open with:
+
+> "Let's build this script. I'll walk you through it like a conversation - I'll ask questions, you talk through your thinking, and I'll pull from your stories and POVs as we go. Don't worry about being structured, I'll handle that on the way out. What's the video idea?"
 
 Wait for their answer. Then dig in.
 
@@ -75,7 +114,7 @@ Wait for their answer. Then dig in.
 - Does it connect to the core method in `core_ip.md`? Note the connection.
 
 **The desirable audience result**
-- Cross-check with `core_channel-positioning.md` (transformation, where you're taking them).
+- Cross-check with your `core_positioning.md` and focus avatar (the transformation, where you're taking them).
 - Is the raw idea framed as a desirable result, or does it need bridging? See /youtube-ideas Step 2 for the bridging logic.
 
 **The transformation**
@@ -108,8 +147,8 @@ For each: what is it, why does it matter, how does someone do it, common mistake
 - Then ask follow-up questions to deepen each one.
 
 **CTA**
-Read `04_YouTube/core_channel-positioning.md` for the channel CTA. Confirm it applies:
-- "Your channel CTA is [describe it]. Use that for this video, or different one?"
+Read your YouTube CTA (`youtube_cta_text` + `youtube_cta_url` in `00_System/state.md`) - the "what you point viewers to" box on your Content page. Confirm it applies:
+- "Your channel CTA is [describe it]. Use that for this video, or a different one?"
 
 **Next video (for the outro)**
 Scan `05_Assets/Transcripts/` and `04_YouTube/Archive/` for existing videos that would make a strong follow-up. If you find one, suggest it. If nothing fits, ask.
@@ -155,7 +194,7 @@ If something is still weak or vague, keep asking. Don't move on.
 When you're ready, tell the user:
 > "I think I have everything I need. Let me put this together - I'll come back with your title options, then your prompt sheet (intro scripted, value as bullets, CTA scripted, outro scripted). Give me a moment."
 
-Save the interview output to `04_YouTube/Scripts/[slug].md` before moving on.
+Save the interview output to the video's project file before moving on.
 
 ---
 
@@ -260,7 +299,7 @@ Suggested drop-in points:
 [X minutes - calculated from word count of the locked sections + estimated bullet expansion]
 ```
 
-Save as the final prompt sheet to `04_YouTube/Scripts/[slug].md`.
+Save as the final prompt sheet to the video's project file.
 
 ### Step 7 - Present the prompt sheet and ask for feedback FIRST
 
@@ -331,7 +370,7 @@ The last value section's rehook bridges into either the CTA or the outro - tell 
 
 ### Step 3 - Final assembly
 
-Combine all the word-for-word sections in order. Save as the full script in `04_YouTube/Scripts/[slug].md`, replacing the prompt-sheet version.
+Combine all the word-for-word sections in order. Save as the full script in the video's project file, replacing the prompt-sheet version.
 
 Calculate total spoken length from word count (~150 words/minute spoken).
 
@@ -341,7 +380,7 @@ Calculate total spoken length from word count (~150 words/minute spoken).
 
 Whether the user stopped at the prompt sheet or went all the way to a full script, close with:
 
-> "Your script is ready - saved to `04_YouTube/Scripts/[slug].md`. Estimated spoken length: [X] minutes.
+> "Your script is ready - saved to the video's project file. Estimated spoken length: [X] minutes.
 >
 > When you film this video, drop the transcript back in chat afterwards and /youtube-post-film will:
 > - Save the transcript to `04_YouTube/Transcripts/`
@@ -405,4 +444,5 @@ Next step: [step name]
 - The prompt sheet is the default deliverable. Phase 3 is opt-in.
 - Never invent content. If a section skill returns "needs user input," go back to the user.
 - Voice rules from `core_voice-style.md` apply throughout.
+- **The script is plain spoken text - NO markdown.** Never put `#` headings, `*` or `**` (bold/italic), backticks, or `-`/`*` bullet markers in the script that gets saved to the video. It is read off a teleprompter, where those symbols show up literally and clutter the read. Plain sentences only. (Section labels like "Intro" or "CTA" are fine as plain words on their own line - just no markdown symbols.)
 - Never use - (em dash). Use - instead.

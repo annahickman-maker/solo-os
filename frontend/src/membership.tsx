@@ -43,18 +43,24 @@ export function MembershipGate({ children }: MembershipGateProps) {
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
+    // Returning users (ever verified) never wall and never need the network -
+    // skip the status check entirely so first paint isn't blocked on it.
+    if (hasEverVerified()) return;
     let alive = true;
-    api
-      .membershipStatus()
+    // Brand-new install only: check status, but cap the wait so a slow or dead
+    // verification endpoint can't leave the user staring at a blank splash.
+    const timeout = new Promise<MembershipStatus>((resolve) =>
+      setTimeout(() => resolve({ state: 'unverified', reason: 'verification timed out' }), 6000)
+    );
+    Promise.race([api.membershipStatus(), timeout])
       .then((s) => {
         if (!alive) return;
         setStatus(s);
         if (s.state === 'valid' || s.state === 'expired') markEverVerified();
       })
       .catch(() => {
-        // Offline / transient server error - never wall. If they've ever
-        // verified, render the app. Otherwise treat as unverified so the
-        // first-launch user CAN see the wall and enter their key.
+        // Offline / transient server error - never wall. Treat as unverified so
+        // the first-launch user CAN see the wall and enter their key.
         if (alive) setStatus({ state: 'unverified', reason: 'could not reach server' });
       });
     return () => {
@@ -62,10 +68,11 @@ export function MembershipGate({ children }: MembershipGateProps) {
     };
   }, []);
 
-  if (status === null) return null; // splash; loading server status
-
-  // Sticky bypass: once verified at any point, never wall again.
+  // Sticky bypass: once verified at any point, never wall again - checked
+  // BEFORE the loading splash so returning users paint instantly (no network).
   if (skipWall) return <>{children}</>;
+
+  if (status === null) return null; // brand-new install: brief splash while we check
 
   // If a key has ever been entered (valid OR expired), the app boots.
   if (status.state !== 'unverified') return <>{children}</>;

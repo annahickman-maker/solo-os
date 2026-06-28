@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type ExtractedQuote, type QuoteTag, type AudienceQuote, type AudienceQuoteCategory, type OfferAvatar } from '../api';
 import { TagChips } from '../components/TagChips';
+import { SectionHeading } from '../components/SectionHeading';
+import { ConnectAppCard } from '../components/ConnectAppCard';
 
 export function Archive() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -19,11 +21,13 @@ export function Archive() {
   return (
     <>
       <style>{TX_CSS}</style>
-      <div className="stack" style={{ gap: 'var(--space-7)' }}>
+      <div className="stack" style={{ gap: 'var(--space-6)' }}>
         <header className="page-header">
           <span className="eyebrow">vault</span>
           <h1 className="h2">transcripts</h1>
         </header>
+        {/* Shows only while Zoom isn't connected; self-hides once live. */}
+        <ConnectAppCard app="zoom" />
         <TranscriptDropZone />
         <TranscriptList onSelect={setSelectedId} />
       </div>
@@ -63,26 +67,11 @@ function TranscriptDropZone() {
         );
         // Refresh the list so the new file appears immediately.
         qc.invalidateQueries({ queryKey: ['archive-transcripts'] });
-        // Kick off extraction (POVs, audience quotes, etc). Best-effort:
-        // if the bridge isn't up or extraction fails, the row still
-        // appears - the creator can re-run from the panel.
-        if (res.id) {
-          try {
-            await api.runExtraction(res.id);
-          } catch (err: any) {
-            // Mark as done-with-warning rather than full error.
-            setQueue((prev) =>
-              prev.map((q) =>
-                q.name === file.name
-                  ? { ...q, status: 'done' as const, message: `uploaded · extraction failed (run manually): ${err?.message ?? err}` }
-                  : q,
-              ),
-            );
-            continue;
-          }
-        }
+        // Extraction (content quotes + audience quotes) now runs automatically
+        // server-side as soon as the file lands - nothing to trigger here. The
+        // transcript panel polls and fills in when it finishes.
         setQueue((prev) =>
-          prev.map((q) => (q.name === file.name ? { ...q, status: 'done' as const, message: `saved as ${res.type}${res.auto_detected_type ? ' (auto)' : ''}` } : q)),
+          prev.map((q) => (q.name === file.name ? { ...q, status: 'done' as const, message: `saved as ${res.type}${res.auto_detected_type ? ' (auto)' : ''} · extracting in background` } : q)),
         );
       } catch (err: any) {
         setQueue((prev) =>
@@ -141,7 +130,7 @@ function TranscriptDropZone() {
         {dragging ? 'drop to upload' : 'drop transcripts here or click to pick'}
       </div>
       <p className="muted" style={{ margin: 0, fontSize: 12, lineHeight: 1.5 }}>
-        .md · .txt · .vtt · .srt — category is auto-detected from the filename (yt-* → video, workshop* → workshop, client* → client, fallback → Q&A). extraction runs automatically once the file lands.
+        .md · .txt · .vtt · .srt - category is auto-detected from the filename (yt-* → video, workshop* → workshop, client* → client, fallback → Q&A). extraction runs automatically once the file lands.
       </p>
 
       {queue.length > 0 && (
@@ -200,6 +189,7 @@ const CATEGORY_ORDER: Array<{ key: string; label: string; color: string }> = [
   { key: 'workshop', label: 'Live workshops', color: '#E6A52F' },
   { key: 'client', label: 'Client calls', color: 'var(--strain)' },
   { key: 'video', label: 'YouTube videos', color: 'var(--sleep)' },
+  { key: 'solo-os', label: 'Solo OS Dashboard', color: 'var(--hrv)' },
 ];
 
 type TranscriptItem = {
@@ -212,6 +202,7 @@ type TranscriptItem = {
   summary?: string;
   youtube_url?: string | null;
   has_raw?: boolean;
+  is_summary?: boolean;
 };
 
 function TranscriptList({ onSelect }: { onSelect: (id: string) => void }) {
@@ -239,24 +230,11 @@ function TranscriptList({ onSelect }: { onSelect: (id: string) => void }) {
 
   if (isLoading) return <div className="empty">loading</div>;
   if (!grouped.length) return <div className="empty">no transcripts yet</div>;
-  const total = grouped.reduce((acc, g) => acc + g.items.length, 0);
-
   return (
-    <div className="stack" style={{ gap: 'var(--space-7)' }}>
-      <div className="tx-meta">
-        {total} transcript{total === 1 ? '' : 's'} across {grouped.length} categor{grouped.length === 1 ? 'y' : 'ies'}
-      </div>
+    <div className="stack" style={{ gap: 'var(--space-6)' }}>
       {grouped.map((g) => (
         <section key={g.key} className="stack" style={{ gap: 'var(--space-4)' }}>
-          <header
-            className="tx-cat-head"
-            style={{ borderBottomColor: `color-mix(in srgb, ${g.color} 25%, transparent)` }}
-          >
-            <h2 className="tx-cat-title" style={{ color: g.color }}>
-              {g.label}
-            </h2>
-            <span className="tx-meta">{g.items.length}</span>
-          </header>
+          <SectionHeading label={g.label} count={g.items.length} color={g.color} />
           <div className="tx-rows">
             {g.items.map((t) => (
               <TranscriptRow key={t.id} item={t} onSelect={() => onSelect(t.id)} />
@@ -270,7 +248,9 @@ function TranscriptList({ onSelect }: { onSelect: (id: string) => void }) {
 
 function TranscriptRow({ item, onSelect }: { item: TranscriptItem; onSelect: () => void }) {
   const cleanName = item.title ?? item.filename.replace(/\.(md|txt)$/, '');
-  const isVerbatim = item.type === 'video' || item.has_raw === true;
+  // Everything is a verbatim transcript unless it's a genuine summary (title
+  // starts with "Q&A Recording"). A raw/ companion always means verbatim too.
+  const isVerbatim = item.has_raw === true || item.is_summary !== true;
   return (
     <div className="tx-row">
       <button
@@ -307,6 +287,7 @@ const TYPE_COLOR: Record<string, string> = {
   workshop: '#E6A52F',
   video: 'var(--sleep)',
   client: 'var(--strain)',
+  'solo-os': 'var(--hrv)',
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -314,9 +295,10 @@ const TYPE_LABEL: Record<string, string> = {
   workshop: 'live workshop',
   video: 'YouTube video',
   client: 'client call',
+  'solo-os': 'Solo OS Dashboard',
 };
 
-function TranscriptPanel({ id, onClose }: { id: string; onClose: () => void }) {
+export function TranscriptPanel({ id, onClose }: { id: string; onClose: () => void }) {
   const { data: transcript, isLoading: tLoading } = useQuery({
     queryKey: ['transcript', id],
     queryFn: () => api.getTranscript(id),
@@ -850,7 +832,7 @@ function EditableTitle({ value, onSave }: { value: string; onSave: (v: string) =
     setEditing(false);
     if (draft.trim() !== (value ?? '').trim()) onSave(draft.trim());
   }
-  const placeholder = 'a short headline summarising the struggle / desire / win — in their voice';
+  const placeholder = 'a short headline summarising the struggle / desire / win - in their voice';
   if (editing) {
     return (
       <input
@@ -1076,46 +1058,53 @@ function QuoteCard({
       qc.invalidateQueries({ queryKey: ['reputation'] });
     },
   });
-  const queueIg = useMutation({
-    mutationFn: () => api.queueExtractToIg(transcriptId, q.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['extracts', transcriptId] }),
-  });
-  const unqueueIg = useMutation({
-    mutationFn: () => api.unqueueExtractFromIg(transcriptId, q.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['extracts', transcriptId] }),
+  // Toggle this quote in/out of the Instagram queue (no chat).
+  //   ready to edit (clip) -> status 'filmed'  - footage exists, needs editing
+  //   seed idea     (seed) -> status 'queued'  - needs filming first
+  // Each queued item is linked back to this quote via quote_id, so the buttons
+  // can show a tick when it's already queued and remove it on a second click.
+  const igQueue = useQuery({ queryKey: ['ig-queue'], queryFn: api.igQueue });
+  const igItems = igQueue.data?.items ?? [];
+  const editItem = igItems.find((i) => i.quote_id === q.id && i.status === 'filmed');
+  const seedItem = igItems.find((i) => i.quote_id === q.id && i.status === 'queued');
+  const toggleDirection = useMutation({
+    mutationFn: async (direction: 'clip' | 'seed') => {
+      const existing = direction === 'clip' ? editItem : seedItem;
+      if (existing) {
+        await api.deleteIgItem(existing.id);
+        return;
+      }
+      await api.createIgIdea({
+        title: q.title ?? undefined,
+        text: q.text,
+        tag: q.tag,
+        kind: q.kind,
+        quote_id: q.id,
+        source_transcript_id: q.source_transcript_id,
+        source_transcript_filename: q.source_transcript_filename,
+        source_moments: q.source_moments,
+        topics: q.topics,
+        status: direction === 'clip' ? 'filmed' : 'queued',
+        reel_origin: direction === 'clip' ? 'clip' : 'film',
+        // Same shape for both: the editable script + source moments. Seeds also
+        // keep the original verbatim quote.
+        script: q.text,
+        ...(direction === 'seed' ? { original_quote: q.text } : {}),
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['extracts', transcriptId] });
+      qc.invalidateQueries({ queryKey: ['ig-queue'] });
+    },
   });
   const dismiss = useMutation({
     mutationFn: () => api.dismissExtract(transcriptId, q.id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['extracts', transcriptId] }),
   });
 
-  function copyDescriptPlan() {
-    const moments = q.source_moments ?? [];
-    const lines: string[] = [];
-    lines.push(`# ${q.title ?? 'Reel from ' + q.source_transcript_filename}`);
-    lines.push('');
-    lines.push('## What the reel says (final cut)');
-    lines.push('');
-    lines.push(q.text);
-    lines.push('');
-    if (moments.length > 0) {
-      lines.push('## Find these clips in Descript (in this order)');
-      lines.push('');
-      lines.push(`Source: ${q.source_transcript_filename}`);
-      lines.push('');
-      moments.forEach((m, i) => {
-        lines.push(`${i + 1}. [${m.timestamp}] Search Descript for: "${m.text.split(/\s+/).slice(0, 8).join(' ')}…"`);
-        lines.push(`   Verbatim: "${m.text}"`);
-        lines.push('');
-      });
-    }
-    navigator.clipboard.writeText(lines.join('\n'));
-  }
-
   const meta = TAG_META[q.tag];
   const isActive = q.status !== 'dismissed';
   const isApproved = !!q.approved_at;
-  const isQueued = q.in_ig_queue === true;
   // Tag is locked once approved (changing tag would orphan the bank entry).
   const tagLocked = isApproved;
   const isStory = q.kind === 'story';
@@ -1139,6 +1128,8 @@ function QuoteCard({
             {selected ? '✓' : ''}
           </button>
         )}
+        {/* Left: the colored tag selector (connection / pov / value / ...).
+            Reflects the selected tag's color, styled as a pill. */}
         <select
           value={q.tag}
           onChange={(e) => patch.mutate({ tag: e.target.value as QuoteTag })}
@@ -1146,28 +1137,52 @@ function QuoteCard({
           className="tx-tag-select"
           style={{
             color: meta.color,
+            fontWeight: 600,
+            padding: '8px 14px',
+            borderRadius: 'var(--radius-md)',
             borderColor: `color-mix(in srgb, ${meta.color} 40%, var(--hairline))`,
-            background: `color-mix(in srgb, ${meta.color} 8%, transparent)`,
+            background: `color-mix(in srgb, ${meta.color} 12%, transparent)`,
           }}
-          title={tagLocked ? 'unapprove first to change tag' : undefined}
+          title={tagLocked ? 'unapprove first to change tag' : 'what kind of idea this is'}
         >
           {Object.entries(TAG_META).map(([k, m]) => (
             <option key={k} value={k}>{m.label}</option>
           ))}
         </select>
-        <div className="tx-quote__badges">
-          {isApproved && (
-            <span className="tx-badge--inline" style={{ color: 'var(--recovery)' }}>✓ in bank</span>
-          )}
-          {isQueued && (
-            <span className="tx-badge--inline" style={{ color: 'var(--sleep)' }}>→ IG queue</span>
-          )}
-          {!isApproved && !isQueued && isActive && (
-            <span className="tx-quote__ts">
-              {q.timestamp || (isStory ? `${q.source_moments?.length ?? 0} moments` : '')}
-            </span>
-          )}
-        </div>
+        {/* Topic tags sit up here next to the tag selector (icon, no label). */}
+        {isActive && (
+          <TagChips
+            inline
+            topics={q.topics ?? []}
+            onChange={(next) => patch.mutate({ topics: next })}
+            color={meta.color}
+          />
+        )}
+        {/* Right: save to bank ("save idea"), replacing the old "approve as X". */}
+        {isActive && (
+          <div style={{ marginLeft: 'auto' }}>
+            {isApproved ? (
+              <button
+                type="button"
+                onClick={() => unapprove.mutate()}
+                disabled={unapprove.isPending}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 'var(--radius-md)', fontSize: 'var(--body-sm)', fontWeight: 600, cursor: 'pointer', background: 'transparent', color: 'var(--recovery)', border: '1px solid color-mix(in srgb, var(--recovery) 45%, var(--hairline))' }}
+                title="saved to your bank - click to remove"
+              >
+                {unapprove.isPending ? '...' : '✓ saved'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => approve.mutate()}
+                disabled={approve.isPending}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 'var(--radius-md)', fontSize: 'var(--body-sm)', fontWeight: 600, cursor: 'pointer', background: '#EDEDE9', color: '#16140F', border: '1.5px solid #16140F' }}
+              >
+                {approve.isPending ? '...' : 'save idea'}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Title: shown if it exists, OR as an editable placeholder for any active
@@ -1244,70 +1259,50 @@ function QuoteCard({
         </details>
       )}
 
+      {/* Bottom: the Instagram-queue feature, clearly separated from save-to-bank. */}
       {isActive && (
-        <TagChips
-          topics={q.topics ?? []}
-          onChange={(next) => patch.mutate({ topics: next })}
-          color={meta.color}
-        />
-      )}
-
-      {isActive && (
-        <div className="rep-actions">
+        <div
+          className="tx-quote__queue"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            flexWrap: 'wrap',
+            marginTop: 'var(--space-3)',
+            paddingTop: 'var(--space-3)',
+            borderTop: '1px solid var(--hairline)',
+          }}
+        >
+          <span style={{ fontSize: 'var(--body-sm)', fontWeight: 600, color: 'var(--muted)' }}>
+            Queue to Instagram:
+          </span>
+          <button
+            type="button"
+            className={`rep-btn ${editItem ? 'rep-btn--primary' : 'rep-btn--ghost'}`}
+            onClick={() => toggleDirection.mutate('clip')}
+            disabled={toggleDirection.isPending}
+            title={editItem ? 'in the ready-to-edit queue - click to remove' : 'footage exists - add to the Instagram queue as a ready-to-edit reel'}
+          >
+            {toggleDirection.isPending && toggleDirection.variables === 'clip' ? '...' : editItem ? '✓ ready to edit' : 'ready to edit'}
+          </button>
+          <button
+            type="button"
+            className={`rep-btn ${seedItem ? 'rep-btn--primary' : 'rep-btn--ghost'}`}
+            onClick={() => toggleDirection.mutate('seed')}
+            disabled={toggleDirection.isPending}
+            title={seedItem ? 'in the ready-to-film queue - click to remove' : 'add to the Instagram queue as a ready-to-film seed idea'}
+          >
+            {toggleDirection.isPending && toggleDirection.variables === 'seed' ? '...' : seedItem ? '✓ seed idea' : 'seed idea'}
+          </button>
           <button
             type="button"
             className="rep-btn rep-btn--ghost"
             onClick={() => dismiss.mutate()}
             disabled={dismiss.isPending}
-            style={{ marginRight: 'auto', color: 'var(--muted-2)' }}
+            style={{ marginLeft: 'auto', color: 'var(--muted-2)' }}
           >
             dismiss
           </button>
-          {isStory && (q.source_moments?.length ?? 0) > 0 && (
-            <button type="button" className="rep-btn rep-btn--ghost" onClick={copyDescriptPlan}>
-              copy edit plan
-            </button>
-          )}
-          {isQueued ? (
-            <button
-              type="button"
-              className="rep-btn rep-btn--ghost"
-              onClick={() => unqueueIg.mutate()}
-              disabled={unqueueIg.isPending}
-              style={{ color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.3)' }}
-            >
-              {unqueueIg.isPending ? '...' : 'remove from IG queue'}
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="rep-btn rep-btn--ghost"
-              onClick={() => queueIg.mutate()}
-              disabled={queueIg.isPending}
-            >
-              {queueIg.isPending ? '...' : 'queue to instagram'}
-            </button>
-          )}
-          {isApproved ? (
-            <button
-              type="button"
-              className="rep-btn rep-btn--ghost"
-              onClick={() => unapprove.mutate()}
-              disabled={unapprove.isPending}
-              style={{ color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.3)' }}
-            >
-              {unapprove.isPending ? '...' : 'unapprove'}
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="rep-btn rep-btn--primary"
-              onClick={() => approve.mutate()}
-              disabled={approve.isPending}
-            >
-              {approve.isPending ? '...' : `approve as ${meta.label.toLowerCase()}`}
-            </button>
-          )}
         </div>
       )}
     </article>
@@ -1328,7 +1323,7 @@ function extractSummary(content: string): string {
 
 // ─── styles ────────────────────────────────────────────────────────────────
 
-const TX_CSS = `
+export const TX_CSS = `
 /* Shared with Reputation panel - if Reputation isn't mounted we still need them. */
 .rep-eyebrow {
   font-size: 10px;
@@ -1642,7 +1637,7 @@ const TX_CSS = `
 }
 .tx-quote__title-input {
   width: 100%;
-  background: rgba(255,255,255,0.06);
+  background: transparent;
   border: 1px solid;
   border-radius: var(--radius-sm);
   padding: 6px 10px;
