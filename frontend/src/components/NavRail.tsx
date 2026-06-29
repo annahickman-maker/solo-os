@@ -16,8 +16,8 @@ const REST_ITEMS = [
   { to: '/profile', label: 'profile' },
   { to: '/content', label: 'content' },
   { to: '/projects', label: 'projects' },
-  { to: '/vault', label: 'vault' },
   { to: '/skills', label: 'skills' },
+  { to: '/vault', label: 'vault' },
   { to: '/inbox', label: 'inbox' },
   // { to: '/metrics', label: 'metrics' }, // parked - re-add when she comes back to it
 ];
