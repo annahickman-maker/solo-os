@@ -17,6 +17,7 @@
 import fs from 'node:fs';
 
 import { BRIDGE_URL } from './bridge.js';
+import { personalize } from './creatorContext.js';
 
 // Tags mirror the 4 Reputation dimensions, one-to-one.
 export type QuoteTag = 'pov' | 'value' | 'authority' | 'connection';
@@ -176,7 +177,7 @@ async function callClaude(system: string, user: string, maxTokens = 16000): Prom
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'extractQuotes',
-        system,
+        system: personalize(system),
         user,
         maxTokens,
         expectJson: true,

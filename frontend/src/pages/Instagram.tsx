@@ -397,7 +397,7 @@ export function CtaPopup({ channel, onClose }: { channel: 'instagram' | 'youtube
           type="url"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder=""
+          placeholder="https://..."
           style={POPUP_FIELD}
         />
       </div>

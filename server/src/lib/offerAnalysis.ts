@@ -16,6 +16,7 @@ import path from 'node:path';
 import { abs, loadFile } from '../vault.js';
 
 import { BRIDGE_URL } from './bridge.js';
+import { personalize } from './creatorContext.js';
 
 // The 25 questions, mirroring the frontend OFFER_QUIZ. Kept here as the
 // source-of-truth for the Claude prompt; if you edit the questions on the
@@ -240,7 +241,7 @@ async function callBridge(system: string, user: string): Promise<string> {
     const res = await fetch(BRIDGE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'offerAnalysis', system, user, maxTokens: 4000, expectJson: true }),
+      body: JSON.stringify({ type: 'offerAnalysis', system: personalize(system), user, maxTokens: 4000, expectJson: true }),
       signal: controller.signal,
     });
     if (!res.ok) throw new Error(`claude-bridge ${res.status}: ${await res.text()}`);

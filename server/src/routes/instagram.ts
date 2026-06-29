@@ -13,17 +13,18 @@ import path from 'node:path';
 import { abs, loadFile, saveFile } from '../vault.js';
 import { normalizeQuoteTag } from '../lib/extractQuotes.js';
 import { loadPosts, syncInstagram } from '../lib/instagramSync.js';
+import { loadCreatorContext } from '../lib/creatorContext.js';
 
 const IG_QUEUE = abs('00_System', 'instagram-queue.json');
 const STATE_FILE_REL = ['00_System', 'state.md'] as const;
 const VOICE_FILE_REL = ['01_Core', 'core_voice-style.md'] as const;
 import { BRIDGE_URL } from '../lib/bridge.js';
 
-// Defaults match server/src/routes/settings.ts DEFAULTS.focus_cta_*. Both
-// point at the creator's SS Skool. Kept here so this route can run independently of
-// the settings route if state.md is unreadable.
-const FOCUS_CTA_TEXT_DEFAULT =
-  'want my system for building a one-person business that fits your brain? link in bio.';
+// Defaults match server/src/routes/settings.ts DEFAULTS.*_cta_*. Kept here so
+// this route can run independently of the settings route if state.md is
+// unreadable. The real CTA lives in the vault (state.md) / Settings; these are
+// neutral placeholders so nothing personal is hardcoded.
+const FOCUS_CTA_TEXT_DEFAULT = 'link in bio.';
 const FOCUS_CTA_URL_DEFAULT = '';
 
 type IgItem = {
@@ -473,14 +474,20 @@ function getVoiceSummary(): string {
   }
 }
 
-const CAPTION_SYSTEM = `You write ultra-minimal Instagram reel captions in the creator's voice for the channel. Think Tom Noske: one sharp sentence that lands, then the CTA. That's it.
+function buildCaptionSystem(): string {
+  const ctx = loadCreatorContext();
+  const selfRef = ctx.name || 'the creator';
+  const poss = ctx.possessive;
+  const forChannel = ctx.channelHandle ? ` for ${ctx.channelHandle}` : '';
+  const audience = ctx.whoTheyHelp ? ` (${ctx.whoTheyHelp})` : '';
+  return `You write ultra-minimal Instagram reel captions in ${poss} voice${forChannel}. Think Tom Noske: one sharp sentence that lands, then the CTA. That's it.
 
 NON-NEGOTIABLES:
 - NEVER use the em dash character. Use a hyphen with spaces ( - ) instead. Zero exceptions.
 - All lowercase prose. No title case sentences.
 - No emojis anywhere.
 - No guru language. No hype. No "let me tell you a secret." No "here's the truth nobody talks about."
-- Sound like the creator, not like an AI caption generator. Plain, direct, a little dry.
+- Sound like ${selfRef}, not like an AI caption generator. Plain, direct, a little dry.
 - Do NOT echo the reel's spoken script verbatim. The caption is the small written kicker next to the reel, not a transcript.
 
 CAPTION STRUCTURE (exactly two lines, no labels, no extra prose):
@@ -489,13 +496,14 @@ CAPTION STRUCTURE (exactly two lines, no labels, no extra prose):
 
 That's the whole caption body. Two lines of prose separated by a blank line. No story arc, no breakdown, no bullets.
 
-Then 5 hashtags, lowercase, no spaces inside each tag, separated by single spaces. Target the creator's audience: creative freelancers, solopreneurs, web designers, online business owners, content creators. Use specific tags like #solopreneur #onepersonbusiness #creativefreelancer #onlinebusiness #contentstrategy. Pick the 5 that fit this specific reel best.
+Then 5 hashtags, lowercase, no spaces inside each tag, separated by single spaces. Target ${poss} audience${audience}. Pick the 5 lowercase hashtags that fit this specific reel and that audience best.
 
 OUTPUT FORMAT - return a JSON object only, no commentary, no markdown fences:
 {
   "caption": "one sentence.\\n\\nthe cta sentence.",
   "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5"]
 }`;
+}
 
 async function callBridge(system: string, user: string, maxTokens = 1500): Promise<string> {
   // The bridge is a single supervised process; a crash restarts it in ~2s. To
@@ -580,13 +588,13 @@ app.post('/queue/:id/caption', async (c) => {
           .join('\n')}`
       : '',
     `\n# CTA to include verbatim (do not paraphrase)\n${cta.text}`,
-    voice ? `\n# the creator's voice (calibrate to this)\n${voice}` : '',
+    voice ? `\n# Voice (calibrate to this)\n${voice}` : '',
   ]
     .filter(Boolean)
     .join('\n');
 
   try {
-    const raw = await callBridge(CAPTION_SYSTEM, userPrompt);
+    const raw = await callBridge(buildCaptionSystem(), userPrompt);
     const parsed = parseCaptionJson(raw);
     if (!parsed.caption) return c.json({ error: 'empty caption from model' }, 502);
     // Re-read after the await: another writer may have changed the queue while
@@ -778,7 +786,12 @@ app.post('/queue/:id/render-title', async (c) => {
 
 // ─── Hook generation (3 on-screen text variants) ──────────────────────────
 
-const HOOK_SYSTEM = `You write on-screen text hooks for Instagram reels in the creator's voice for the channel.
+function buildHookSystem(): string {
+  const ctx = loadCreatorContext();
+  const selfRef = ctx.name || 'the creator';
+  const poss = ctx.possessive;
+  const forChannel = ctx.channelHandle ? ` for ${ctx.channelHandle}` : '';
+  return `You write on-screen text hooks for Instagram reels in ${poss} voice${forChannel}.
 
 A hook is the text that gets burned into the top of the reel - the first thing a scroller sees in 0.5 seconds. It has to stop the scroll.
 
@@ -787,7 +800,7 @@ NON-NEGOTIABLES:
 - All lowercase. No title case. No exclamation points.
 - NEVER use the em dash character. Use a hyphen with spaces ( - ) instead.
 - No emojis. No hashtags. No quotes around the hook.
-- Sound like the creator - direct, contrarian, plain. Not guru. Not clickbait. Not "the truth about X".
+- Sound like ${selfRef} - direct, contrarian, plain. Not guru. Not clickbait. Not "the truth about X".
 - Each variant must be a DIFFERENT angle on the same reel. Not three rewordings of the same line.
 
 3 ANGLES TO HIT (one per variant):
@@ -799,6 +812,7 @@ OUTPUT FORMAT - return a JSON object only, no commentary, no markdown fences:
 {
   "hooks": ["hook one", "hook two", "hook three"]
 }`;
+}
 
 function parseHookJson(raw: string): string[] {
   let cleaned = raw.trim().replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
@@ -838,11 +852,11 @@ app.post('/queue/:id/hooks', async (c) => {
     it.title ? `Working title: ${it.title}` : '',
     it.context ? `\n# Why this moment\n${it.context}` : '',
     `\n# What's said in the reel\n${it.text}`,
-    voice ? `\n# the creator's voice (calibrate to this)\n${voice}` : '',
+    voice ? `\n# Voice (calibrate to this)\n${voice}` : '',
   ].filter(Boolean).join('\n');
 
   try {
-    const raw = await callBridge(HOOK_SYSTEM, userPrompt, 500);
+    const raw = await callBridge(buildHookSystem(), userPrompt, 500);
     const hooks = parseHookJson(raw);
     if (hooks.length === 0) return c.json({ error: 'no hooks returned' }, 502);
     // Re-read after the await so a concurrent edit during the bridge call isn't lost.

@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import { abs, loadCollection, loadFile, saveFile } from '../vault.js';
 
 import { BRIDGE_URL } from './bridge.js';
+import { personalize } from './creatorContext.js';
 
 function readCore(filename: string): string {
   try {
@@ -26,7 +27,7 @@ async function callBridge(system: string, user: string): Promise<string> {
   const res = await fetch(BRIDGE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'extractFromCore', system, user, maxTokens: 3000, expectJson: true }),
+    body: JSON.stringify({ type: 'extractFromCore', system: personalize(system), user, maxTokens: 3000, expectJson: true }),
   });
   if (!res.ok) throw new Error(`bridge ${res.status}: ${await res.text()}`);
   const data = (await res.json()) as { text?: string; error?: string };

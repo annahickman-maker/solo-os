@@ -77,7 +77,7 @@ export function FocusCtaEditor({ channel }: { channel: 'instagram' | 'youtube' }
           />
           <Field
             label="link"
-            placeholder=""
+            placeholder="https://..."
             value={ctaUrl}
             onSave={saveUrl}
           />

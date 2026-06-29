@@ -2565,7 +2565,7 @@ function SalesPageBlock({
         <TextInput
           value={url}
           onSave={(v) => onSave({ sales_page_url: v })}
-          placeholder="https://www.skool.com/..."
+          placeholder="https://..."
         />
       </FieldGroup>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>

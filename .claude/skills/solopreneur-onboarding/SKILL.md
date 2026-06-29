@@ -1,7 +1,7 @@
 ---
 name: solopreneur-onboarding
 description: 'One-time foundational onboarding for Solopreneur OS. Walks the user through 6 sequential phases - positioning, audience, my story, core IP, offer suite, and voice and style - and produces the core files that every other skill in the system reads from. Use whenever a user starts the system, when they ask to "onboard" or "set up", or when any other skill detects that core files are missing.'
-title: Solo OS Onboarding
+title: Personal Brand Strategy
 card: 'Map your core files: positioning, voice, audience, offer'
 category: Strategy
 inputs:

@@ -1,7 +1,7 @@
 /**
  * Derive the 5 intro parts (clarity / baseline belief / contrarian / proof /
- * outcome) FROM an already-drafted full script. the creator struggles with intros
- * cold, but the rest of the script gives plenty of context to riff off.
+ * outcome) FROM an already-drafted full script. Intros are hard to write cold,
+ * but the rest of the script gives plenty of context to riff off.
  *
  * The intro section in the script builder uses these 5 parts as separate
  * fields, and `youtubeScriptBuilder.ts` weaves them in when drafting the
@@ -9,9 +9,11 @@
  *
  * Mirrors the youtube-script-intro skill's 3 Cs framework. Voice file is
  * sliced in so the wording sounds like the creator, not a generic template.
+ * Identity (name / channel) is read from the vault via loadCreatorContext().
  */
 
 import { abs, loadFile } from '../vault.js';
+import { loadCreatorContext } from './creatorContext.js';
 
 import { BRIDGE_URL } from './bridge.js';
 const VOICE_FILE_REL = ['01_Core', 'core_voice-style.md'] as const;
@@ -54,19 +56,24 @@ function getVoiceSummary(): string {
   }
 }
 
-const INTRO_SYSTEM = `You write the spoken-intro brief for a YouTube video in the creator's voice for the channel.
+function buildIntroSystem(): string {
+  const ctx = loadCreatorContext();
+  const selfRef = ctx.name || 'the creator';
+  const poss = ctx.possessive;
+  const forChannel = ctx.channelHandle ? ` for ${ctx.channelHandle}` : '';
+  return `You write the spoken-intro brief for a YouTube video in ${poss} voice${forChannel}.
 
-You get one or more of: the drafted full script body, the per-section briefs (what the creator intends each section to do), and the actual story text of every bank item she's already linked to a section. Use everything you have. If the full script body is thin, lean on the section briefs and anchor stories - they're the source of truth for what the video is going to be.
+You get one or more of: the drafted full script body, the per-section briefs (what ${selfRef} intends each section to do), and the actual story text of every bank item they've already linked to a section. Use everything you have. If the full script body is thin, lean on the section briefs and anchor stories - they're the source of truth for what the video is going to be.
 
 Your job is to write the 5 brief pieces that, when woven together by the next pass, become a 30-90 second spoken intro that hits the 3 Cs (Clarity, Credibility, Curiosity) in the first 30 seconds.
 
-The 5 PARTS (each is 1-2 sentences MAX, written as if the creator will say them):
+The 5 PARTS (each is 1-2 sentences MAX, written as if ${selfRef} will say them):
 
 1. CLARITY (clarity): what this video is about + what the viewer will be able to do by the end. Names the audience and the outcome. Pulled directly from the script's content.
 
 2. BASELINE BELIEF (belief): the dominant belief or objection most viewers hold on this topic. Phrase it as what "most people" or "everyone else" thinks. This sets up the flip.
 
-3. CONTRARIAN (contrarian): the creator's actual position - the unique take that flips the baseline belief. This is the hook. Must be a real contrarian angle the script actually argues, not a generic reversal.
+3. CONTRARIAN (contrarian): ${poss} actual position - the unique take that flips the baseline belief. This is the hook. Must be a real contrarian angle the script actually argues, not a generic reversal.
 
 4. PROOF (proof): one specific, concrete proof point from the script (a result, a number, a named experience). Never invent - if no proof is in the script, write "no proof point in script - add one before filming."
 
@@ -77,7 +84,7 @@ NON-NEGOTIABLES:
 - No greeting, no "hey guys", no "welcome back".
 - Talk to one person, never "you guys".
 - No invented proof. Only proof grounded in what's actually in the script.
-- Match the creator's voice from the voice file - no hype, no guru language, conversational.
+- Match ${poss} voice from the voice file - no hype, no guru language, conversational.
 
 OUTPUT FORMAT - return ONLY a JSON object, no commentary, no markdown fences:
 {
@@ -87,6 +94,7 @@ OUTPUT FORMAT - return ONLY a JSON object, no commentary, no markdown fences:
   "proof": "...",
   "outcome": "..."
 }`;
+}
 
 async function callBridge(system: string, user: string, maxTokens = 2000): Promise<string> {
   const controller = new AbortController();
@@ -183,10 +191,10 @@ export async function suggestIntroFromScript(input: SuggestIntroInput): Promise<
     script
       ? `\n# Drafted full script body (when present, this is the most authoritative source)\n${script}`
       : '\n# Drafted full script body\n(empty - rely on the section briefs and linked stories above)',
-    voice ? `\n# the creator's voice (calibrate to this)\n${voice}` : '',
+    voice ? `\n# Voice (calibrate to this)\n${voice}` : '',
   ]
     .filter(Boolean)
     .join('\n');
-  const raw = await callBridge(INTRO_SYSTEM, userPrompt);
+  const raw = await callBridge(buildIntroSystem(), userPrompt);
   return parseParts(raw);
 }

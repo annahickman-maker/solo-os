@@ -16,6 +16,7 @@ import path from 'node:path';
 import { abs } from '../vault.js';
 
 import { BRIDGE_URL } from './bridge.js';
+import { loadCreatorContext } from './creatorContext.js';
 const AUDIENCE_BANK = abs('00_System', 'audience-quotes.json');
 const MAX_TRANSCRIPT_CHARS = 100_000;
 
@@ -210,7 +211,14 @@ export async function extractAudienceQuotesFromTranscript(args: {
     '--- END TRANSCRIPT ---',
   ].join('\n');
 
-  const raw = await callBridge(SYSTEM_PROMPT, userPrompt);
+  // This prompt extracts what OTHER people say, so it doesn't need the full
+  // creator voice/positioning block - only enough identity to know whose turns
+  // to SKIP (the host's). A one-line host identity, not personalize().
+  const ctx = loadCreatorContext();
+  const hostPrefix = ctx.name
+    ? `The host/creator (whose own words you must SKIP) is ${ctx.name}.\n\n`
+    : '';
+  const raw = await callBridge(hostPrefix + SYSTEM_PROMPT, userPrompt);
   const { quotes } = parseClaudeJson(raw);
   const now = Math.floor(Date.now() / 1000);
   const out: AudienceQuote[] = [];

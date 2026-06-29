@@ -294,10 +294,11 @@ app.patch('/:id/suggestions', async (c) => {
 
 // ─── Description generator ─────────────────────────────────────────────────
 
-// Defaults match server/src/routes/settings.ts DEFAULTS.focus_cta_*. Kept
-// here so this route can run independently if state.md is unreadable.
-const FOCUS_CTA_TEXT_DEFAULT =
-  'want my system for building a one-person business that fits your brain? link in bio.';
+// Defaults match server/src/routes/settings.ts DEFAULTS.*_cta_*. Kept here so
+// this route can run independently if state.md is unreadable. The real CTA
+// lives in the vault (state.md) / Settings; these are blank so nothing personal
+// is hardcoded.
+const FOCUS_CTA_TEXT_DEFAULT = '';
 const FOCUS_CTA_URL_DEFAULT = '';
 
 function getFocusCta(): { text: string; url: string } {

@@ -13,6 +13,7 @@
 import type { AudienceQuote } from './audienceQuotes.js';
 
 import { BRIDGE_URL } from './bridge.js';
+import { personalize } from './creatorContext.js';
 
 export type SynthesisResult = {
   before_state: string;
@@ -36,7 +37,7 @@ async function callBridge(system: string, user: string): Promise<string> {
     const res = await fetch(BRIDGE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'avatarSynthesis', system, user, maxTokens: 4000, expectJson: true }),
+      body: JSON.stringify({ type: 'avatarSynthesis', system: personalize(system), user, maxTokens: 4000, expectJson: true }),
       signal: controller.signal,
     });
     if (!res.ok) throw new Error(`claude-bridge ${res.status}: ${await res.text()}`);

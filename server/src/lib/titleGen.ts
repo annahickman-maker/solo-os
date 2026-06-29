@@ -60,7 +60,7 @@ First, generate 30 candidate titles internally, roughly 4 per formula across the
 
 Second, for each candidate, mentally write the most exaggerated, almost-unbelievable version of the title, and then write the dialled-back version next to it. Your final candidate should sit between those two poles, closer to exaggerated than safe.
 
-Third, write the most boring possible version of each candidate, the version a corporate marketing team would ship. Confirm that none of the titles you return are within striking distance of that floor.
+Third, write the most boring possible version of each candidate, the version a corporate marketing team would ship (the "how LA addresses its water shortage problem" version). Confirm that none of the titles you return are within striking distance of that floor.
 
 Fourth, run every candidate through the relevance gate first. Drop any whose topic the ideal viewer could not place in under a second. Then score the survivors against the CCN test and the promise-not-resolution check. Drop any that fail either one.
 

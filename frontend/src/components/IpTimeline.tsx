@@ -25,7 +25,7 @@ export function IpTimeline() {
           <h3 className="h3" style={{ marginTop: 4 }}>scattered freelancer to lean two-hour day</h3>
         </div>
         <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-          5-step method from the offer
+          the 5-step method
         </span>
       </div>
       <div
