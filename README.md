@@ -61,6 +61,12 @@ The first launch takes ~10 seconds to spin up the three services. Then Chrome op
 
 Double-click Solo OS in your Dock or Applications folder. Browser opens. Use the dashboard. Close the tab when you're done; the services keep running until you restart your Mac.
 
+The dashboard opens fast because it serves a pre-built version. If you use Claude Code to change the dashboard's own code, your change is picked up automatically the next time you launch (a quick rebuild, only when something changed). If you want to actively iterate on the code with live reload, launch in dev mode:
+
+```bash
+DEV_MODE=1 ./start-local.sh
+```
+
 ## Point at your own vault
 
 By default the dashboard uses the bundled `sample-vault/`. To use your own:

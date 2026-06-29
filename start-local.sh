@@ -125,8 +125,38 @@ spawn_supervised server 8791 "$LOG_DIR/solo-os-server.log" \
     INSTAGRAM_BUSINESS_ACCOUNT_ID="$IG_BIZ_ID" \
     bash -c 'cd server && npm start'
 
-spawn_supervised frontend 5174 "$LOG_DIR/solo-os-frontend.log" \
-  bash -c 'cd frontend && npm run dev'
+# Frontend. Default: serve a pre-built bundle for fast opens. The build is
+# rebuilt automatically only when the source changed since the last build (e.g.
+# you used Claude Code to edit the dashboard), so your changes always show up -
+# they just appear on the next launch instead of live. For actively iterating on
+# dashboard code with live hot-reload, run:  DEV_MODE=1 ./start-local.sh
+DEV_MODE="${DEV_MODE:-0}"
+if [ "$DEV_MODE" = "1" ]; then
+  echo "  frontend: dev mode (hot reload)"
+  spawn_supervised frontend 5174 "$LOG_DIR/solo-os-frontend.log" \
+    bash -c 'cd frontend && npm run dev'
+else
+  # Rebuild if there's no build yet, or any source file is newer than it. Use
+  # `vite build` directly (no tsc) so a stray type error never blocks the fast
+  # path - if the build genuinely fails, fall back to the dev server.
+  serve_built=1
+  if [ ! -f frontend/dist/index.html ] || \
+     [ -n "$(find frontend/src frontend/index.html frontend/vite.config.ts frontend/package.json -newer frontend/dist/index.html 2>/dev/null | head -1)" ]; then
+    echo "  frontend: building (first run or code changed since last build)..."
+    if ! ( cd frontend && npx vite build >"$LOG_DIR/solo-os-frontend-build.log" 2>&1 ); then
+      echo "  ⚠ frontend build failed (see $LOG_DIR/solo-os-frontend-build.log) - using dev server"
+      serve_built=0
+    fi
+  fi
+  if [ "$serve_built" = 1 ]; then
+    echo "  frontend: serving built bundle (fast)"
+    spawn_supervised frontend 5174 "$LOG_DIR/solo-os-frontend.log" \
+      bash -c 'cd frontend && npm run preview'
+  else
+    spawn_supervised frontend 5174 "$LOG_DIR/solo-os-frontend.log" \
+      bash -c 'cd frontend && npm run dev'
+  fi
+fi
 
 spawn_supervised claude-bridge 8789 "$LOG_DIR/solo-os-claude-bridge.log" \
   bash -c 'cd claude-bridge && npm start'

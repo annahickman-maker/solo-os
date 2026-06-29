@@ -32,6 +32,16 @@ export default defineConfig({
       },
     },
   },
+  // Production preview server (`vite preview`) serves the built dist/ for fast
+  // opens - this is the default the launcher uses. Mirrors the dev proxy so
+  // /api still reaches the server on :8791.
+  preview: {
+    port: 5174,
+    strictPort: true,
+    proxy: {
+      '/api': { target: 'http://localhost:8791', changeOrigin: true },
+    },
+  },
   // Pre-bundle heavy deps once at first start so they don't get re-bundled
   // on idle-tab return (which is what makes the page take "a while to
   // come back" after long inactivity).

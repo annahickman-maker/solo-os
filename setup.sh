@@ -45,6 +45,17 @@ echo ""
 echo "✓ Dependencies installed."
 echo ""
 
+# ─── 1b. Pre-build the frontend ────────────────────────────────────────────
+# The launcher serves a pre-built bundle for fast opens. Build it once now so
+# the very first launch is instant too (the launcher only rebuilds later if you
+# change the code). A build failure here is non-fatal - the launcher falls back
+# to the dev server, so setup still completes.
+echo "→ building the dashboard (one-time, for fast opens)"
+( cd "$DASH_DIR/frontend" && npx vite build ) >/dev/null 2>&1 \
+  && echo "✓ Dashboard built." \
+  || echo "⚠ Build skipped (the launcher will build on first open instead)."
+echo ""
+
 # ─── 2. Check `claude` CLI ─────────────────────────────────────────────────
 
 if ! command -v claude >/dev/null 2>&1; then
