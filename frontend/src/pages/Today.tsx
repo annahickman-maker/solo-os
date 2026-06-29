@@ -4,7 +4,7 @@ import { api } from '../api';
 import { Ring } from '../components/Ring';
 import { Card } from '../components/Card';
 import { ActivityTracker } from '../components/ActivityTracker';
-import { greetingFromHour } from '../lib/format';
+import { SURFACE_LIFT } from '../lib/ui';
 
 // Local wall-clock date helpers. "Today" should mean today in the user's
 // timezone, never UTC - this matters most after local 5pm when UTC has
@@ -60,10 +60,6 @@ export function Today() {
     return <div className="empty">couldn't load today: {(error as Error).message}</div>;
   }
 
-  const greeting = data?.greeting ?? greetingFromHour();
-  const dateStr =
-    data?.date ??
-    new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   // The server still returns deep_work_* fields - we just don't render them
   // on the page anymore. Keep them in the fallback so the type matches.
   const rings = data?.rings ?? {
@@ -92,21 +88,14 @@ export function Today() {
         width: '100%',
       }}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-        <header className="page-header">
-          <span className="eyebrow">{dateStr}</span>
-          <h1 className="h2">{greeting}</h1>
-        </header>
-
-        <DayToggle
-          offset={dayOffset}
-          date={selectedDate}
-          today={today}
-          onPrev={() => setSelectedDate((d) => addDays(d, -1))}
-          onNext={() => setSelectedDate((d) => addDays(d, 1))}
-          onPick={(d) => setSelectedDate(d)}
-        />
-      </div>
+      <DayToggle
+        offset={dayOffset}
+        date={selectedDate}
+        today={today}
+        onPrev={() => setSelectedDate((d) => addDays(d, -1))}
+        onNext={() => setSelectedDate((d) => addDays(d, 1))}
+        onPick={(d) => setSelectedDate(d)}
+      />
 
       {/* Side-by-side top: strain dial on the LEFT, task list on the RIGHT.
           Both cards have a 378px floor on desktop so the layout doesn't
@@ -217,7 +206,7 @@ function DayToggle({
     padding: 0,
   };
   const centerStyle: React.CSSProperties = {
-    background: 'rgba(255,255,255,0.08)',
+    background: 'transparent',
     border: 'none',
     color: 'var(--ink)',
     height: 24,
@@ -240,9 +229,11 @@ function DayToggle({
         style={{
           display: 'inline-flex',
           alignItems: 'center',
-          background: 'rgba(255,255,255,0.03)',
+          background: 'var(--surface)',
+          border: '1px solid var(--hairline)',
           borderRadius: 999,
-          padding: 2,
+          padding: 3,
+          boxShadow: SURFACE_LIFT,
         }}
       >
         <button type="button" onClick={onPrev} aria-label="previous day" style={chevStyle}>

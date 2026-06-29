@@ -8,6 +8,7 @@ import { solidButtonStyle, ghostButtonStyle, filledPillStyle } from '../lib/ui';
 import { Voice } from './Voice';
 import { MonthGrid } from '../components/MonthGrid';
 import { Markdown } from '../lib/Markdown';
+import { PageSkillLink } from '../components/PageSkillLink';
 import { DatePickerPopover } from '../components/DatePickerPopover';
 import { CarouselFrame } from '../components/CarouselViewer';
 
@@ -504,6 +505,10 @@ function EmptyState() {
         <strong>queue to instagram</strong> on the stories and quotes you want to film.
         they'll show up here as filmable reels.
       </p>
+      {/* Or pull clippable moments straight from an existing video transcript. */}
+      <div style={{ marginTop: 'var(--space-4)', width: '100%', maxWidth: 520 }}>
+        <PageSkillLink name="reel-scripter" />
+      </div>
     </div>
   );
 }

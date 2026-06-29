@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0A0A0A" />
+    <meta name="theme-color" content="#f7f8f6" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -11,6 +11,17 @@
       rel="stylesheet"
     />
     <title>Solo OS</title>
+
+    <script>
+      // Apply the saved theme before first paint so the theme never flashes.
+      // Mirrors the toggle in Settings. Default is light.
+      (function () {
+        try {
+          var t = localStorage.getItem('solo-os-theme') || 'light';
+          document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {}
+      })();
+    </script>
 
     <!--
       Critical bootstrap CSS. Most of the dashboard's styles live in
@@ -27,6 +38,13 @@
         --bootstrap-fg: #ededed;
         --bootstrap-muted: #6b6b6b;
         --bootstrap-accent: #4a90e2;
+      }
+      :root[data-theme='light'] {
+        color-scheme: light;
+        --bootstrap-bg: #f7f8f6;
+        --bootstrap-fg: #1c1a17;
+        --bootstrap-muted: #8a8782;
+        --bootstrap-accent: #16c97e;
       }
       html, body {
         margin: 0;

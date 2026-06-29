@@ -1,5 +1,6 @@
 ---
 name: youtube-thumbnail
+hidden: true
 description: Generate visual YouTube thumbnails using nano banana (Google Gemini 2.5 Flash Image). Combines universal thumbnail design principles, the user's personal brand visual layer (face references, brand colors, fonts, recurring elements), and the user's thumbnail style references to produce 3-5 thumbnail options for a finalised title and one or more thumbnail phrases. Generates the visual base via the API; text overlay can be applied via ImageMagick or handed off to the user. Use whenever the user asks to generate, design, or create YouTube thumbnails.
 ---
 

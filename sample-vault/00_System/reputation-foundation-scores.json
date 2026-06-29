@@ -1,5 +1,87 @@
 {
-  "generated_at": 0,
-  "model": "",
-  "dimensions": []
+  "generated_at": 1782701077,
+  "model": "claude-code",
+  "dimensions": [
+    {
+      "id": "value",
+      "label": "Value",
+      "baseline": 0,
+      "score": 0,
+      "adjustments": {
+        "clarity": 0,
+        "depth": 0,
+        "distinctness": 0,
+        "transformation_alignment": 0,
+        "relevance": 0
+      },
+      "total_adjustment": 0,
+      "what_claude_noticed": "No content exists to evaluate - all slots and banks are empty.",
+      "what_to_strengthen": [
+        "Write a transformation statement that names the before/after your audience experiences",
+        "Define your core method with 3-5 named steps",
+        "Add at least one teaching framework with a name, components, and explanation of why it works"
+      ]
+    },
+    {
+      "id": "authority",
+      "label": "Authority",
+      "baseline": 0,
+      "score": 0,
+      "adjustments": {
+        "clarity": 0,
+        "depth": 0,
+        "distinctness": 0,
+        "transformation_alignment": 0,
+        "relevance": 0
+      },
+      "total_adjustment": 0,
+      "what_claude_noticed": "No content exists to evaluate - all slots and banks are empty.",
+      "what_to_strengthen": [
+        "Add your proof intro with specific dollar amounts, dates, or measurable outcomes",
+        "Log at least 3 wins with concrete numbers and named results",
+        "Add proof points that tie your wins to a coherent authority narrative"
+      ]
+    },
+    {
+      "id": "point_of_view",
+      "label": "Point of View",
+      "baseline": 0.2,
+      "score": 0,
+      "adjustments": {
+        "clarity": 0,
+        "depth": 0,
+        "distinctness": 0,
+        "transformation_alignment": 0,
+        "relevance": -0.2
+      },
+      "total_adjustment": -0.2,
+      "what_claude_noticed": "The sole POV entry is the bundled example/placeholder template, not real content.",
+      "what_to_strengthen": [
+        "Replace the example POV with a real belief flip: name the common belief, your counter-belief, and why",
+        "Fill at least one pov_flip slot with a genuinely contrarian stance backed by your experience",
+        "Add a named enemy or named counter-framework that makes your position concrete"
+      ]
+    },
+    {
+      "id": "connection",
+      "label": "Connection",
+      "baseline": 0,
+      "score": 0,
+      "adjustments": {
+        "clarity": 0,
+        "depth": 0,
+        "distinctness": 0,
+        "transformation_alignment": 0,
+        "relevance": 0
+      },
+      "total_adjustment": 0,
+      "what_claude_noticed": "No content exists to evaluate - all slots and banks are empty.",
+      "what_to_strengthen": [
+        "Write your origin story with specific moments, places, and emotional beats",
+        "Add 3-5 micro-stories with sensory detail and proper nouns",
+        "Map which stories mirror which audience pain points"
+      ]
+    }
+  ],
+  "input_hash": "9de81d1d"
 }

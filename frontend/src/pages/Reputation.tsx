@@ -15,6 +15,7 @@ import type {
 import { Ring } from '../components/Ring';
 import { TagChips } from '../components/TagChips';
 import { FilterTabs } from '../components/FilterTabs';
+import { ConnectAppCard } from '../components/ConnectAppCard';
 
 // Reputation page v4.
 //   • Hero: score ring + "what this is for" line + maturity chip. No big headline.
@@ -2152,19 +2153,7 @@ function ShowingUpSection({
 // Shown when the reputation analysis has nothing to analyze yet (no published
 // content totals). Explains the two paths to wiring real content into this
 // surface so the empty state isn't read as a bug.
-const RUN_YOUTUBE_API_PROMPT = '/youtube-setup-api';
-
 function NoContentExplainer({ hasStaleAnalysis }: { hasStaleAnalysis: boolean }) {
-  const [copied, setCopied] = useState<string | null>(null);
-  async function copy(label: string, text: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(label);
-      setTimeout(() => setCopied(null), 2000);
-    } catch {
-      window.prompt('copy this:', text);
-    }
-  }
   return (
     <div
       style={{
@@ -2195,14 +2184,10 @@ function NoContentExplainer({ hasStaleAnalysis }: { hasStaleAnalysis: boolean })
           option 1 · connect youtube
         </span>
         <span className="muted" style={{ fontSize: 'var(--body-sm)', lineHeight: 1.5 }}>
-          run this prompt in claude inside this vault. it walks you through wiring up the youtube
-          data api so transcripts pull in automatically.
+          run the setup skill - it walks you through wiring up the youtube data api so transcripts
+          pull in automatically.
         </span>
-        <PromptRow
-          prompt={RUN_YOUTUBE_API_PROMPT}
-          copied={copied === 'api'}
-          onCopy={() => copy('api', RUN_YOUTUBE_API_PROMPT)}
-        />
+        <ConnectAppCard app="youtube" />
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
@@ -2220,28 +2205,6 @@ function NoContentExplainer({ hasStaleAnalysis }: { hasStaleAnalysis: boolean })
           (the analysis shown is from your last run - it's stale until new content lands.)
         </span>
       )}
-    </div>
-  );
-}
-
-function PromptRow({ prompt, copied, onCopy }: { prompt: string; copied: boolean; onCopy: () => void }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--space-2)',
-        padding: 'var(--space-2) var(--space-3)',
-        background: 'rgba(255,255,255,0.04)',
-        borderRadius: 'var(--radius-sm)',
-        fontFamily: 'var(--font-mono, monospace)',
-        fontSize: 'var(--body-sm)',
-      }}
-    >
-      <span style={{ flex: 1, color: 'var(--ink)' }}>{prompt}</span>
-      <button type="button" className="btn btn--ghost" onClick={onCopy}>
-        {copied ? 'copied' : 'copy'}
-      </button>
     </div>
   );
 }

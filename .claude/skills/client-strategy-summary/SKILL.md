@@ -31,7 +31,7 @@ One job: turn a client / strategy call into a ready-to-send recap email to the o
 
 If a transcript was handed to this run, use it. If it fired with nothing provided, pull the latest strategy recording from Zoom: `search_meetings` for recent recordings with `has_recording: true`, then `get_recording_resource` with `types: "transcript"` (skip video and audio). Read in chunks if large.
 
-Self-guard on the topic: this skill is only for client / strategy calls (a focused conversation between you and one other person). If the latest recording is a Q&A / community call (topic contains `q&a`, `community call`, `office hours`, or several attendees asking questions in sequence), leave it - that is `skool-qa-post`'s job. If the transcript is empty or still processing, stop and leave it for next run.
+Self-guard on the topic: this skill is only for client / strategy calls (a focused conversation between you and one other person). If the latest recording is a Q&A / community call (topic contains `q&a`, `community call`, `office hours`, or several attendees asking questions in sequence), leave it - this skill is not for those. If the transcript is empty or still processing, stop and leave it for next run.
 
 ## Write the recap
 

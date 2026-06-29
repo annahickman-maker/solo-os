@@ -45,3 +45,9 @@ test-vault/
 # Each install has its own VAULT_ROOT. The bundled sample-vault is committed
 # so a fresh clone boots into example data. Users with a real vault should
 # point VAULT_ROOT elsewhere - don't put their data inside this repo.
+
+# sample-vault runtime artifacts (created when the dashboard runs against it - never ship)
+sample-vault/00_System/dashboard-chats/
+sample-vault/**/.transcript-baseline
+sample-vault/**/.transcript-baseline*
+sample-vault/00_System/reputation-analysis.json

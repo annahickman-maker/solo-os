@@ -23,6 +23,7 @@ import { Ring } from '../components/Ring';
 import { useChat } from '../components/ChatProvider';
 import { Icon, PlayIcon, skillIconKind, skillColor } from '../lib/skillVisuals';
 import { Markdown } from '../lib/Markdown';
+import { PageSkillLink } from '../components/PageSkillLink';
 
 // Offer Strength v2.
 // Mirrors the Reputation v4 layout: hero ring + framing, profile card,
@@ -4076,6 +4077,11 @@ export function SectionPanel({
             <button type="button" className="off-btn off-btn--ghost" onClick={onClose}>close</button>
           </div>
         </header>
+
+        {/* Run the skill that builds this section, right where it's relevant -
+            offer-blueprint for the offer suite, customer-avatar for avatars. */}
+        {section.id === 'pricing' && <PageSkillLink name="offer-blueprint" />}
+        {section.id === 'avatar' && <PageSkillLink name="customer-avatar" />}
 
         {/* Proof, Avatar, Pricing, and Validation all have their own custom
             blocks (Promise+proof / avatar bank / proof ladder / tangible

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, type SkillFull } from '../api';
+import { api } from '../api';
 import { solidButtonStyle, ghostButtonStyle, createButtonStyle } from '../lib/ui';
 
 // The "bring your context" step in front of Personal Brand Strategy. Optional -
@@ -10,11 +10,9 @@ import { solidButtonStyle, ghostButtonStyle, createButtonStyle } from '../lib/ui
 // onLaunch receives the vault-relative paths of every context file gathered, so
 // the caller can seed the onboarding chat with them.
 export function OnboardingLauncher({
-  skill,
   onClose,
   onLaunch,
 }: {
-  skill: SkillFull;
   onClose: () => void;
   onLaunch: (contextPaths: string[]) => void;
 }) {
@@ -72,7 +70,6 @@ export function OnboardingLauncher({
   }
 
   const hasAnything = lines(youtube).length > 0 || lines(website).length > 0 || docs.length > 0;
-  const label = skill.title || skill.name;
 
   return (
     <div
@@ -93,10 +90,11 @@ export function OnboardingLauncher({
         }}
       >
         <div>
-          <span className="eyebrow" style={{ color: 'var(--muted)' }}>first - the foundation</span>
-          <h2 className="h2" style={{ marginTop: 4 }}>{label}</h2>
-          <p className="muted" style={{ marginTop: 6, fontSize: 'var(--body)', lineHeight: 1.5 }}>
-            Bring anything that already shows who you are and I'll read it before we talk - so we start from a draft, not a blank page.
+          <h2 className="h2">Complete your onboarding</h2>
+          <p className="muted" style={{ marginTop: 8, fontSize: 'var(--body)', lineHeight: 1.55 }}>
+            This is the foundation everything else in the system reads from - your positioning, audience,
+            story, offer, and voice. It's the first thing to do. Bring in your existing content below to
+            start from a draft, or skip and just talk it through.
           </p>
         </div>
 

@@ -51,7 +51,7 @@ type Theme = 'dark' | 'light';
 
 function AppearanceCard() {
   const [theme, setTheme] = useState<Theme>(
-    () => ((document.documentElement.getAttribute('data-theme') as Theme) || 'dark'),
+    () => ((document.documentElement.getAttribute('data-theme') as Theme) || 'light'),
   );
 
   const apply = (next: Theme) => {

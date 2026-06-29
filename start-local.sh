@@ -159,7 +159,7 @@ else
 fi
 
 spawn_supervised claude-bridge 8789 "$LOG_DIR/solo-os-claude-bridge.log" \
-  bash -c 'cd claude-bridge && npm start'
+  env VAULT_ROOT="$VAULT_ROOT" bash -c 'cd claude-bridge && npm start'
 
 # Wait for server + frontend to accept connections instead of a blanket sleep.
 # ~1-2s on a fast machine, longer only if the machine genuinely needs it.

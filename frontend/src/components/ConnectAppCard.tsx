@@ -68,7 +68,7 @@ interface Meta {
 const META: Record<ConnectAppKey, Meta> = {
   google: {
     title: 'Connect Google Calendar',
-    sub: 'see your meetings on the Today page',
+    sub: 'see calendar events here',
     color: '#29A4FF',
     icon: CalendarIcon,
   },
@@ -98,13 +98,15 @@ const META: Record<ConnectAppKey, Meta> = {
   },
 };
 
-// Pack setup skills (resolved dashboard ids). Google has no pack skill - it uses
-// OAuth (grant access) once configured, or the connect-calendar skill chat.
-const SETUP_SKILL: Record<Exclude<ConnectAppKey, 'google'>, string> = {
-  zoom: 'skill-business-connect-zoom-transcripts',
-  youtube: 'skill-solopreneur-os-youtube-setup-api',
-  tracking: 'skill-solopreneur-os-setup-conversion-tracking',
-  nanobanana: 'skill-solopreneur-os-connect-nano-banana',
+// Pack setup skills, keyed by frontmatter `name`. We resolve the dashboard id
+// by name at click time because the id is pack-derived and differs between the
+// live vault and the members' template (e.g. solopreneur-os vs solo-os). Google
+// has no pack skill - it uses OAuth (grant access) or the connect-calendar chat.
+const SETUP_SKILL_NAME: Record<Exclude<ConnectAppKey, 'google'>, string> = {
+  zoom: 'connect-zoom-transcripts',
+  youtube: 'youtube-setup-api',
+  tracking: 'setup-conversion-tracking',
+  nanobanana: 'connect-nano-banana',
 };
 
 const GOOGLE_CONNECT_PROMPT = 'Connect my Google Calendar to the dashboard';
@@ -137,7 +139,7 @@ function useStatus(app: ConnectAppKey) {
   };
 }
 
-export function ConnectAppCard({ app }: { app: ConnectAppKey }) {
+export function ConnectAppCard({ app, onDismiss }: { app: ConnectAppKey; onDismiss?: () => void }) {
   const meta = META[app];
   const { runSkill } = useSkillRun();
   const { openChat } = useChat();
@@ -149,7 +151,13 @@ export function ConnectAppCard({ app }: { app: ConnectAppKey }) {
 
   let label = 'run setup';
   let onClick: () => void = () => {
-    if (app !== 'google') runSkill(SETUP_SKILL[app]);
+    if (app === 'google') return;
+    const skillName = SETUP_SKILL_NAME[app];
+    // Resolve the id by name (id differs between vault + template packs).
+    api.skills().then(({ items }) => {
+      const s = items.find((x) => x.name === skillName);
+      if (s) runSkill(s.id);
+    });
   };
   let sub = meta.sub;
 
@@ -179,7 +187,7 @@ export function ConnectAppCard({ app }: { app: ConnectAppKey }) {
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 'var(--space-4)',
+        gap: 'var(--space-3)',
         padding: 'var(--space-4)',
         background: 'var(--surface)',
         border: '1px solid var(--hairline)',
@@ -202,37 +210,47 @@ export function ConnectAppCard({ app }: { app: ConnectAppKey }) {
         {meta.icon}
       </div>
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 'var(--body)', fontWeight: 600 }}>{meta.title}</span>
-          <span
-            style={{
-              fontSize: 'var(--eyebrow)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-              fontWeight: 600,
-              color: 'var(--muted-2)',
-              border: '1px solid var(--hairline)',
-              borderRadius: 'var(--radius-pill)',
-              padding: '1px 8px',
-            }}
-          >
-            not connected
-          </span>
-        </div>
+      <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+        <span style={{ fontSize: 'var(--body)', fontWeight: 600 }}>{meta.title}</span>
         <div className="muted" style={{ fontSize: 'var(--body-sm)', lineHeight: 1.45, marginTop: 3 }}>
           {sub}
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={busy}
-        style={{ ...solidButtonStyle, flex: '0 0 auto', ...(busy ? { opacity: 0.6, cursor: 'wait' } : {}) }}
-      >
-        <PlayIcon /> {busy ? 'opening' : label}
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flex: '0 0 auto', marginLeft: 'auto' }}>
+        <button
+          type="button"
+          onClick={onClick}
+          disabled={busy}
+          style={{ ...solidButtonStyle, flex: '0 0 auto', ...(busy ? { opacity: 0.6, cursor: 'wait' } : {}) }}
+        >
+          <PlayIcon /> {busy ? 'opening' : label}
+        </button>
+
+        {onDismiss && (
+          <button
+            type="button"
+            onClick={onDismiss}
+            aria-label="dismiss"
+            title="dismiss"
+            style={{
+              flex: '0 0 auto',
+              width: 24,
+              height: 24,
+              padding: 0,
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--muted)',
+              fontSize: 18,
+              lineHeight: '24px',
+              cursor: 'pointer',
+              borderRadius: 4,
+            }}
+          >
+            ×
+          </button>
+        )}
+      </div>
     </div>
   );
 }

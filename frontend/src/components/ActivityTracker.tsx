@@ -17,6 +17,7 @@ import { api } from '../api';
 import type { CalendarEvent, Task } from '../api';
 import { Card } from '../components/Card';
 import { FloatingFocusButton } from '../components/FloatingTimer';
+import { ConnectAppCard } from '../components/ConnectAppCard';
 
 // Strain-weight order. The key 'operations' is kept for backend
 // compatibility - displayed as 'calls'.
@@ -90,7 +91,6 @@ export function ActivityTracker({
 
   const events = calendar?.events ?? [];
   const calendarConnected = calendar?.connected ?? false;
-  const calendarConfigured = calendar?.configured ?? false;
 
   // Group tasks by category so filming sits with filming, building with
   // building, admin with admin etc. Same order used in the Focus week
@@ -122,7 +122,7 @@ export function ActivityTracker({
         </div>
       )}
       {events.length === 0 && !calendarConnected && isToday && (
-        <ConnectCalendarPrompt configured={calendarConfigured} />
+        <ConnectCalendarPrompt />
       )}
 
       {/* Tasks - tickable, with editable name + category. */}
@@ -488,15 +488,15 @@ function CategoryDot({
 }
 
 // =========================================================================
-// "Run this prompt in Claude" panel for SS members who haven't connected
-// their Google Calendar yet. Once configured, this is replaced by the
-// native OAuth connect button.
+// Today-page nudge to connect Google Calendar. Renders the same Skills-page-
+// style card used elsewhere (icon + a button that runs the
+// connect-calendar skill, or grants OAuth once credentials are set), plus an X
+// to dismiss. ConnectAppCard returns null once the calendar is connected, so
+// this auto-hides the moment it goes live.
 // =========================================================================
-const CONNECT_PROMPT = 'Connect my Google Calendar to the dashboard';
-
 const CALENDAR_PROMPT_DISMISS_KEY = 'dashboard.calendar-prompt.dismissed';
 
-function ConnectCalendarPrompt({ configured }: { configured: boolean }) {
+function ConnectCalendarPrompt() {
   const [dismissed, setDismissed] = useState<boolean>(() => {
     try {
       return localStorage.getItem(CALENDAR_PROMPT_DISMISS_KEY) === '1';
@@ -504,126 +504,20 @@ function ConnectCalendarPrompt({ configured }: { configured: boolean }) {
       return false;
     }
   });
-  if (configured) return <ConnectViaOAuthButton />;
   if (dismissed) return null;
   return (
-    <ConnectViaClaudePanel
-      onDismiss={() => {
-        try {
-          localStorage.setItem(CALENDAR_PROMPT_DISMISS_KEY, '1');
-        } catch {
-          // ignore - dismissal won't persist but the UI still hides
-        }
-        setDismissed(true);
-      }}
-    />
-  );
-}
-
-function ConnectViaClaudePanel({ onDismiss }: { onDismiss: () => void }) {
-  const [copied, setCopied] = useState(false);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(CONNECT_PROMPT);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      window.prompt('copy this prompt:', CONNECT_PROMPT);
-    }
-  }
-  return (
-    <div
-      style={{
-        position: 'relative',
-        padding: 'var(--space-3)',
-        paddingRight: 32,
-        border: '1px dashed var(--hairline)',
-        borderRadius: 'var(--radius-md)',
-        marginBottom: 'var(--space-3)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--space-2)',
-      }}
-    >
-      <button
-        type="button"
-        onClick={onDismiss}
-        aria-label="dismiss"
-        title="dismiss"
-        style={{
-          position: 'absolute',
-          top: 6,
-          right: 6,
-          width: 22,
-          height: 22,
-          padding: 0,
-          background: 'transparent',
-          border: 'none',
-          color: 'var(--muted)',
-          fontSize: 16,
-          lineHeight: '22px',
-          cursor: 'pointer',
-          borderRadius: 4,
+    <div style={{ marginBottom: 'var(--space-3)' }}>
+      <ConnectAppCard
+        app="google"
+        onDismiss={() => {
+          try {
+            localStorage.setItem(CALENDAR_PROMPT_DISMISS_KEY, '1');
+          } catch {
+            // ignore - dismissal won't persist but the UI still hides
+          }
+          setDismissed(true);
         }}
-      >
-        ×
-      </button>
-      <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-        connect google calendar so today's meetings show up here. run this prompt in claude inside this vault:
-      </span>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-2)',
-          padding: 'var(--space-2) var(--space-3)',
-          background: 'var(--fill-subtle)',
-          borderRadius: 'var(--radius-sm)',
-          fontFamily: 'var(--font-mono, monospace)',
-          fontSize: 'var(--body-sm)',
-        }}
-      >
-        <span style={{ flex: 1, color: 'var(--ink)' }}>{CONNECT_PROMPT}</span>
-        <button type="button" className="btn btn--ghost" onClick={copy}>
-          {copied ? 'copied' : 'copy'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function ConnectViaOAuthButton() {
-  const [pending, setPending] = useState(false);
-  async function connect() {
-    setPending(true);
-    try {
-      const { url } = await api.googleConnectUrl();
-      window.location.href = url;
-    } catch (err) {
-      setPending(false);
-      window.alert(`could not start connect flow: ${(err as Error).message}`);
-    }
-  }
-  return (
-    <div
-      style={{
-        padding: 'var(--space-3)',
-        border: '1px dashed var(--hairline)',
-        borderRadius: 'var(--radius-md)',
-        marginBottom: 'var(--space-3)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 'var(--space-3)',
-        flexWrap: 'wrap',
-      }}
-    >
-      <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
-        google credentials are configured. grant access to surface today's meetings.
-      </span>
-      <button type="button" className="btn" disabled={pending} onClick={connect}>
-        {pending ? 'opening google' : 'connect calendar'}
-      </button>
+      />
     </div>
   );
 }

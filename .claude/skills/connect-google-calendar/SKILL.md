@@ -1,5 +1,6 @@
 ---
 name: connect-google-calendar
+hidden: true
 description: Walk a dashboard user through connecting their Google Calendar so meetings appear on the Today page. Triggered by phrases like "connect my Google Calendar to the dashboard", "set up Google Calendar", "I want my meetings to show up here". Guides them through a one-time Google Cloud Console setup, captures their client ID + client secret, writes them to a local config file, restarts the dashboard server, and verifies the OAuth grant. All credentials stay on the user's machine. Read this whole file before starting - the steps are linear and the user is doing manual UI work in a browser between every step.
 ---
 

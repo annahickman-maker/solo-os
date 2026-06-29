@@ -399,7 +399,6 @@ export function SkillRunProvider({ children }: { children: ReactNode }) {
       {skill && <RunPanel skill={skill} onClose={() => setSkill(null)} onRun={run} />}
       {onboarding && (
         <OnboardingLauncher
-          skill={onboarding}
           onClose={() => setOnboarding(null)}
           onLaunch={(paths) => launchOnboarding(onboarding, paths)}
         />
