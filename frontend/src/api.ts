@@ -446,8 +446,13 @@ export class UnauthorizedError extends Error {
   }
 }
 
-export function getStoredPassword(): string | null {
-  return localStorage.getItem(PASSWORD_KEY);
+// There is no login screen anymore - access is gated by the SS membership key,
+// not a password. The local API still carries a fixed token so the localhost
+// server, deck/media routes, and OAuth callback keep working; it's automatic
+// and invisible to the user. Defaults to 'dev' (the server's default) unless a
+// custom DASHBOARD_PASSWORD was set and stored.
+export function getStoredPassword(): string {
+  return localStorage.getItem(PASSWORD_KEY) ?? 'dev';
 }
 
 export function setStoredPassword(value: string): void {

@@ -259,6 +259,12 @@ function MembershipCard({ onChanged }: { onChanged: () => void }) {
         </div>
       )}
 
+      {!showInput && !membershipValid && !status.isLoading && (
+        <p style={{ margin: 0, fontSize: 'var(--body-sm)', color: 'var(--danger)', fontWeight: 500 }}>
+          enter your SS key to enable updates - the current key is pinned in the SS community.
+        </p>
+      )}
+
       {updateStatusLine && (
         <p
           className="muted"

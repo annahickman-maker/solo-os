@@ -1,7 +1,6 @@
 import { QueryClient, QueryClientProvider, MutationCache, QueryCache } from '@tanstack/react-query';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Agentation } from 'agentation';
-import { PasswordGate } from './auth';
 import { MembershipGate } from './membership';
 import { NavRail } from './components/NavRail';
 import { BottomNav } from './components/BottomNav';
@@ -100,17 +99,15 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <PasswordGate>
-          <MembershipGate>
-            <TeleprompterProvider>
-              <ChatProvider>
-                <SkillRunProvider>
-                  <Shell />
-                </SkillRunProvider>
-              </ChatProvider>
-            </TeleprompterProvider>
-          </MembershipGate>
-        </PasswordGate>
+        <MembershipGate>
+          <TeleprompterProvider>
+            <ChatProvider>
+              <SkillRunProvider>
+                <Shell />
+              </SkillRunProvider>
+            </ChatProvider>
+          </TeleprompterProvider>
+        </MembershipGate>
       </BrowserRouter>
     </QueryClientProvider>
   );
