@@ -21,7 +21,12 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 
 const VERIFY_URL = process.env.MEMBERSHIP_VERIFY_URL || 'https://annahickman.com/verify-key';
-const TOKEN_FILE = path.join(os.homedir(), '.solo-os', 'membership.json');
+// Machine-global state dir by default (one person, one key, survives reinstalls
+// so a member never re-enters their key). Override with SOLO_OS_STATE_DIR to
+// isolate a second install - e.g. a test dashboard running alongside the real
+// one, so they don't share the same SS key / login.
+const STATE_DIR = process.env.SOLO_OS_STATE_DIR || path.join(os.homedir(), '.solo-os');
+const TOKEN_FILE = path.join(STATE_DIR, 'membership.json');
 const RECHECK_AFTER_SECONDS = 30 * 24 * 60 * 60; // 30 days. Token TTL from the worker is 32 days so a same-key re-check refreshes before expiry.
 // Hard ceiling on the verify-key network call. Without it a hung connection
 // (captive wifi, DNS black hole, server stall) would leave the UI stuck on
