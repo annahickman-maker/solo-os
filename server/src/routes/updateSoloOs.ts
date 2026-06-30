@@ -26,11 +26,35 @@ interface PullResult {
   exitCode: number;
 }
 
+// Never let the pull hang. Two guards:
+//   1. GIT_TERMINAL_PROMPT=0 + GCM_INTERACTIVE=never -> git fails fast instead
+//      of blocking on a credential/passphrase prompt. The repo is public, but a
+//      stale remote or an https switch could otherwise stall forever waiting on
+//      stdin that never arrives from a detached spawn.
+//   2. A wall-clock timeout that SIGKILLs the child and resolves with a clear
+//      message, so the Settings button can't spin indefinitely.
+const PULL_TIMEOUT_MS = 60_000;
+
 function runGitPull(cwd: string): Promise<PullResult> {
   return new Promise((resolve) => {
-    const child = spawn('git', ['pull', '--ff-only'], { cwd });
+    const child = spawn('git', ['pull', '--ff-only'], {
+      cwd,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' },
+    });
     let stdout = '';
     let stderr = '';
+    let timedOut = false;
+    let settled = false;
+    const finish = (result: PullResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGKILL');
+    }, PULL_TIMEOUT_MS);
     child.stdout.on('data', (chunk) => {
       stdout += chunk.toString();
     });
@@ -38,7 +62,7 @@ function runGitPull(cwd: string): Promise<PullResult> {
       stderr += chunk.toString();
     });
     child.on('error', (err) => {
-      resolve({
+      finish({
         ok: false,
         alreadyUpToDate: false,
         output: `failed to spawn git: ${err.message}`,
@@ -46,9 +70,18 @@ function runGitPull(cwd: string): Promise<PullResult> {
       });
     });
     child.on('close', (code) => {
+      if (timedOut) {
+        finish({
+          ok: false,
+          alreadyUpToDate: false,
+          output: `update timed out after ${PULL_TIMEOUT_MS / 1000}s and was stopped. check your connection and try again.`,
+          exitCode: -1,
+        });
+        return;
+      }
       const output = [stdout, stderr].filter(Boolean).join('\n').trim();
       const alreadyUpToDate = /Already up to date/i.test(output);
-      resolve({
+      finish({
         ok: code === 0,
         alreadyUpToDate,
         output: output || (code === 0 ? 'pulled' : 'git pull failed'),

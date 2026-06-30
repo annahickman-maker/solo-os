@@ -1,211 +1,79 @@
 #!/bin/bash
-# Solo OS one-time setup. Run this once after `git clone`.
+# Solo OS manual setup. Run this once from a cloned copy of the repo:
+#
+#   git clone https://github.com/annahickman-maker/solo-os.git ~/solo-os-src
+#   cd ~/solo-os-src
+#   ./setup.sh
 #
 # What it does:
-#   1. Installs npm dependencies in server/, frontend/, claude-bridge/
-#   2. Verifies the `claude` CLI is installed + authenticated
-#   3. Builds a `Solo OS.app` bundle in /Applications/ with a custom icon
-#      that wraps start-local.sh, so the user can double-click to launch
-#      the dashboard like any other Mac app
+#   1. Seeds your VAULT at ~/Desktop/Solo OS on first run (never overwrites it).
+#   2. Installs the CODE inside /Applications/Solo OS.app (self-contained, off
+#      iCloud) and builds the launcher - via build-dashboard-app.sh.
 #
-# After this runs once, the user opens Solo OS from /Applications/ (or
-# Spotlight, or the Dock if they pin it). No terminal involved.
+# After this, the code lives in the app. The folder you cloned into is just a
+# staging copy; you can delete it. Launch from /Applications/Solo OS (or ⌘-space
+# "Solo OS"). Updates happen in-app via Settings -> "update + restart".
+#
+# Most people should use the one-line installer instead:
+#   curl -fsSL https://raw.githubusercontent.com/annahickman-maker/solo-os/main/install.sh | bash
 
 set -e
 
-DASH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APP_NAME="Solo OS"
-APP_BUNDLE="/Applications/${APP_NAME}.app"
+SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_BUNDLE="${APP_BUNDLE:-/Applications/Solo OS.app}"
+VAULT_DIR="${VAULT_DIR:-$HOME/Desktop/Solo OS}"
 
 echo ""
 echo "Solo OS setup"
 echo "============="
 echo ""
-echo "Dashboard repo: $DASH_DIR"
+echo "  source : $SRC_DIR"
+echo "  app    : $APP_BUNDLE"
+echo "  vault  : $VAULT_DIR"
 echo ""
 
-# ─── 1. npm install in all three subfolders ────────────────────────────────
-
-# Install all three in parallel - the wait is bounded by the slowest one, not
-# the sum of all three (cuts a big chunk off first-time setup).
-pids=()
-for sub in server frontend claude-bridge; do
-  echo "→ npm install in $sub/ (running in parallel)"
-  ( cd "$DASH_DIR/$sub" && npm install --silent --no-audit --no-fund ) >/dev/null 2>&1 &
-  pids+=($!)
-done
-install_failed=0
-for pid in "${pids[@]}"; do wait "$pid" || install_failed=1; done
-if [ "$install_failed" = 1 ]; then
-  echo "✗ One or more npm installs failed. Re-run ./setup.sh (check your internet connection)."
-  exit 1
-fi
-
-echo ""
-echo "✓ Dependencies installed."
-echo ""
-
-# ─── 1b. Pre-build the frontend ────────────────────────────────────────────
-# The launcher serves a pre-built bundle for fast opens. Build it once now so
-# the very first launch is instant too (the launcher only rebuilds later if you
-# change the code). A build failure here is non-fatal - the launcher falls back
-# to the dev server, so setup still completes.
-echo "→ building the dashboard (one-time, for fast opens)"
-( cd "$DASH_DIR/frontend" && npx vite build ) >/dev/null 2>&1 \
-  && echo "✓ Dashboard built." \
-  || echo "⚠ Build skipped (the launcher will build on first open instead)."
-echo ""
-
-# ─── 2. Check `claude` CLI ─────────────────────────────────────────────────
-
+# ─── 1. Check the claude CLI (best effort) ─────────────────────────────────
 if ! command -v claude >/dev/null 2>&1; then
   echo "⚠  The 'claude' CLI is not installed."
-  echo ""
   echo "   The dashboard uses your Claude Code subscription for AI features."
-  echo "   Install Claude Code from: https://claude.com/code"
+  echo "   Install it from https://claude.com/code, run 'claude auth login', then re-run ./setup.sh."
   echo ""
-  echo "   Once installed, run:  claude auth login"
-  echo "   Then re-run:          ./setup.sh"
-  echo ""
-  exit 1
-fi
-echo "✓ Found 'claude' at $(command -v claude)"
-
-# Best-effort auth check. `claude` doesn't expose a clean "am I logged in"
-# command, but most failures point at auth. Give the user the heads-up.
-echo ""
-echo "Note: if you have not yet run 'claude auth login', do that now (browser flow)."
-echo "Without it the dashboard's AI features will silently fail."
-echo ""
-
-# ─── 3. Build the macOS .app bundle ────────────────────────────────────────
-
-echo "→ Building ${APP_NAME}.app at ${APP_BUNDLE}"
-
-# Wipe any prior install
-if [ -d "$APP_BUNDLE" ]; then
-  rm -rf "$APP_BUNDLE"
-fi
-
-mkdir -p "$APP_BUNDLE/Contents/MacOS"
-mkdir -p "$APP_BUNDLE/Contents/Resources"
-
-# Copy bundled icon (shipped in the repo at AppIcon.icns)
-if [ -f "$DASH_DIR/AppIcon.icns" ]; then
-  cp "$DASH_DIR/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 else
-  echo "⚠  AppIcon.icns not found in repo, app will have a default icon"
+  echo "✓ Found 'claude' at $(command -v claude)"
+  echo "  (If you haven't run 'claude auth login' yet, do that for AI features.)"
+  echo ""
 fi
 
-# Info.plist
-cat > "$APP_BUNDLE/Contents/Info.plist" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleIdentifier</key>
-  <string>com.solo-os.dashboard</string>
-  <key>CFBundleName</key>
-  <string>Solo OS</string>
-  <key>CFBundleDisplayName</key>
-  <string>Solo OS</string>
-  <key>CFBundleExecutable</key>
-  <string>launcher</string>
-  <key>CFBundleIconFile</key>
-  <string>AppIcon</string>
-  <key>CFBundlePackageType</key>
-  <string>APPL</string>
-  <key>CFBundleShortVersionString</key>
-  <string>0.1.0</string>
-  <key>CFBundleVersion</key>
-  <string>1</string>
-  <key>LSMinimumSystemVersion</key>
-  <string>11.0</string>
-  <key>NSHighResolutionCapable</key>
-  <true/>
-  <key>LSUIElement</key>
-  <false/>
-</dict>
-</plist>
-PLIST
-
-# Launcher executable - the script that runs when the user double-clicks
-# the .app. Writes the absolute path to the cloned repo so the launcher
-# always knows where start-local.sh lives.
-cat > "$APP_BUNDLE/Contents/MacOS/launcher" <<LAUNCHER
-#!/bin/bash
-# Solo OS launcher - generated by setup.sh on $(date -u +%Y-%m-%dT%H:%M:%SZ)
-# Repo: $DASH_DIR
-
-DASH_DIR="$DASH_DIR"
-LOG_DIR="/tmp"
-
-# Ensure node is findable when launched via Finder (no shell init).
-# Pick the newest installed nvm version dynamically + cover both Homebrew
-# prefixes (Apple Silicon /opt/homebrew, Intel /usr/local).
-NVM_BIN=""
-if [ -d "\$HOME/.nvm/versions/node" ]; then
-  NVM_BIN=\$(ls -d "\$HOME"/.nvm/versions/node/v*/bin 2>/dev/null | sort -V | tail -1)
-fi
-export PATH="\${NVM_BIN:+\$NVM_BIN:}/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:\$PATH"
-
-# Check if the dashboard is already running. If yes, just open the browser.
-if lsof -ti:5174 >/dev/null 2>&1; then
-  open -a "Google Chrome" http://localhost:5174 2>/dev/null || open http://localhost:5174
-  exit 0
-fi
-
-# Start the services in the background via the supervised launcher.
-# Invoke through /bin/bash explicitly so macOS provenance (com.apple.provenance
-# xattr on cloned/downloaded files) doesn't block exec from the .app bundle.
-# Detach via nohup so the .app process can exit cleanly.
-nohup /bin/bash "\$DASH_DIR/start-local.sh" > "\$LOG_DIR/solo-os-launcher.log" 2>&1 &
-
-# Wait up to 30 seconds for the frontend to come up, then open browser.
-for i in {1..30}; do
-  if lsof -ti:5174 >/dev/null 2>&1; then
-    sleep 1  # tiny grace period for Vite to actually serve
-    open -a "Google Chrome" http://localhost:5174 2>/dev/null || open http://localhost:5174
-    exit 0
+# ─── 2. Seed the vault (first run only) ────────────────────────────────────
+if [ -e "$VAULT_DIR" ]; then
+  echo "✓ Vault already exists at $VAULT_DIR - leaving it untouched."
+else
+  if [ -d "$SRC_DIR/sample-vault" ]; then
+    mkdir -p "$(dirname "$VAULT_DIR")"
+    cp -R "$SRC_DIR/sample-vault" "$VAULT_DIR"
+    echo "✓ Created your vault at $VAULT_DIR (seeded with the starter files)."
+  else
+    mkdir -p "$VAULT_DIR/01_Core"
+    echo "⚠ No starter vault found; created an empty vault at $VAULT_DIR."
   fi
-  sleep 1
-done
-
-# If we got here, services didn't come up in time. Open the log so the
-# user can see what failed.
-osascript -e "display alert \"Solo OS\" message \"Services did not start in time. Check /tmp/solo-os-launcher.log\""
-exit 1
-LAUNCHER
-
-chmod +x "$APP_BUNDLE/Contents/MacOS/launcher"
-
-# Force macOS to refresh the icon cache so the new icon shows up
-touch "$APP_BUNDLE"
-
-echo "✓ Built ${APP_BUNDLE}"
+fi
 echo ""
+
+# ─── 3. Build the app (installs code into /Applications/Solo OS.app) ────────
+APP_BUNDLE="$APP_BUNDLE" bash "$SRC_DIR/build-dashboard-app.sh" "$SRC_DIR" "$APP_BUNDLE"
 
 # ─── 4. Done ───────────────────────────────────────────────────────────────
-
 echo "─────────────────────────────────────────────"
 echo ""
 echo "  ✓ Solo OS is installed."
 echo ""
-echo "  → Open it from /Applications/Solo OS"
-echo "  → Or hit ⌘-Space and type 'Solo OS'"
-echo "  → Or drag it to your Dock"
+echo "  → Open it from /Applications/Solo OS (or ⌘-Space, 'Solo OS')"
+echo "  → Dashboard: http://localhost:5174   (password: dev)"
+echo "  → Your vault: $VAULT_DIR"
 echo ""
-echo "  First launch:"
-echo "    1. Double-click Solo OS"
-echo "    2. Wait ~10 seconds for services to start"
-echo "    3. Browser opens to http://localhost:5174"
-echo "    4. Password: dev"
-echo "    5. Drop your 6 core_*.md files into your vault's 01_Core/"
-echo "       folder, then open the dashboard. Extraction auto-runs."
-echo ""
-echo "  Default vault: $DASH_DIR/sample-vault"
-echo "  To point at your own vault, edit start-local.sh and set VAULT_ROOT,"
-echo "  or set VAULT_ROOT in your shell before launching."
+echo "  The code now lives inside the app. This cloned folder is just a"
+echo "  staging copy - you can delete it. Updates happen in-app via"
+echo "  Settings -> 'update + restart'."
 echo ""
 echo "─────────────────────────────────────────────"
 echo ""

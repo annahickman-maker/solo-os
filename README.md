@@ -41,17 +41,24 @@ You need four things first:
 curl -fsSL https://raw.githubusercontent.com/annahickman-maker/solo-os/main/install.sh | bash
 ```
 
-This installs Node and the Claude CLI if you don't have them, downloads the dashboard, builds the app, and opens it. It is also the **reinstall** command - run it again anytime to get a clean, up-to-date copy (your old copy goes to the Trash, recoverable).
+This installs Node and the Claude CLI if you don't have them, downloads the dashboard, installs the code **inside `/Applications/Solo OS.app`**, seeds your vault at **`~/Desktop/Solo OS`**, and opens it.
+
+**Two folders, two jobs:**
+
+- **Code** lives inside `/Applications/Solo OS.app` - self-contained and off iCloud, which keeps it fast and stable. The app's update button refreshes it.
+- **Your vault** lives at `~/Desktop/Solo OS` - your data, in plain markdown + JSON. Point Claude Code at this folder to work in it.
+
+The installer is also the **reinstall** command - run it again anytime to get a clean, up-to-date copy of the code. A reinstall **never touches your `~/Desktop/Solo OS` vault**; only the app's code is refreshed. (Already a member from the old layout at `~/Desktop/solo-os`? The installer migrates you automatically: it preserves your vault to `~/Desktop/Solo OS` and moves the old folder to the Trash.)
 
 **The manual way**, if you'd rather do each step yourself:
 
 ```bash
-git clone https://github.com/annahickman-maker/solo-os.git ~/Desktop/solo-os
-cd ~/Desktop/solo-os
+git clone https://github.com/annahickman-maker/solo-os.git ~/solo-os-src
+cd ~/solo-os-src
 ./setup.sh
 ```
 
-The setup script runs `npm install` in three sub-folders, verifies your Claude CLI is set up, and builds **Solo OS.app** into your `/Applications/` folder with a custom icon. Double-click it (or hit ⌘-space and type "Solo OS") to launch.
+`setup.sh` seeds your vault at `~/Desktop/Solo OS` (first run only), then installs the code into **Solo OS.app** in `/Applications/` with a custom icon. The folder you cloned into is just a staging copy - you can delete it afterwards. Launch the app by double-clicking it (or hit ⌘-space and type "Solo OS").
 
 The first launch takes ~10 seconds to spin up the three services. Then Chrome opens to http://localhost:5174. Password is `dev`.
 
@@ -61,23 +68,25 @@ The first launch takes ~10 seconds to spin up the three services. Then Chrome op
 
 Double-click Solo OS in your Dock or Applications folder. Browser opens. Use the dashboard. Close the tab when you're done; the services keep running until you restart your Mac.
 
-The dashboard opens fast because it serves a pre-built version. If you use Claude Code to change the dashboard's own code, your change is picked up automatically the next time you launch (a quick rebuild, only when something changed). If you want to actively iterate on the code with live reload, launch in dev mode:
+The dashboard opens fast because it serves a pre-built version. If you use Claude Code to change the dashboard's own code, your change is picked up automatically the next time you launch (a quick rebuild, only when something changed). If you want to actively iterate on the code with live reload, launch in dev mode (the code lives inside the app):
 
 ```bash
-DEV_MODE=1 ./start-local.sh
+DEV_MODE=1 "/Applications/Solo OS.app/Contents/Resources/app/start-local.sh"
 ```
 
-## Point at your own vault
+## Your vault
 
-By default the dashboard uses the bundled `sample-vault/`. To use your own:
+By default the dashboard reads and writes your vault at **`~/Desktop/Solo OS`** (created for you on first install, seeded with the starter files). Everything in it is plain markdown + JSON - point Claude Code at that folder to work in it.
+
+The 6 `01_Core/core_*.md` files are the most important - drop yours in and the dashboard auto-extracts your brand slots, avatars, POVs, journey timeline, offer rungs, and wins the first time you open it. This takes ~90 seconds. Reputation and Offer pages populate immediately after.
+
+To point at a different vault instead:
 
 ```bash
 VAULT_ROOT="/path/to/your/vault" open "/Applications/Solo OS.app"
 ```
 
-Or edit the default in `start-local.sh`.
-
-Your vault should follow the structure under `sample-vault/`. The 6 `01_Core/core_*.md` files are the most important - drop yours in and the dashboard auto-extracts your brand slots, avatars, POVs, journey timeline, offer rungs, and wins the first time you open it. This takes ~90 seconds. Reputation and Offer pages populate immediately after.
+The vault lives on your Desktop (not inside the app) on purpose: it's plain text with no git and low churn, so iCloud syncing it is fine - and keeping it out of the app means a reinstall can never lose your data.
 
 ## What you get from this repo vs. what you get from SS
 
@@ -97,14 +106,16 @@ The dashboard is a smart workspace. SS is what makes it work for your specific b
 
 ## Updates
 
-When I ship improvements:
+When I ship improvements, open **Settings** in the dashboard and click **"update + restart"**. It pulls the latest code (inside the app) and restarts the services for you. You need a current Solopreneur Systems membership key for updates to run.
+
+If you'd rather update from the terminal:
 
 ```bash
-cd ~/Desktop/solo-os
+cd "/Applications/Solo OS.app/Contents/Resources/app"
 git pull
 ```
 
-Your vault (outside this repo) is never touched.
+Your vault at `~/Desktop/Solo OS` is never touched by an update or a reinstall.
 
 ## Troubleshooting
 
@@ -116,7 +127,7 @@ Your vault (outside this repo) is never touched.
 curl -fsSL https://raw.githubusercontent.com/annahickman-maker/solo-os/main/install.sh | bash
 ```
 
-It stops the old copy, moves it to the Trash, downloads a fresh one, and rebuilds the app. To see the raw logs instead, double-click `start-local.sh` in the cloned repo.
+It refreshes the app's code and rebuilds the launcher, and leaves your `~/Desktop/Solo OS` vault untouched. To see the raw logs instead, check `/tmp/solo-os-*.log`.
 
 **Extraction never finishes.** Check `/tmp/solo-os-server.log` and `/tmp/solo-os-claude-bridge.log` for errors. Almost always: `claude auth login` hasn't been run.
 
@@ -125,17 +136,24 @@ It stops the old copy, moves it to the Trash, downloads a fresh one, and rebuild
 ## What's in here
 
 ```
-server/         Hono backend that reads + writes the vault
-frontend/       Vite + React dashboard UI
-claude-bridge/  Tiny HTTP service that spawns `claude -p`
-sample-vault/   Example vault - default VAULT_ROOT
-setup.sh        One-time installer (npm install + build the .app)
-start-local.sh  Supervised launcher for all three services
-AppIcon.icns    Branded macOS app icon
-CLAUDE.md       Architecture guide for anyone modifying the dashboard
-DEPLOY.md       Detailed setup guide
-WINDOWS.md      Manual install steps for Windows
+server/                Hono backend that reads + writes the vault
+frontend/              Vite + React dashboard UI
+claude-bridge/         Tiny HTTP service that spawns `claude -p`
+sample-vault/          Starter vault - seeds ~/Desktop/Solo OS on first install
+install.sh             One-line installer / reinstaller (curl | bash)
+setup.sh               Manual setup from a clone
+build-dashboard-app.sh Installs the code into /Applications/Solo OS.app
+start-local.sh         Supervised launcher for all three services
+restart.sh             Stops + relaunches this install (the in-app update button)
+AppIcon.icns           Branded macOS app icon
+CLAUDE.md              Architecture guide for anyone modifying the dashboard
+DEPLOY.md              Detailed setup guide
+WINDOWS.md             Manual install steps for Windows
 ```
+
+After install, the code lives inside the app at
+`/Applications/Solo OS.app/Contents/Resources/app/`, and your data lives in
+`~/Desktop/Solo OS/`.
 
 ## License + maintenance
 

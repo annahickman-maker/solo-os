@@ -23,6 +23,22 @@ import * as os from 'node:os';
 const VERIFY_URL = process.env.MEMBERSHIP_VERIFY_URL || 'https://annahickman.com/verify-key';
 const TOKEN_FILE = path.join(os.homedir(), '.solo-os', 'membership.json');
 const RECHECK_AFTER_SECONDS = 30 * 24 * 60 * 60; // 30 days. Token TTL from the worker is 32 days so a same-key re-check refreshes before expiry.
+// Hard ceiling on the verify-key network call. Without it a hung connection
+// (captive wifi, DNS black hole, server stall) would leave the UI stuck on
+// "checking key" forever. On timeout the fetch aborts and the caller's
+// existing catch handles it: verifyKey reports a clear error, silentRecheck
+// falls back to the cached state so an offline user is never locked out.
+const VERIFY_TIMEOUT_MS = 10_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), VERIFY_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export interface MembershipToken {
   key: string;
@@ -100,7 +116,7 @@ export async function verifyKey(rawKey: string): Promise<MembershipState> {
 
   let payload: any;
   try {
-    const res = await fetch(VERIFY_URL, {
+    const res = await fetchWithTimeout(VERIFY_URL, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ key }),
@@ -145,7 +161,7 @@ export async function silentRecheck(): Promise<MembershipState> {
   const token = readToken();
   if (!token) return getCurrentState();
   try {
-    const res = await fetch(VERIFY_URL, {
+    const res = await fetchWithTimeout(VERIFY_URL, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ key: token.key }),

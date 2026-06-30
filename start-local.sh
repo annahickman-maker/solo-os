@@ -30,9 +30,38 @@ export PATH="${NVM_BIN:+$NVM_BIN:}/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
 
 # Vault root the server reads/writes. Override with the VAULT_ROOT env var
 # (set it before running this script) to point at a different vault folder.
-# Default is the bundled sample-vault sitting next to this script.
-VAULT_ROOT_DEFAULT="$DASH_DIR/sample-vault"
+# Default: your real vault at ~/Desktop/Solo OS (seeded by the installer). If
+# that doesn't exist (e.g. a bare clone), fall back to the bundled sample-vault.
+if [ -d "$HOME/Desktop/Solo OS" ]; then
+  VAULT_ROOT_DEFAULT="$HOME/Desktop/Solo OS"
+else
+  VAULT_ROOT_DEFAULT="$DASH_DIR/sample-vault"
+fi
 VAULT_ROOT="${VAULT_ROOT:-$VAULT_ROOT_DEFAULT}"
+
+# ─── iCloud guard ─────────────────────────────────────────────────────────
+# The CODE must NOT run from an iCloud-synced folder. iCloud syncing a git repo
+# + node_modules causes slowness, duplicate " 2" files, and crashes. The
+# installer puts the code inside /Applications/Solo OS.app (off iCloud); this
+# warns if it somehow ends up running from a synced location instead.
+ICLOUD_ROOT="$HOME/Library/Mobile Documents"
+icloud_code=0
+if [[ "$DASH_DIR" == "$ICLOUD_ROOT"* ]]; then
+  icloud_code=1
+elif [ -d "$ICLOUD_ROOT/com~apple~CloudDocs/Desktop" ] && \
+     { [[ "$DASH_DIR" == "$HOME/Desktop/"* ]] || [[ "$DASH_DIR" == "$HOME/Documents/"* ]]; }; then
+  # Desktop & Documents iCloud sync is ON and the code sits under one of them.
+  icloud_code=1
+fi
+if [ "$icloud_code" = 1 ]; then
+  echo ""
+  echo "  ⚠  WARNING: Solo OS code is running from an iCloud-synced folder:"
+  echo "       $DASH_DIR"
+  echo "     iCloud syncing the code causes slowness, duplicate files, and crashes."
+  echo "     Reinstall to move the code into the app (off iCloud):"
+  echo "       curl -fsSL https://raw.githubusercontent.com/annahickman-maker/solo-os/main/install.sh | bash"
+  echo ""
+fi
 
 # ─── Single-instance guard ────────────────────────────────────────────────
 LOCK_FILE="$LOG_DIR/solo-os-launcher.pid"
