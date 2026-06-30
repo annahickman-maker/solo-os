@@ -96,6 +96,9 @@ function MembershipCard({ onChanged }: { onChanged: () => void }) {
     queryFn: api.membershipStatus,
   });
   const [restarting, setRestarting] = useState(false);
+  // Set when the user presses update + restart without a valid key, so the
+  // red hint appears on press (feedback) rather than sitting there always-on.
+  const [updateBlocked, setUpdateBlocked] = useState(false);
   const updateSoloOs = useMutation({
     mutationFn: api.updateSoloOs,
     onSuccess: (res) => {
@@ -247,9 +250,15 @@ function MembershipCard({ onChanged }: { onChanged: () => void }) {
         <div className="row" style={{ gap: 'var(--space-3)' }}>
           <button
             className="btn"
-            onClick={() => updateSoloOs.mutate()}
-            disabled={updateSoloOs.isPending || restarting || !membershipValid}
-            title={!membershipValid ? 'enter a valid SS key first' : undefined}
+            onClick={() => {
+              if (!membershipValid) {
+                setUpdateBlocked(true);
+                return;
+              }
+              setUpdateBlocked(false);
+              updateSoloOs.mutate();
+            }}
+            disabled={updateSoloOs.isPending || restarting}
           >
             {updateSoloOs.isPending ? 'updating…' : restarting ? 'restarting…' : 'update + restart'}
           </button>
@@ -259,7 +268,7 @@ function MembershipCard({ onChanged }: { onChanged: () => void }) {
         </div>
       )}
 
-      {!showInput && !membershipValid && !status.isLoading && (
+      {!showInput && updateBlocked && !membershipValid && (
         <p style={{ margin: 0, fontSize: 'var(--body-sm)', color: 'var(--danger)', fontWeight: 500 }}>
           enter your SS key to enable updates - the current key is pinned in the SS community.
         </p>
