@@ -1,8 +1,8 @@
 /**
- * Update Solo OS - runs `git pull` in the dashboard repo root so members
- * (and the creator's live install) can pull the latest code from GitHub straight
- * from the Settings page. No database; reports stdout/stderr back to the
- * UI so the user sees what happened.
+ * Update Solo OS - runs `git pull` in the dashboard repo root so each install
+ * can pull the latest code from GitHub straight from the Settings page.
+ * No database; reports stdout/stderr back to the UI so the user sees what
+ * happened.
  */
 
 import { Hono } from 'hono';
@@ -72,7 +72,7 @@ app.post('/pull', async (c) => {
         alreadyUpToDate: false,
         output:
           state.state === 'unverified'
-            ? 'enter your the offer key in settings to enable updates.'
+            ? 'enter your solopreneur systems key in settings to enable updates.'
             : state.state === 'expired'
             ? 'your ss key has expired. open settings and paste the current key to keep updating.'
             : 'reason' in state
@@ -86,7 +86,20 @@ app.post('/pull', async (c) => {
   }
   const cwd = repoRoot();
   const result = await runGitPull(cwd);
-  return c.json({ ...result, membership_state: 'valid' }, result.ok ? 200 : 500);
+  // Optional one-click restart: when asked and the pull succeeded, fire
+  // restart.sh DETACHED so it outlives this server process. The frontend then
+  // polls until the stack is back and reloads. Restart on any successful pull
+  // (even "already up to date") so the running build is never stale.
+  let restarting = false;
+  if (result.ok) {
+    const body = (await c.req.json().catch(() => ({}))) as { restart?: boolean };
+    if (body?.restart) {
+      const script = path.join(cwd, 'restart.sh');
+      spawn('bash', [script, cwd], { detached: true, stdio: 'ignore' }).unref();
+      restarting = true;
+    }
+  }
+  return c.json({ ...result, restarting, membership_state: 'valid' }, result.ok ? 200 : 500);
 });
 
 export default app;

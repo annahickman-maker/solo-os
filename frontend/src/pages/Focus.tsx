@@ -41,14 +41,19 @@ export function Focus() {
   const [editingMembers, setEditingMembers] = useState(false);
   const [membersDraft, setMembersDraft] = useState('');
   const updateMembersMutation = useMutation({
-    mutationFn: (newCount: number) =>
-      api.updateSettings({
+    mutationFn: async ({ newCount, goalId }: { newCount: number; goalId: string | null }) => {
+      await api.updateSettings({
         ss_members: newCount,
         // Auto-calc MRR at the default $47/mo price point. If the creator later wants
         // separate control she can split this out, but for now keeping them in
         // sync is the desired behaviour she asked for.
         ss_mrr_usd: newCount * 47,
-      }),
+      });
+      // Also write the goal's current value so the tracker moves directly. The
+      // offer-name heuristic only fires when the goal title names the offer; a
+      // generic starter goal won't match, so set it explicitly here.
+      if (goalId) await api.updateGoal(goalId, { current_value: newCount });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['focus'] });
       qc.invalidateQueries({ queryKey: ['metrics'] });
@@ -62,7 +67,7 @@ export function Focus() {
       setEditingMembers(false);
       return;
     }
-    updateMembersMutation.mutate(parsed);
+    updateMembersMutation.mutate({ newCount: parsed, goalId: goal?.id ?? null });
   };
   // Secondary fetches: pipeline for the YouTube publish grid, metrics for
   // the SS MRR figure. Both already power other pages so the responses are

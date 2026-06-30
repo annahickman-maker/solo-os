@@ -4,24 +4,38 @@ import { api } from '../api';
 import type { PipelineResponse } from '../api';
 import { StatusPill } from '../components/StatusPill';
 import { ModuleDetail } from '../components/ModuleDetail';
+import { SectionHeading } from '../components/SectionHeading';
+import { PageTabs } from '../components/PageTabs';
+import { createButtonStyle, SURFACE_LIFT } from '../lib/ui';
 
 export function Projects() {
   const qc = useQueryClient();
   const [openModuleId, setOpenModuleId] = useState<string | null>(null);
+  // True only for an item we just created via "+ add", so the detail panel
+  // focuses + selects the placeholder name on open.
+  const [justCreated, setJustCreated] = useState(false);
   const [tab, setTab] = useState<'projects' | 'clients'>('projects');
   const { data, isLoading, error } = useQuery<PipelineResponse>({
     queryKey: ['pipeline'],
     queryFn: () => api.pipeline(),
   });
 
+  // Add project / client: create a blank one with a unique placeholder name and
+  // open it straight in the detail panel - no name prompt. The user renames and
+  // fills everything in the panel. The unique-name pass avoids the create route
+  // overwriting (projects) or 409-ing (clients) on a repeated default name.
   const createItem = useMutation({
     mutationFn: (kind: 'project' | 'client') => {
-      const name = window.prompt(`new ${kind} name:`);
-      if (!name || !name.trim()) return Promise.reject(new Error('cancelled'));
-      return api.createSSModule({ name: name.trim(), kind });
+      const base = kind === 'project' ? 'New project' : 'New client';
+      const existing = kind === 'project' ? data?.ss_modules ?? [] : data?.clients ?? [];
+      const taken = new Set(existing.map((m) => m.name));
+      let name = base;
+      for (let n = 2; taken.has(name); n++) name = `${base} ${n}`;
+      return api.createSSModule({ name, kind });
     },
     onSuccess: (m) => {
       qc.invalidateQueries({ queryKey: ['pipeline'] });
+      setJustCreated(true);
       setOpenModuleId(m.id);
     },
   });
@@ -34,68 +48,39 @@ export function Projects() {
   const clients = data?.clients ?? [];
 
   const items = tab === 'projects' ? modules : clients;
-  const heading =
-    tab === 'projects' ? `${modules.length} in build` : `${clients.length} client${clients.length === 1 ? '' : 's'}`;
   const tone = tab === 'projects' ? 'accent' : 'default';
 
   return (
-    <div className="stack" style={{ gap: 'var(--space-8)' }}>
-      <header className="page-header">
-        <span className="eyebrow">projects</span>
-        <h1 className="h2">projects + clients</h1>
-      </header>
-
-      <div
-        style={{
-          display: 'inline-flex',
-          border: '1px solid var(--hairline)',
-          borderRadius: 'var(--radius-pill)',
-          padding: 4,
-          alignSelf: 'flex-start',
-        }}
-      >
-        {(['projects', 'clients'] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            style={{
-              border: 'none',
-              padding: '8px 20px',
-              borderRadius: 'var(--radius-pill)',
-              cursor: 'pointer',
-              background: tab === t ? 'var(--ink)' : 'transparent',
-              color: tab === t ? 'var(--bg)' : 'var(--muted)',
-              fontSize: 'var(--body-sm)',
-              fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: '0.12em',
-              transition: 'background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out)',
-            }}
-          >
-            {t}
-            <span style={{ marginLeft: 8, opacity: 0.7, fontVariantNumeric: 'tabular-nums' }}>
-              {t === 'projects' ? modules.length : clients.length}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      <section className="section" style={{ marginTop: 0 }}>
-        <header className="section__header">
-          <div className="section__title">
-            <span className="eyebrow">{tab === 'projects' ? 'projects' : 'active engagements'}</span>
-            <h3 className="h3">{heading}</h3>
-          </div>
+    <div className="stack" style={{ gap: 'var(--space-6)' }}>
+      {/* Projects / Clients file-folder page-tabs with the contextual + add
+          button on the right. No page title - the tabs are the header. */}
+      <PageTabs
+        value={tab}
+        onChange={(v) => setTab(v as 'projects' | 'clients')}
+        ariaLabel="projects or clients"
+        options={[
+          { value: 'projects', label: 'projects', count: modules.length },
+          { value: 'clients', label: 'clients', count: clients.length },
+        ]}
+        rightActions={
           <button
             type="button"
             onClick={() => createItem.mutate(tab === 'projects' ? 'project' : 'client')}
             disabled={createItem.isPending}
-            className="btn btn--primary"
+            style={{ ...createButtonStyle, ...(createItem.isPending ? { opacity: 0.6, cursor: 'wait' } : {}) }}
           >
             {createItem.isPending ? 'adding' : `+ add ${tab === 'projects' ? 'project' : 'client'}`}
           </button>
-        </header>
+        }
+      />
+
+      <section className="section" style={{ marginTop: 0 }}>
+        <div style={{ marginBottom: 'var(--space-5)' }}>
+          <SectionHeading
+            label={tab === 'projects' ? 'the offer' : 'active engagements'}
+            count={items.length}
+          />
+        </div>
         {isLoading ? (
           <div className="empty">loading</div>
         ) : items.length === 0 ? (
@@ -106,7 +91,7 @@ export function Projects() {
               <button
                 key={m.id}
                 type="button"
-                onClick={() => setOpenModuleId(m.id)}
+                onClick={() => { setJustCreated(false); setOpenModuleId(m.id); }}
                 style={{
                   background: 'var(--surface)',
                   border: '1px solid var(--hairline)',
@@ -118,6 +103,7 @@ export function Projects() {
                   alignItems: 'stretch',
                   textAlign: 'left',
                   cursor: 'pointer',
+                  boxShadow: SURFACE_LIFT,
                   transition: 'border-color var(--duration-fast) var(--ease-out)',
                 }}
                 onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.18)'; }}
@@ -144,7 +130,11 @@ export function Projects() {
         )}
       </section>
 
-      <ModuleDetail moduleId={openModuleId} onClose={() => setOpenModuleId(null)} />
+      <ModuleDetail
+        moduleId={openModuleId}
+        autofocusName={justCreated}
+        onClose={() => { setOpenModuleId(null); setJustCreated(false); }}
+      />
     </div>
   );
 }

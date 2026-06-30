@@ -1178,8 +1178,9 @@ export const api = {
       alreadyUpToDate: boolean;
       output: string;
       exitCode: number;
+      restarting?: boolean;
       membership_state?: 'valid' | 'unverified' | 'expired' | 'rejected';
-    }>('/api/update-solo-os/pull', { method: 'POST' }),
+    }>('/api/update-solo-os/pull', { method: 'POST', body: JSON.stringify({ restart: true }) }),
 
   // SS membership-key gate. The key validates the user against the SS
   // community for as long as their membership is active. The local token

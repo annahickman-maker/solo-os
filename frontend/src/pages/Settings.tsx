@@ -95,7 +95,40 @@ function MembershipCard({ onChanged }: { onChanged: () => void }) {
     queryKey: ['membership-status'],
     queryFn: api.membershipStatus,
   });
-  const updateSoloOs = useMutation({ mutationFn: api.updateSoloOs });
+  const [restarting, setRestarting] = useState(false);
+  const updateSoloOs = useMutation({
+    mutationFn: api.updateSoloOs,
+    onSuccess: (res) => {
+      // The server restarts itself after a successful pull. Poll a real route
+      // (proves the proxy AND the server are back), then hard-reload to pick up
+      // the fresh build. Generous timeout - a preview build takes a bit.
+      if (res.ok && res.restarting) {
+        setRestarting(true);
+        const start = Date.now();
+        const password = localStorage.getItem('dashboard_password') ?? '';
+        const tick = async () => {
+          try {
+            const r = await fetch('/api/tasks', {
+              headers: { 'X-Dashboard-Password': password },
+              cache: 'no-store',
+            });
+            if (r.ok) {
+              window.location.reload();
+              return;
+            }
+          } catch {
+            // still down
+          }
+          if (Date.now() - start > 90_000) {
+            setRestarting(false);
+            return;
+          }
+          setTimeout(tick, 1500);
+        };
+        setTimeout(tick, 4000);
+      }
+    },
+  });
 
   const [showInput, setShowInput] = useState(false);
   const [value, setValue] = useState('');
@@ -133,14 +166,16 @@ function MembershipCard({ onChanged }: { onChanged: () => void }) {
     !!updateResult && updateResult.ok === false && updateResult.membership_state && updateResult.membership_state !== 'valid';
 
   let updateStatusLine: string | null = null;
-  if (updateSoloOs.isPending) {
-    updateStatusLine = 'checking github';
+  if (restarting) {
+    updateStatusLine = 'restarting to apply - the page reloads itself when it is back.';
+  } else if (updateSoloOs.isPending) {
+    updateStatusLine = 'checking github…';
   } else if (updateErrored) {
     updateStatusLine = updateErrorMessage ?? updateResult?.output ?? 'update failed';
   } else if (updateResult?.alreadyUpToDate) {
-    updateStatusLine = 'already up to date';
+    updateStatusLine = 'already up to date - restarting to refresh…';
   } else if (updateResult?.ok) {
-    updateStatusLine = 'updated. restart solo OS to load the new code.';
+    updateStatusLine = 'updated - restarting…';
   }
 
   const membershipValid = status.data?.state === 'valid';
@@ -213,10 +248,10 @@ function MembershipCard({ onChanged }: { onChanged: () => void }) {
           <button
             className="btn"
             onClick={() => updateSoloOs.mutate()}
-            disabled={updateSoloOs.isPending || !membershipValid}
+            disabled={updateSoloOs.isPending || restarting || !membershipValid}
             title={!membershipValid ? 'enter a valid SS key first' : undefined}
           >
-            {updateSoloOs.isPending ? 'checking…' : 'check for updates'}
+            {updateSoloOs.isPending ? 'updating…' : restarting ? 'restarting…' : 'update + restart'}
           </button>
           <button className="btn btn--ghost" onClick={() => setShowInput(true)}>
             {membershipValid ? 'update key' : 'enter key'}
