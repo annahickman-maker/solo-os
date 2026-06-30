@@ -31,6 +31,14 @@ export function Chat() {
     setTimeout(() => inputRef.current?.focus(), 60);
   }, [currentId]);
 
+  // Auto-grow the composer as you type, up to a cap, then it scrolls.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+  }, [draft]);
+
   // Tick once a second while a turn is running, so the "working Ns" timer counts.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -146,7 +154,9 @@ export function Chat() {
           style={{
             flex: 1,
             resize: 'none',
+            minHeight: 47,
             maxHeight: 200,
+            overflowY: 'auto',
             background: 'var(--surface)',
             border: '1px solid var(--hairline)',
             borderRadius: 'var(--radius-md)',
