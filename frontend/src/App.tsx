@@ -27,6 +27,7 @@ import { TeleprompterProvider } from './components/TeleprompterProvider';
 import { ChatProvider } from './components/ChatProvider';
 import { SkillRunProvider } from './components/SkillRunProvider';
 import { FirstRunGate } from './components/FirstRunGate';
+import { features } from './features/registry';
 
 function handleAuthError(err: unknown) {
   if (err instanceof UnauthorizedError) {
@@ -80,6 +81,11 @@ function Shell() {
             <Route path="/vault" element={<Archive />} />
             <Route path="/archive" element={<Archive />} />
             <Route path="/settings" element={<Settings />} />
+            {/* Auto-discovered features (features/* + lab/*). Additive - the
+                14 central routes above stay centrally registered. */}
+            {features.map((f) => (
+              <Route key={f.path} path={f.path} element={<f.component />} />
+            ))}
           </Routes>
         </div>
       </main>

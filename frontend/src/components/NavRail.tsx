@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { SURFACE_LIFT } from '../lib/ui';
+import { features } from '../features/registry';
 
 // Two groups separated by a hairline. Top group = "where I am right now"
 // (today, focus). Bottom group = everything else - the systems that move
@@ -21,6 +22,13 @@ const REST_ITEMS = [
   { to: '/inbox', label: 'inbox' },
   // { to: '/metrics', label: 'metrics' }, // parked - re-add when she comes back to it
 ];
+
+// Auto-discovered features (features/* + lab/*) append to the nav. A feature
+// with group 'top' joins today/focus; everything else joins REST (and so
+// participates in the collapse-into-"more" logic below).
+const FEATURE_NAV = features.map((f) => ({ to: f.path, label: f.navLabel, group: f.group ?? 'rest' }));
+const TOP = [...TOP_ITEMS, ...FEATURE_NAV.filter((f) => f.group === 'top').map(({ to, label }) => ({ to, label }))];
+const REST = [...REST_ITEMS, ...FEATURE_NAV.filter((f) => f.group !== 'top').map(({ to, label }) => ({ to, label }))];
 
 function NavItem({ to, label, end, onClick }: { to: string; label: string; end?: boolean; onClick?: () => void }) {
   return (
@@ -124,7 +132,7 @@ export function NavRail() {
   const [collapse, setCollapse] = useState(0);
   const [, setTick] = useState(0);
   const [moreOpen, setMoreOpen] = useState(false);
-  const MAX = REST_ITEMS.length + 1;
+  const MAX = REST.length + 1;
 
   // Converge: while the footer (chats + more + settings) spills past the bottom
   // of the rail's 100vh box, push one more thing into "more". Runs after every
@@ -185,8 +193,8 @@ export function NavRail() {
   }, [moreOpen]);
 
   const hiddenRestCount = Math.max(0, collapse - 1);
-  const visibleRest = REST_ITEMS.slice(0, REST_ITEMS.length - hiddenRestCount);
-  const hiddenRest = REST_ITEMS.slice(REST_ITEMS.length - hiddenRestCount);
+  const visibleRest = REST.slice(0, REST.length - hiddenRestCount);
+  const hiddenRest = REST.slice(REST.length - hiddenRestCount);
   const chatsInMore = collapse >= 1;
   const hasMore = chatsInMore; // anything collapsed -> show the more button
 
@@ -199,8 +207,8 @@ export function NavRail() {
         </div>
         <nav>
           <ul className="nav-rail__list">
-            {TOP_ITEMS.map((it) => (
-              <NavItem key={it.to} to={it.to} label={it.label} end={it.end} />
+            {TOP.map((it) => (
+              <NavItem key={it.to} to={it.to} label={it.label} end={(it as { end?: boolean }).end} />
             ))}
           </ul>
           {/* Thin hairline separating "today/focus" from the rest of the nav. */}

@@ -113,7 +113,7 @@ function ProfileOverview() {
   const showExtractionBanner = data?.extraction_status === 'error' && data?.extraction_error;
 
   return (
-    <div className="stack" style={{ gap: 'var(--space-7)' }}>
+    <div className="stack" style={{ gap: 'var(--space-5)' }}>
       <style>{PHASE_CARD_CSS}</style>
 
       {showBridgeBanner && (
@@ -179,7 +179,7 @@ function ProfileOverview() {
       {isLoading ? (
         <div className="empty">loading</div>
       ) : (
-        <section className="stack" style={{ gap: 'var(--space-4)' }}>
+        <section className="stack" style={{ gap: 'var(--space-4)', marginTop: 'var(--space-5)' }}>
           <header
             style={{
               display: 'flex',
@@ -199,7 +199,7 @@ function ProfileOverview() {
                 margin: 0,
               }}
             >
-              Onboarding phases
+              Your Core
             </h2>
             <span className="muted" style={{ fontSize: 'var(--body-sm)' }}>
               click to read

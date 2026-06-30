@@ -116,12 +116,13 @@ app.get('/', (c) => {
     (ytTargetPerWeeks > 0 ? 1 / ytTargetPerWeeks : 1);
   const shortFormPerWeek = (stateFm.short_form_per_week as number | undefined) ?? 0;
 
+  const offerName = (stateFm.offer_name as string) ?? '';
   function goalShape(g: typeof allGoals[number]) {
     const fm = g.frontmatter;
     const titleMatch = g.body.match(/^#\s+(.+?)\s*$/m);
     const title = titleMatch ? titleMatch[1]! : g.id;
     let current = fm.current_value ?? 0;
-    if (/paid members|the offer/i.test(title)) {
+    if (/paid members/i.test(title) || (offerName && title.toLowerCase().includes(offerName.toLowerCase()))) {
       current = ssMembers || current;
     }
     // Convert ISO date string to unix seconds (frontend expects number)

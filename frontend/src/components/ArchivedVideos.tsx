@@ -43,7 +43,7 @@ export function ArchivedVideos() {
         onClick={() => setOpen((o) => !o)}
         style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 'var(--body-sm)', fontWeight: 600, padding: 0 }}
       >
-        <span style={{ fontSize: 11 }}>{open ? '▾' : '▸'}</span> recover a video ({archived.length + postedByMistake.length})
+        <span style={{ fontSize: 11 }}>{open ? '▾' : '▸'}</span> archive ({archived.length + postedByMistake.length})
       </button>
 
       {open && (

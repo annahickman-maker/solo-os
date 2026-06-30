@@ -609,14 +609,14 @@ function OfferCard({
             />
             {/* The six "shape of the offer" sub-cards (avatar / pricing /
                 proof / validation / conversions / sales page) all share the
-                sleep blue and sit in a 2x3 grid. The Overall Offer Score is
+                blue and sit in a 2x3 grid. The Overall Offer Score is
                 pulled out below the grid as a full-width recovery-green bar so
                 it reads as the rollup of everything above it. */}
             <OfferSubCard
               eyebrow="pricing"
               title={rung.goal_price_label ? `goal: ${rung.goal_price_label}` : 'set a price strategy'}
               definition={pricingCardSummary(rung)}
-              color="var(--sleep)"
+              color="var(--strain)"
               score={sectionScores.pricing}
               onClick={() => setPerOfferPanel('pricing')}
             />
@@ -624,7 +624,7 @@ function OfferCard({
               eyebrow="proof"
               title="Proof"
               definition="The one-line promise this offer makes plus the proof that makes it believable."
-              color="var(--sleep)"
+              color="var(--strain)"
               score={rung.proof_section?.build_completion ?? 0}
               onClick={() => setPerOfferPanel('proof')}
             />
@@ -632,7 +632,7 @@ function OfferCard({
               eyebrow="validation"
               title={validationSection?.label ?? 'Validation'}
               definition="Where this offer is on the journey from idea to scaling, by tangible signs."
-              color="var(--sleep)"
+              color="var(--strain)"
               score={(() => {
                 const phases = rung.validation_phases ?? [];
                 const allChecks = phases.flatMap((p) => p.checks);
@@ -645,7 +645,7 @@ function OfferCard({
               eyebrow="conversions"
               title={contentCardTitle(rung)}
               definition="How traffic flows into this offer and converts at every step of the funnel."
-              color="var(--sleep)"
+              color="var(--strain)"
               score={sectionScores.content}
               onClick={() => setPerOfferPanel('content')}
             />
@@ -654,7 +654,7 @@ function OfferCard({
               eyebrow="sales page"
               title={(rung.sales_page_words ?? 0) > 0 ? `${rung.sales_page_words} words written` : 'write your sales page'}
               definition="Talk to Claude to write this offer's sales page, then read and edit it right here."
-              color="var(--sleep)"
+              color="var(--strain)"
               score={(rung.sales_page_words ?? 0) > 0 ? 1 : 0}
               onClick={() => setPerOfferPanel('salespage')}
             />
@@ -827,10 +827,10 @@ function AvatarSubCard({
   onClick?: () => void;
 }) {
   const qc = useQueryClient();
-  // Matches its 4 sleep-blue sibling sub-cards (pricing / proof /
+  // Matches its 4 blue sibling sub-cards (pricing / proof /
   // validation / conversions). Only the Overall Offer Score card uses
   // recovery green so the rollup metric stands apart visually.
-  const color = 'var(--sleep)';
+  const color = 'var(--strain)';
   const imgUrl = avatar?.image_path
     ? `/api/vault-asset/${encodeURI(avatar.image_path)}`
     : null;
@@ -1250,7 +1250,7 @@ function PerOfferSalesPagePanel({
       eyebrow="sales page"
       title={`sales page for ${rung.name || 'this offer'}`}
       subtitle="write it with Claude, then read and edit it right here. it saves to this offer, so your offer score can see it."
-      color="var(--sleep)"
+      color="var(--strain)"
       onClose={onClose}
     >
       {/* Script-a-sales-page card - styled like its Skills-page row (minus the
@@ -1487,7 +1487,7 @@ const SECTION_COLOR: Record<SectionKey, string> = {
   avatar: 'var(--hrv)',
   pricing: 'var(--strain)',
   proof: 'var(--strain)',
-  validation: 'var(--sleep)',
+  validation: 'var(--strain)',
   content: 'var(--recovery)',
 };
 
@@ -1599,7 +1599,7 @@ function PerOfferProofPanel({
       eyebrow="proof"
       title={`proof for ${rung.name || 'this offer'}`}
       subtitle="write THIS offer's specific promise, then pin the proof that makes it believable. independent of every other offer in the suite."
-      color="var(--sleep)"
+      color="var(--strain)"
       onClose={onClose}
     >
       {/* ─── The Promise (per-rung text) ─── */}
@@ -1794,13 +1794,13 @@ function PerOfferValidationPanel({
       eyebrow="validation"
       title={`has ${rung.name || 'this offer'} been validated?`}
       subtitle="5 stages from idea to scaling. each stage has tangible yes/no checks - tick what's actually true for this specific offer. independent of every other offer in the suite."
-      color="var(--sleep)"
+      color="var(--strain)"
       onClose={onClose}
     >
       <ValidationPhases
         phases={phases}
         currentPhase={currentPhase}
-        color="var(--sleep)"
+        color="var(--strain)"
         onToggle={(checkId, done) => toggleCheck.mutate({ checkId, done })}
       />
     </PanelShell>
@@ -2207,7 +2207,7 @@ function PerOfferAvatarPanel({
 }) {
   // Sleep blue to match the other per-rung section panels. Only the
   // Overall Offer Score panel keeps the recovery-green standout.
-  const color = 'var(--sleep)';
+  const color = 'var(--strain)';
   const attachedId = rung.avatar_id;
   const attached = avatars.find((a) => a.id === attachedId) ?? null;
   // When attached, default-open its editor underneath. Otherwise leave
@@ -2352,7 +2352,7 @@ function PerOfferPricingPanel({
       eyebrow="pricing · proof ladder"
       title={`how do we raise the price of ${rung.name || 'this offer'}?`}
       subtitle="track the current price, where you want it to go, the revenue + customer goals for this offer, and the plan to climb the ladder."
-      color="var(--sleep)"
+      color="var(--strain)"
       onClose={onClose}
     >
       <FieldGroup label="current price" hint="what you charge today.">

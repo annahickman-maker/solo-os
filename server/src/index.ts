@@ -55,6 +55,7 @@ import membership from './routes/membership.js';
 import zoom from './routes/zoom.js';
 import chat from './routes/chat.js';
 import nanoBanana from './routes/nanoBanana.js';
+import { mountFeatures } from './featureLoader.js';
 
 const PORT = Number(process.env.PORT ?? 8790);
 
@@ -193,6 +194,11 @@ app.route('/api/membership', membership);
 app.route('/api/zoom', zoom);
 app.route('/api/chat', chat);
 app.route('/api/nano-banana', nanoBanana);
+
+// Auto-discovered features (features/* ships, lab/* stays local). Additive -
+// mounted AFTER the central routes and after the /api/* auth middleware, so
+// discovered features inherit auth. See featureLoader.ts.
+await mountFeatures(app);
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`solo-os-dashboard-server listening on http://localhost:${info.port}`);

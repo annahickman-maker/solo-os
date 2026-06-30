@@ -93,10 +93,14 @@ export function Instagram() {
   // Pipeline lanes, driven purely by status (the lane itself shows the phase):
   //   ready to film  = queued   (scripted, needs recording)
   //   ready to edit  = filmed   (recorded, needs editing)
-  //   in-edit        = editing  (HIDDEN - the user checked it off ready-to-edit;
-  //                              it reappears in ready-to-schedule when the
-  //                              edited video file drops in the folder)
-  //   ready to schedule = ready_to_schedule (edited file landed)
+  //   ready to schedule = ready_to_schedule. Two ways a card lands here:
+  //     - folder-linked: the Descript export lands in the dropbox, the watcher
+  //       content-matches it to the card, attaches the video + generates caption
+  //       and hooks automatically.
+  //     - no folder: the user hits "edited" (finish-edit), which advances the
+  //       card here and generates caption + hooks from the script - no video.
+  //   editing = legacy in-edit status; nothing new enters it (finish-edit skips
+  //     it). Still rendered in ready-to-schedule if any old items remain.
   const rawIdeas = items.filter((i) => i.status === 'idea');
   const readyToFilm = items.filter((i) => i.status === 'queued');
   const readyToEdit = items.filter((i) => i.status === 'filmed');
@@ -104,6 +108,7 @@ export function Instagram() {
   const scheduled = items.filter((i) => i.status === 'scheduled');
   const posted = items.filter((i) => i.status === 'posted');
   const failed = items.filter((i) => i.status === 'failed');
+  const archived = items.filter((i) => i.status === 'dismissed');
   const openItem = items.find((i) => i.id === openId) ?? null;
 
   return (
@@ -246,6 +251,10 @@ export function Instagram() {
           {/* Posted is a TABLE at the bottom, not a card lane (the archive).
               Always shown, regardless of the stage filter. */}
           <PostedTable items={posted} onOpen={setOpenId} />
+
+          {/* Archived reels: a small toggle at the very bottom, mirroring the
+              YouTube page's archive toggle. Out of the stage sorting entirely. */}
+          <ArchivedReels items={archived} onOpen={setOpenId} />
         </>
       )}
 
@@ -684,7 +693,7 @@ function ReadyToEditLane({ items }: { items: IgQueueItem[] }) {
 function EditGroupCard({ title, subtitle, clips, onOpen }: { title: string; subtitle: string; clips: IgQueueItem[]; onOpen: () => void }) {
   const qc = useQueryClient();
   const markEdited = useMutation({
-    mutationFn: () => Promise.all(clips.map((c) => api.updateIgItem(c.id, { status: 'editing' }))),
+    mutationFn: () => Promise.all(clips.map((c) => api.finishIgEdit(c.id))),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['ig-queue'] });
       qc.invalidateQueries({ queryKey: ['ig-output'] });
@@ -731,7 +740,7 @@ function EditGroupCard({ title, subtitle, clips, onOpen }: { title: string; subt
 function GroupEditPanel({ mode, title, subtitle, clips, onClose }: { mode: 'clip' | 'film'; title: string; subtitle: string; clips: IgQueueItem[]; onClose: () => void }) {
   const qc = useQueryClient();
   const markEdited = useMutation({
-    mutationFn: () => Promise.all(clips.map((c) => api.updateIgItem(c.id, { status: 'editing' }))),
+    mutationFn: () => Promise.all(clips.map((c) => api.finishIgEdit(c.id))),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['ig-queue'] });
       qc.invalidateQueries({ queryKey: ['ig-output'] });
@@ -780,7 +789,7 @@ function EditClipCard({ clip, index, total, mode }: { clip: IgQueueItem; index: 
     onSuccess: () => qc.invalidateQueries({ queryKey: ['ig-queue'] }),
   });
   const markDone = useMutation({
-    mutationFn: () => api.updateIgItem(clip.id, { status: 'editing' }),
+    mutationFn: () => api.finishIgEdit(clip.id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['ig-queue'] });
       qc.invalidateQueries({ queryKey: ['ig-output'] });
@@ -863,6 +872,9 @@ function EditClipCard({ clip, index, total, mode }: { clip: IgQueueItem; index: 
             </details>
           )
         )}
+        <div style={{ marginTop: 'var(--space-3)', paddingTop: 'var(--space-3)', borderTop: '1px solid var(--hairline)' }}>
+          <ArchiveDeleteRow item={clip} />
+        </div>
       </div>
     </section>
   );
@@ -1394,6 +1406,134 @@ function toScriptBeats(s: string): string {
   return t.replace(/([.!?])\s+(?=["'A-Z])/g, '$1\n\n');
 }
 
+// Archive (recoverable) + Delete (permanent) - the one button pair on every
+// reel card, in every stage. Archive sets status 'dismissed' and the card moves
+// to the "archived" tab, where this same row shows "restore" instead. Delete
+// hard-removes after a confirm. Used by ReelPanel and each ready-to-edit clip.
+function ArchiveDeleteRow({ item, onDone }: { item: IgQueueItem; onDone?: () => void }) {
+  const qc = useQueryClient();
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['ig-queue'] });
+    qc.invalidateQueries({ queryKey: ['ig-output'] });
+  };
+  const archive = useMutation({
+    mutationFn: () => api.updateIgItem(item.id, { status: 'dismissed' }),
+    onSuccess: () => { invalidate(); onDone?.(); },
+  });
+  const restore = useMutation({
+    mutationFn: () => api.updateIgItem(item.id, { status: item.archived_from ?? 'idea' }),
+    onSuccess: () => { invalidate(); onDone?.(); },
+  });
+  const remove = useMutation({
+    mutationFn: () => api.deleteIgItem(item.id),
+    onSuccess: () => { invalidate(); onDone?.(); },
+  });
+  const archived = item.status === 'dismissed';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+      {archived ? (
+        <button
+          type="button"
+          className="rep-btn rep-btn--ghost"
+          onClick={() => restore.mutate()}
+          disabled={restore.isPending}
+          title="restore this reel to the stage it was in before archiving"
+        >
+          {restore.isPending ? '...' : 'restore'}
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="rep-btn rep-btn--ghost"
+          onClick={() => archive.mutate()}
+          disabled={archive.isPending}
+          title="archive this reel - recoverable from the archived tab"
+        >
+          {archive.isPending ? '...' : 'archive'}
+        </button>
+      )}
+      <button
+        type="button"
+        className="rep-btn rep-btn--ghost"
+        style={{ marginLeft: 'auto', color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.3)' }}
+        onClick={() => { if (confirm('Delete this reel permanently? This cannot be undone.')) remove.mutate(); }}
+        disabled={remove.isPending}
+      >
+        {remove.isPending ? '...' : 'delete'}
+      </button>
+    </div>
+  );
+}
+
+// Archived reels - a small collapsed toggle at the very bottom of the page,
+// mirroring the YouTube ArchivedVideos design. Out of the stage sorting; archive
+// parks a reel here (recoverable). Restore puts it back in the stage it came
+// from; delete removes it for good. Returns null when nothing is archived.
+function ArchivedReels({ items, onOpen }: { items: IgQueueItem[]; onOpen: (id: string) => void }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['ig-queue'] });
+    qc.invalidateQueries({ queryKey: ['ig-output'] });
+  };
+  const restore = useMutation({
+    mutationFn: (it: IgQueueItem) => api.updateIgItem(it.id, { status: it.archived_from ?? 'idea' }),
+    onSuccess: invalidate,
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => api.deleteIgItem(id),
+    onSuccess: invalidate,
+  });
+  if (items.length === 0) return null;
+  return (
+    <div style={{ marginTop: 'var(--space-5)', borderTop: '1px solid var(--hairline)', paddingTop: 'var(--space-4)' }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 'var(--body-sm)', fontWeight: 600, padding: 0 }}
+      >
+        <span style={{ fontSize: 11 }}>{open ? '▾' : '▸'}</span> archive ({items.length})
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {items.map((v) => (
+            <div
+              key={v.id}
+              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', border: '1px solid var(--hairline)', borderRadius: 'var(--radius-md)', background: 'var(--surface)' }}
+            >
+              <button
+                type="button"
+                onClick={() => onOpen(v.id)}
+                title="open this reel"
+                style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 'var(--body-sm)', textAlign: 'left', background: 'none', border: 'none', color: 'var(--ink)', cursor: 'pointer', padding: 0 }}
+              >
+                {v.title || (v.text || '').slice(0, 60) || v.id}
+              </button>
+              <button
+                type="button"
+                onClick={() => restore.mutate(v)}
+                disabled={restore.isPending}
+                style={{ flex: '0 0 auto', padding: '6px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--hairline)', background: 'var(--surface-2)', color: 'var(--ink)', fontSize: 'var(--body-sm)', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
+                restore
+              </button>
+              <button
+                type="button"
+                onClick={() => { if (confirm('Delete this reel permanently? This cannot be undone.')) remove.mutate(v.id); }}
+                disabled={remove.isPending}
+                style={{ flex: '0 0 auto', padding: '6px 14px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,107,107,0.3)', background: 'var(--surface-2)', color: '#ff6b6b', fontSize: 'var(--body-sm)', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
+                delete
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Side panel for a reel (script + edit plan + actions) ──────────────────
 
 function ReelPanel({ item, onClose }: { item: IgQueueItem; onClose: () => void }) {
@@ -1429,14 +1569,6 @@ function ReelPanel({ item, onClose }: { item: IgQueueItem; onClose: () => void }
       qc.invalidateQueries({ queryKey: ['ig-output'] });
     },
   });
-  const remove = useMutation({
-    mutationFn: () => api.deleteIgItem(item.id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['ig-queue'] });
-      onClose();
-    },
-  });
-
   function copyScript() {
     const lines = [item.title ?? 'Reel script', '', item.text];
     navigator.clipboard.writeText(lines.join('\n'));
@@ -1709,6 +1841,13 @@ function ReelPanel({ item, onClose }: { item: IgQueueItem; onClose: () => void }
           </section>
         )}
         {item.format !== 'carousel' && item.video_path && <ReelProductionSection item={item} />}
+        {/* No-folder path: card advanced to ready-to-schedule with no video yet.
+            Show the generated hooks (the video preview + bake-title appear once a
+            file is attached). */}
+        {item.format !== 'carousel' && !item.video_path &&
+          (item.status === 'ready_to_schedule' || item.status === 'editing' || item.status === 'scheduled') && (
+            <HookSection item={item} />
+          )}
 
         {item.context && (
           <section className="rep-section">
@@ -1767,28 +1906,9 @@ function ReelPanel({ item, onClose }: { item: IgQueueItem; onClose: () => void }
           </section>
         )}
 
-        {/* Bottom row: dismiss on the left, remove on the right. */}
+        {/* Bottom row: archive (recoverable) on the left, delete (permanent) on the right. */}
         <section className="rep-section">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-            <button
-              type="button"
-              className="rep-btn rep-btn--ghost"
-              onClick={() => setStatus('dismissed')}
-              disabled={update.isPending}
-              style={{ color: 'var(--muted-2)' }}
-            >
-              {item.status === 'dismissed' ? 'dismissed' : 'dismiss'}
-            </button>
-            <button
-              type="button"
-              className="rep-btn rep-btn--ghost"
-              style={{ marginLeft: 'auto', color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.3)' }}
-              onClick={() => { if (confirm('Remove this reel from the queue entirely?')) remove.mutate(); }}
-              disabled={remove.isPending}
-            >
-              {remove.isPending ? '...' : 'remove from queue'}
-            </button>
-          </div>
+          <ArchiveDeleteRow item={item} onDone={onClose} />
         </section>
       </aside>
       {bankPickerOpen && (
@@ -2388,6 +2508,117 @@ function ReelProductionSection({ item }: { item: IgQueueItem }) {
               rows={2}
             />
           </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// Hook ideas + the final on-screen hook, WITHOUT a video preview. Shown on
+// ready-to-schedule cards that have no attached video yet - the no-folder
+// "edited" path, where caption + hooks were generated from the script. Mirrors
+// the right-hand column of ReelProductionSection; the video preview and the
+// render-title step only appear once a file is attached.
+function HookSection({ item }: { item: IgQueueItem }) {
+  const qc = useQueryClient();
+  const saveHook = useMutation({
+    mutationFn: (v: string) => api.updateIgItem(item.id, { chosen_hook: v }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ig-queue'] }),
+  });
+  const regenHooks = useMutation({
+    mutationFn: () => api.generateIgHooks(item.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ig-queue'] }),
+  });
+  const [hookDraft, setHookDraft] = useState<string>(item.chosen_hook ?? '');
+  useEffect(() => { setHookDraft(item.chosen_hook ?? ''); }, [item.chosen_hook]);
+  // Debounced auto-save, mirroring ReelProductionSection.
+  useEffect(() => {
+    const next = hookDraft.trim();
+    const current = (item.chosen_hook ?? '').trim();
+    if (next === current) return;
+    const t = setTimeout(() => saveHook.mutate(next), 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hookDraft, item.chosen_hook]);
+  const [copyMsg, setCopyMsg] = useState('');
+  async function copyHook() {
+    if (!hookDraft) return;
+    try {
+      await navigator.clipboard.writeText(hookDraft);
+      setCopyMsg('copied');
+      setTimeout(() => setCopyMsg(''), 1500);
+    } catch {
+      setCopyMsg('copy failed');
+    }
+  }
+  function commitHook() {
+    const v = hookDraft.trim();
+    if (v === (item.chosen_hook ?? '').trim()) return;
+    saveHook.mutate(v);
+  }
+  function useIdea(text: string) {
+    setHookDraft(text);
+    saveHook.mutate(text);
+  }
+  const ideas = item.hook_variants ?? [];
+
+  return (
+    <section className="rep-section">
+      <header className="rep-section__head">
+        <h3 className="rep-section__title">hooks</h3>
+        <p className="rep-section__sub">
+          3 angles to draw from and the final on-screen hook. attach the video later to bake it onto the frame.
+        </p>
+      </header>
+      <div className="ig-prod__controls">
+        <div className="ig-prod__block">
+          <div className="ig-prod__block-head">
+            <span className="eyebrow">hook ideas (read-only)</span>
+            <button
+              type="button"
+              className="rep-btn rep-btn--ghost"
+              onClick={() => regenHooks.mutate()}
+              disabled={regenHooks.isPending}
+            >
+              {regenHooks.isPending ? 'generating...' : ideas.length === 0 ? 'generate hook ideas' : 'regenerate ideas'}
+            </button>
+          </div>
+          {ideas.length === 0 ? (
+            <p className="muted" style={{ fontSize: 'var(--body-sm)', margin: 0 }}>
+              click generate to get 3 angles to draw from.
+            </p>
+          ) : (
+            <div className="ig-prod__ideas">
+              {ideas.map((h, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className="ig-prod__idea"
+                  onClick={() => useIdea(h)}
+                  title="click to use this as the hook"
+                >
+                  <span className="ig-prod__idea-num">{i + 1}</span>
+                  <span className="ig-prod__idea-text">{h}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="ig-prod__block">
+          <div className="ig-prod__block-head">
+            <span className="eyebrow">the hook (what'll be on the reel)</span>
+            <button type="button" className="rep-btn rep-btn--ghost" onClick={copyHook} disabled={!hookDraft}>
+              {copyMsg || 'copy hook'}
+            </button>
+          </div>
+          <textarea
+            className="rep-text-input ig-prod__hook-final"
+            value={hookDraft}
+            onChange={(e) => setHookDraft(e.target.value)}
+            onBlur={commitHook}
+            placeholder="write the final hook here. click an idea above to start with it, then tweak."
+            rows={2}
+          />
         </div>
       </div>
     </section>

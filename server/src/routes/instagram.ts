@@ -47,6 +47,9 @@ type IgItem = {
   filmed_at?: number;
   posted_at?: number;
   dismissed_at?: number;
+  // The stage a reel was in when it was archived (status set to 'dismissed'),
+  // so "restore" can put it back exactly where it was.
+  archived_from?: IgItem['status'];
   failed_at?: number;
   failed_reason?: string;
   posted_url?: string;
@@ -222,7 +225,16 @@ app.patch('/queue/:id', async (c) => {
       it.filmed_at = now;
     }
     if (body.status === 'posted' && !it.posted_at) it.posted_at = now;
-    if (body.status === 'dismissed' && !it.dismissed_at) it.dismissed_at = now;
+    if (body.status === 'dismissed' && prev !== 'dismissed') {
+      // Archive: remember the stage we came from so restore is exact.
+      it.archived_from = prev;
+      if (!it.dismissed_at) it.dismissed_at = now;
+    }
+    if (prev === 'dismissed' && body.status !== 'dismissed') {
+      // Restore out of the archive - clear the archive bookkeeping.
+      delete it.archived_from;
+      delete it.dismissed_at;
+    }
     if (body.status === 'failed' && !it.failed_at) it.failed_at = now;
     if (prev === 'posted' && body.status !== 'posted') {
       delete it.posted_at;
@@ -560,13 +572,17 @@ function parseCaptionJson(raw: string): { caption: string; hashtags: string[] } 
   return { caption, hashtags };
 }
 
-/** POST /api/instagram/queue/:id/caption - generate caption + 5 hashtags via Claude bridge */
-app.post('/queue/:id/caption', async (c) => {
-  const id = c.req.param('id');
+/**
+ * Generate caption + 5 hashtags for one queue item and persist them. Shared by
+ * the POST /caption route and the finish-edit route. Re-reads the queue after
+ * the bridge call so a concurrent edit isn't clobbered. Throws on bridge error.
+ */
+async function genCaptionForId(
+  id: string,
+): Promise<{ ok: boolean; status: 200 | 404 | 502; error?: string; item?: IgItem }> {
   const items = readQueue();
-  const idx = items.findIndex((i) => i.id === id);
-  if (idx === -1) return c.json({ error: 'not found' }, 404);
-  const it = items[idx]!;
+  const it = items.find((i) => i.id === id);
+  if (!it) return { ok: false, status: 404, error: 'not found' };
 
   const cta = getCtaFromState();
   const voice = getVoiceSummary();
@@ -576,12 +592,17 @@ app.post('/queue/:id/caption', async (c) => {
     : it.tag === 'authority' ? 'Proof / authority'
     : 'Connection (personal story)';
 
+  // Prefer the spoken transcript (it.text). Fall back to the written script for
+  // the no-folder "edited" path, where no video has been filmed yet so there is
+  // no transcript - the caption is generated off the script instead.
+  const reelContent = it.text && it.text.trim() ? it.text : it.script ?? it.text ?? '';
+
   const userPrompt = [
     `# Reel context`,
     `Tag: ${tagLabel}`,
     it.title ? `Working title: ${it.title}` : '',
     it.context ? `\n# Why this moment\n${it.context}` : '',
-    `\n# What's said in the reel (do NOT echo this verbatim in the caption)\n${it.text}`,
+    `\n# What's said in the reel (do NOT echo this verbatim in the caption)\n${reelContent}`,
     it.source_moments && it.source_moments.length > 0
       ? `\n# Source moments (background; do not quote)\n${it.source_moments
           .map((m) => `- [${m.timestamp}] ${m.text}`)
@@ -593,20 +614,27 @@ app.post('/queue/:id/caption', async (c) => {
     .filter(Boolean)
     .join('\n');
 
+  const raw = await callBridge(buildCaptionSystem(), userPrompt);
+  const parsed = parseCaptionJson(raw);
+  if (!parsed.caption) return { ok: false, status: 502, error: 'empty caption from model' };
+  // Re-read after the await: another writer may have changed the queue while
+  // the bridge ran. Merge onto the fresh copy so we don't clobber their edit.
+  const fresh = readQueue();
+  const fIt = fresh.find((i) => i.id === id);
+  if (!fIt) return { ok: false, status: 404, error: 'not found' };
+  fIt.caption = parsed.caption;
+  fIt.caption_hashtags = parsed.hashtags;
+  fIt.caption_generated_at = Math.floor(Date.now() / 1000);
+  writeQueue(fresh);
+  return { ok: true, status: 200, item: fIt };
+}
+
+/** POST /api/instagram/queue/:id/caption - generate caption + 5 hashtags via Claude bridge */
+app.post('/queue/:id/caption', async (c) => {
   try {
-    const raw = await callBridge(buildCaptionSystem(), userPrompt);
-    const parsed = parseCaptionJson(raw);
-    if (!parsed.caption) return c.json({ error: 'empty caption from model' }, 502);
-    // Re-read after the await: another writer may have changed the queue while
-    // the bridge ran. Merge onto the fresh copy so we don't clobber their edit.
-    const fresh = readQueue();
-    const fIt = fresh.find((i) => i.id === id);
-    if (!fIt) return c.json({ error: 'not found' }, 404);
-    fIt.caption = parsed.caption;
-    fIt.caption_hashtags = parsed.hashtags;
-    fIt.caption_generated_at = Math.floor(Date.now() / 1000);
-    writeQueue(fresh);
-    return c.json({ ok: true, item: fIt });
+    const r = await genCaptionForId(c.req.param('id'));
+    if (!r.ok) return c.json({ error: r.error }, r.status);
+    return c.json({ ok: true, item: r.item });
   } catch (err: any) {
     console.error('caption generation failed:', err);
     return c.json({ error: err?.message ?? 'caption generation failed' }, 500);
@@ -831,13 +859,16 @@ function parseHookJson(raw: string): string[] {
   return hooks.slice(0, 3);
 }
 
-/** POST /api/instagram/queue/:id/hooks - generate 3 on-screen hook variants */
-app.post('/queue/:id/hooks', async (c) => {
-  const id = c.req.param('id');
+/**
+ * Generate 3 on-screen hook variants for one item and persist them. Shared by
+ * the POST /hooks route and the finish-edit route. Throws on bridge error.
+ */
+async function genHooksForId(
+  id: string,
+): Promise<{ ok: boolean; status: 200 | 404 | 502; error?: string; hooks?: string[] }> {
   const items = readQueue();
-  const idx = items.findIndex((i) => i.id === id);
-  if (idx === -1) return c.json({ error: 'not found' }, 404);
-  const it = items[idx]!;
+  const it = items.find((i) => i.id === id);
+  if (!it) return { ok: false, status: 404, error: 'not found' };
 
   const voice = getVoiceSummary();
   const tagLabel =
@@ -846,30 +877,81 @@ app.post('/queue/:id/hooks', async (c) => {
     : it.tag === 'authority' ? 'Proof / authority'
     : 'Connection (personal story)';
 
+  // Same transcript-vs-script fallback as the caption generator.
+  const reelContent = it.text && it.text.trim() ? it.text : it.script ?? it.text ?? '';
+
   const userPrompt = [
     `# Reel context`,
     `Tag: ${tagLabel}`,
     it.title ? `Working title: ${it.title}` : '',
     it.context ? `\n# Why this moment\n${it.context}` : '',
-    `\n# What's said in the reel\n${it.text}`,
+    `\n# What's said in the reel\n${reelContent}`,
     voice ? `\n# Voice (calibrate to this)\n${voice}` : '',
   ].filter(Boolean).join('\n');
 
+  const raw = await callBridge(buildHookSystem(), userPrompt, 500);
+  const hooks = parseHookJson(raw);
+  if (hooks.length === 0) return { ok: false, status: 502, error: 'no hooks returned' };
+  // Re-read after the await so a concurrent edit during the bridge call isn't lost.
+  const fresh = readQueue();
+  const fIt = fresh.find((i) => i.id === id);
+  if (!fIt) return { ok: false, status: 404, error: 'not found' };
+  fIt.hook_variants = hooks;
+  writeQueue(fresh);
+  return { ok: true, status: 200, hooks };
+}
+
+/** POST /api/instagram/queue/:id/hooks - generate 3 on-screen hook variants */
+app.post('/queue/:id/hooks', async (c) => {
   try {
-    const raw = await callBridge(buildHookSystem(), userPrompt, 500);
-    const hooks = parseHookJson(raw);
-    if (hooks.length === 0) return c.json({ error: 'no hooks returned' }, 502);
-    // Re-read after the await so a concurrent edit during the bridge call isn't lost.
-    const fresh = readQueue();
-    const fIt = fresh.find((i) => i.id === id);
-    if (!fIt) return c.json({ error: 'not found' }, 404);
-    fIt.hook_variants = hooks;
-    writeQueue(fresh);
-    return c.json({ ok: true, hooks });
+    const r = await genHooksForId(c.req.param('id'));
+    if (!r.ok) return c.json({ error: r.error }, r.status);
+    return c.json({ ok: true, hooks: r.hooks });
   } catch (err: any) {
     console.error('hook generation failed:', err);
     return c.json({ error: err?.message ?? 'hook generation failed' }, 500);
   }
+});
+
+/**
+ * POST /api/instagram/queue/:id/finish-edit
+ *
+ * The "edited" action for users WITHOUT a Descript->dropbox link. Advances the
+ * card straight to ready_to_schedule and generates caption + hooks from the
+ * script/text the card already holds - no video required. Folder-linked users
+ * never hit this: their watcher attaches the exported file and generates these
+ * automatically.
+ *
+ * Best-effort generation: if the bridge fails, the card still lands in
+ * ready_to_schedule and the panel's manual generate buttons remain as backup.
+ */
+app.post('/queue/:id/finish-edit', async (c) => {
+  const id = c.req.param('id');
+  const items = readQueue();
+  const idx = items.findIndex((i) => i.id === id);
+  if (idx === -1) return c.json({ error: 'not found' }, 404);
+  const it = items[idx]!;
+  it.status = 'ready_to_schedule';
+  if (!it.ready_at) it.ready_at = Math.floor(Date.now() / 1000);
+  writeQueue(items);
+
+  let caption_ok = false;
+  let hook_count = 0;
+  try {
+    const r = await genCaptionForId(id);
+    caption_ok = r.ok;
+  } catch (err) {
+    console.error('finish-edit caption failed:', err);
+  }
+  try {
+    const r = await genHooksForId(id);
+    hook_count = r.hooks?.length ?? 0;
+  } catch (err) {
+    console.error('finish-edit hooks failed:', err);
+  }
+
+  const fresh = readQueue();
+  return c.json({ ok: true, item: fresh.find((i) => i.id === id), caption_ok, hook_count });
 });
 
 // ─── Daily scheduling (one post per day) ──────────────────────────────────

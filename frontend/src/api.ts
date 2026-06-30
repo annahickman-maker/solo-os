@@ -104,6 +104,8 @@ export interface IgQueueItem {
   filmed_at?: number;
   posted_at?: number;
   dismissed_at?: number;
+  // The stage a reel was in when archived (status 'dismissed'), so restore is exact.
+  archived_from?: IgItemStatus;
   failed_at?: number;
   failed_reason?: string;
   posted_url?: string;
@@ -982,6 +984,14 @@ export const api = {
     request<{ ok: true; item: IgQueueItem }>(`/api/instagram/queue/${id}/caption`, { method: 'POST' }),
   generateIgHooks: (id: string) =>
     request<{ ok: true; hooks: string[] }>(`/api/instagram/queue/${id}/hooks`, { method: 'POST' }),
+  // "edited" for users without a Descript->dropbox link: advance straight to
+  // ready_to_schedule and generate caption + hooks from the script. Folder-linked
+  // users get this automatically from the watcher when the exported file lands.
+  finishIgEdit: (id: string) =>
+    request<{ ok: true; item: IgQueueItem; caption_ok: boolean; hook_count: number }>(
+      `/api/instagram/queue/${id}/finish-edit`,
+      { method: 'POST' }
+    ),
   renderReelTitle: (id: string) =>
     request<{ ok: true; item: IgQueueItem }>(`/api/instagram/queue/${id}/render-title`, { method: 'POST' }),
   markIgEditing: (id: string) =>

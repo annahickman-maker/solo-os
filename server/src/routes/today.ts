@@ -235,7 +235,8 @@ app.get('/', async (c) => {
   // count from state.md so the dial reflects reality.
   const stateForGoal = loadFile(abs('00_System', 'state.md'));
   const ssMembers = ((stateForGoal?.frontmatter as any)?.ss_members as number) ?? 0;
-  const focus_goal = primary ? buildGoalShape(primary, ssMembers) : null;
+  const offerNameForGoal = ((stateForGoal?.frontmatter as any)?.offer_name as string) ?? '';
+  const focus_goal = primary ? buildGoalShape(primary, ssMembers, offerNameForGoal) : null;
 
   // Resolve the day window FIRST so every downstream filter agrees.
   // day_start (Unix sec, local midnight) is authoritative when present;
@@ -320,13 +321,15 @@ app.get('/', async (c) => {
 // for SS-member-targeted goals.
 function buildGoalShape(
   entry: ReturnType<typeof loadCollection<GoalFrontmatter>>[number],
-  ssMembers: number
+  ssMembers: number,
+  offerName: string
 ) {
   const fm = entry.frontmatter;
   const title = (entry.body.match(/^#\s+(.+?)\s*$/m)?.[1] ?? entry.id) as string;
   let current = fm.current_value ?? 0;
-  // Heuristic: if the goal mentions paid members, current = live count.
-  if (/paid members|the offer/i.test(title)) {
+  // Heuristic: if the goal targets paid members (or names the offer), current =
+  // the live member count. Offer name comes from config so this works per-install.
+  if (/paid members/i.test(title) || (offerName && title.toLowerCase().includes(offerName.toLowerCase()))) {
     current = ssMembers || current;
   }
   // Parse target_date - tolerate ISO date strings ("2026-07-13") and unix
