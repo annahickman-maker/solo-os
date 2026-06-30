@@ -44,10 +44,10 @@ export function Focus() {
     mutationFn: async ({ newCount, goalId }: { newCount: number; goalId: string | null }) => {
       await api.updateSettings({
         ss_members: newCount,
-        // Auto-calc MRR at the default $47/mo price point. If the creator later wants
-        // separate control she can split this out, but for now keeping them in
-        // sync is the desired behaviour she asked for.
-        ss_mrr_usd: newCount * 47,
+        // Auto-calc revenue at the user's own price point (avg_member_price_usd),
+        // falling back to 47 only if no price is set. Keeping the count and the
+        // revenue figure in sync is the desired behaviour.
+        ss_mrr_usd: newCount * (data?.targets?.avg_member_price_usd || 47),
       });
       // Also write the goal's current value so the tracker moves directly. The
       // offer-name heuristic only fires when the goal title names the offer; a
@@ -276,6 +276,10 @@ export function Focus() {
   const mrrTarget = targets?.mrr_target_usd ?? null;
   const currentMrr = targets?.current_mrr_usd ?? metrics?.ss_mrr ?? 0;
   const mrrProgress = mrrTarget && mrrTarget > 0 ? Math.min(1, currentMrr / mrrTarget) : progress;
+  // Revenue model is a labeling switch: recurring -> "members", one-time -> "sales".
+  // The underlying numbers (count = current/target, revenue = mrr fields) are the same.
+  const revenueModel = targets?.revenue_model ?? 'mrr';
+  const metricNoun = revenueModel === 'total' ? 'sales' : 'members';
 
   return (
     <div className="stack" style={{ gap: 'var(--space-6)' }}>
@@ -344,7 +348,7 @@ export function Focus() {
           >
             <Ring
               value={mrrProgress}
-              label={`out of ${target || '?'} members`}
+              label={`out of ${target || '?'} ${metricNoun}`}
               bigNumber={`${Math.round(mrrProgress * 100)}`}
               unit="%"
               size="hero"
@@ -374,7 +378,7 @@ export function Focus() {
                   / ${mrrTarget.toLocaleString('en-US')}
                 </span>
               ) : (
-                <span style={{ color: 'var(--muted)', fontSize: '0.55em', fontWeight: 500 }}> / mo</span>
+                <span style={{ color: 'var(--muted)', fontSize: '0.55em', fontWeight: 500 }}>{revenueModel === 'total' ? '' : ' / mo'}</span>
               )}
             </span>
             {editingMembers ? (
@@ -410,7 +414,7 @@ export function Focus() {
                   setMembersDraft(String(current));
                   setEditingMembers(true);
                 }}
-                title="click to update current member count"
+                title={`click to update current ${metricNoun} count`}
                 style={{
                   background: 'transparent',
                   border: 'none',

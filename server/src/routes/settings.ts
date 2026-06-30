@@ -10,8 +10,10 @@ const STATE_FILE_REL = ['00_System', 'state.md'] as const;
 const DEFAULTS = {
   youtube_target_per_weeks: 1,
   deep_work_target_seconds: 7200,
-  // Per-channel CTAs. Set these via the dashboard's Settings page once you
-  // know the offer + link you want to drive viewers / followers to.
+  // Per-channel CTAs. These USED to be a single shared focus_cta_* pair;
+  // split into two so IG and YT each get their own line + link. The shared
+  // focus_cta_* is kept as a read-only legacy fallback so old data migrates
+  // seamlessly the first time the creator saves a per-channel value.
   instagram_cta_text: '',
   instagram_cta_url: '',
   youtube_cta_text: '',
@@ -47,6 +49,10 @@ app.get('/', (c) => {
     instagram_cta_url: igCtaUrl,
     youtube_cta_text: ytCtaText,
     youtube_cta_url: ytCtaUrl,
+    // The avatar currently selected as the content focus (set on the Content
+    // page avatar panel). Stored as the avatar's source-file path so skills
+    // can read it directly. Null until the creator picks one.
+    content_focus_avatar: (fm.content_focus_avatar as string | undefined) ?? null,
     // Legacy aliases - kept so older frontend code that still reads these
     // names doesn't break. Map to the Instagram pair since that's what the
     // old single-CTA setup historically pointed at.
@@ -68,15 +74,41 @@ app.patch('/', async (c) => {
     next.youtube_target_per_weeks = body.youtube_target_per_weeks;
   if (typeof body.deep_work_target_seconds === 'number')
     next.deep_work_target_seconds = body.deep_work_target_seconds;
-  if (typeof body.long_form_per_week === 'number')
+  if (typeof body.long_form_per_week === 'number') {
     next.long_form_per_week = body.long_form_per_week;
-  if (typeof body.short_form_per_week === 'number')
+    // Keep the legacy `youtube_target_per_weeks` field in sync ("1 every N
+    // weeks" inverse of long_form_per_week) so the YouTube tab + any older
+    // consumer reads the same target. For cadences >= 1/week the inverse
+    // collapses to 1 ("at least weekly").
+    const ytWeeks =
+      body.long_form_per_week > 0
+        ? Math.max(1, Math.round(1 / body.long_form_per_week))
+        : 1;
+    next.youtube_target_per_weeks = ytWeeks;
+  }
+  if (typeof body.short_form_per_week === 'number') {
     next.short_form_per_week = body.short_form_per_week;
+    // Mirror into `instagram_target_per_week` so the Instagram tab's
+    // MonthGrid stays in lock-step with the target set on the Focus page.
+    // The IG output endpoint also falls back to short_form_per_week, but
+    // writing both fields keeps either endpoint authoritative on read.
+    next.instagram_target_per_week = body.short_form_per_week;
+  }
+  // Live SS members + MRR. These drive the Focus page big number and feed
+  // into /api/metrics. Settable inline so the creator can update when she gets a
+  // new member without opening state.md.
+  if (typeof body.ss_members === 'number' && body.ss_members >= 0)
+    next.ss_members = body.ss_members;
+  if (typeof body.ss_mrr_usd === 'number' && body.ss_mrr_usd >= 0)
+    next.ss_mrr_usd = body.ss_mrr_usd;
   // Per-channel CTA keys - independent for IG vs YT.
   if (typeof body.instagram_cta_text === 'string') next.instagram_cta_text = body.instagram_cta_text;
   if (typeof body.instagram_cta_url === 'string') next.instagram_cta_url = body.instagram_cta_url;
   if (typeof body.youtube_cta_text === 'string') next.youtube_cta_text = body.youtube_cta_text;
   if (typeof body.youtube_cta_url === 'string') next.youtube_cta_url = body.youtube_cta_url;
+  // Content focus avatar - the avatar the creator has selected on the Content
+  // page. Empty string clears it back to "none".
+  if (typeof body.content_focus_avatar === 'string') next.content_focus_avatar = body.content_focus_avatar;
   // Legacy keys - if someone PATCHes focus_cta_* or ig_cta_*, route into the
   // Instagram pair (that's where the legacy single CTA was used).
   if (typeof body.focus_cta_text === 'string') next.instagram_cta_text = body.focus_cta_text;
