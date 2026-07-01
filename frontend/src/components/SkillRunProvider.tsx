@@ -479,11 +479,10 @@ function RunPanel({ skill, onClose, onRun }: { skill: SkillFull; onClose: () => 
     });
   };
 
-  // Required (non-optional) inputs must have a value before running.
-  const canRun = skill.inputs.every((inp, i) => {
-    if (inp.optional) return true;
-    return (selected[i]?.length ?? 0) > 0 || (texts[i] ?? '').trim().length > 0;
-  });
+  // You can always run. Picking an option (or typing one) just pre-fills the
+  // input; leaving everything blank is fine - the skill is conversational, so
+  // the chat asks for whatever it still needs. Nothing here is a hard gate.
+  const canRun = true;
 
   const submit = () => {
     const chosen = skill.inputs.map((_, i) => selected[i] ?? []);
