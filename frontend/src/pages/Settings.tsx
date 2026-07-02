@@ -24,10 +24,13 @@ export function Settings() {
         onChanged={() => qc.invalidateQueries({ queryKey: ['membership-status'] })}
       />
 
-      {/* 2. CONNECT YOUR APPS - unified integrations card */}
+      {/* 2. YOUR VAULT - desktop app only (hidden on web installs) */}
+      <VaultCard />
+
+      {/* 3. CONNECT YOUR APPS - unified integrations card */}
       <ConnectYourAppsCard />
 
-      {/* 3. APPEARANCE - light / dark theme */}
+      {/* 4. APPEARANCE - light / dark theme */}
       <AppearanceCard />
 
       {/* 4. PASSWORD / LOG OUT - at the bottom */}
@@ -42,6 +45,60 @@ export function Settings() {
         </div>
       </Card>
     </div>
+  );
+}
+
+// ─── Vault card (desktop app only) ───────────────────────────────────────
+// Shows which folder the app reads as the vault and lets the member move it.
+// The picker + restart are native (owned by the Electron shell); this card
+// just kicks the flow off. On web installs /api/desktop says desktop:false
+// and the card renders nothing.
+
+function VaultCard() {
+  const info = useQuery({ queryKey: ['desktop-info'], queryFn: api.desktopInfo });
+  const [kicked, setKicked] = useState(false);
+
+  const changeVault = useMutation({
+    mutationFn: api.desktopChangeVault,
+    onSuccess: () => setKicked(true),
+  });
+
+  if (!info.data?.desktop) return null;
+
+  return (
+    <Card eyebrow="solo os" title="your vault">
+      <p className="muted" style={{ margin: 0, lineHeight: 1.55 }}>
+        your vault is the folder of plain files this whole dashboard reads and writes - it is your data, and it stays on this computer. point claude code at it to work in it.
+      </p>
+      <p
+        style={{
+          margin: 0,
+          fontFamily: 'var(--font-mono, monospace)',
+          fontSize: 'var(--body-sm)',
+          color: 'var(--ink)',
+          wordBreak: 'break-all',
+        }}
+      >
+        {info.data.vaultPath}
+      </p>
+      <div className="row" style={{ gap: 'var(--space-3)' }}>
+        <button
+          className="btn"
+          onClick={() => changeVault.mutate()}
+          disabled={changeVault.isPending}
+        >
+          change vault folder…
+        </button>
+        <button className="btn btn--ghost" onClick={() => api.desktopOpenVault()}>
+          open vault folder
+        </button>
+      </div>
+      {kicked && (
+        <p className="muted" style={{ margin: 0, fontSize: 'var(--body-sm)' }}>
+          a folder picker just opened - if you choose a new folder, solo os restarts on it. your current vault is never moved or deleted.
+        </p>
+      )}
+    </Card>
   );
 }
 

@@ -14,7 +14,7 @@ const DONE_THRESHOLD = 85; // overall_completion at/above this = set up
 export function FirstRunGate() {
   const { runSkill } = useSkillRun();
   const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: api.profile });
-  const { data: skills } = useQuery({ queryKey: ['skills'], queryFn: api.skills });
+  const { data: skills } = useQuery({ queryKey: ['skills'], queryFn: () => api.skills() });
 
   const forced = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('onboarding');
   const incomplete = forced || (profile ? (profile.overall_completion ?? 0) < DONE_THRESHOLD : false);

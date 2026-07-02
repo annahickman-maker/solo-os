@@ -24,7 +24,7 @@ export function Skills() {
   const [filter, setFilter] = useState('');
   const [tab, setTab] = useState<string>('All');
   const navigate = useNavigate();
-  const { data, isLoading, error } = useQuery({ queryKey: ['skills'], queryFn: api.skills });
+  const { data, isLoading, error } = useQuery({ queryKey: ['skills'], queryFn: () => api.skills() });
 
   const all = data?.items ?? [];
 

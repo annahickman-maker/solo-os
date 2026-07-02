@@ -1162,7 +1162,7 @@ function PerOfferSalesPagePanel({
 
   // The skill summary drives the card so it looks exactly like its Skills-page
   // row (icon, color, title, card line, custom/built-in badge).
-  const skillsQuery = useQuery({ queryKey: ['skills'], queryFn: api.skills });
+  const skillsQuery = useQuery({ queryKey: ['skills'], queryFn: () => api.skills() });
   const spSkill = skillsQuery.data?.items.find((s) => s.name === 'sales-page-builder') ?? null;
 
   // Auto-grow the editor with its content instead of scrolling inside it. The

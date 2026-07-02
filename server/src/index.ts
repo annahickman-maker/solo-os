@@ -51,6 +51,7 @@ import google, { callbackApp as googleCallback } from './routes/google.js';
 import calendar from './routes/calendar.js';
 import onboarding from './routes/onboarding.js';
 import updateSoloOs from './routes/updateSoloOs.js';
+import desktop from './routes/desktop.js';
 import membership from './routes/membership.js';
 import zoom from './routes/zoom.js';
 import chat from './routes/chat.js';
@@ -63,7 +64,25 @@ const app = new Hono();
 
 app.use('*', cors({ origin: '*' }));
 
-app.get('/', (c) => c.json({ ok: true, service: 'solo-os-dashboard-server (Phase 2)' }));
+// In the desktop app the root URL IS the dashboard: this explicit route
+// matches before the static catch-all at the bottom of this file, so it has
+// to serve the app shell itself when FRONTEND_DIST is set. Web installs
+// (no FRONTEND_DIST) keep the JSON status ping.
+app.get('/', async (c) => {
+  const dist = process.env.FRONTEND_DIST;
+  if (dist) {
+    const fsRoot = await import('node:fs');
+    const pathRoot = await import('node:path');
+    const indexFile = pathRoot.join(pathRoot.resolve(dist), 'index.html');
+    if (fsRoot.existsSync(indexFile)) {
+      return c.body(fsRoot.readFileSync(indexFile), 200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-cache',
+      });
+    }
+  }
+  return c.json({ ok: true, service: 'solo-os-dashboard-server (Phase 2)' });
+});
 app.get('/health', (c) => c.json({ ok: true }));
 
 // Vault asset serving has to live ABOVE the auth middleware because
@@ -190,6 +209,7 @@ app.route('/api/google', google);
 app.route('/api/calendar', calendar);
 app.route('/api/onboarding', onboarding);
 app.route('/api/update-solo-os', updateSoloOs);
+app.route('/api/desktop', desktop);
 app.route('/api/membership', membership);
 app.route('/api/zoom', zoom);
 app.route('/api/chat', chat);

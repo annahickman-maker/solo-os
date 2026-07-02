@@ -13,7 +13,7 @@ import { PageTabs } from '../components/PageTabs';
 // direct way to open a conversation with Claude to sharpen the foundation.
 function StrategyLaunchCard() {
   const navigate = useNavigate();
-  const { data: skills } = useQuery({ queryKey: ['skills'], queryFn: api.skills });
+  const { data: skills } = useQuery({ queryKey: ['skills'], queryFn: () => api.skills() });
   const item = skills?.items.find((s) => s.name === 'solopreneur-onboarding');
   if (!item) return null;
   return <SkillRow skill={item} onOpen={() => navigate(`/skills/${item.id}`)} hideSchedule />;

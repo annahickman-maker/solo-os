@@ -44,6 +44,13 @@ const { spawn, execFile } = require('node:child_process');
 const IS_MAC = process.platform === 'darwin';
 const IS_WIN = process.platform === 'win32';
 const SELF_TEST = process.argv.includes('--self-test');
+
+// Self-test runs are hermetic: their config, logs, and port choices must
+// NEVER touch (or pollute) the real install's userData. A self-test once
+// saved its throwaway port into the real config and broke the next launch.
+if (SELF_TEST) {
+  app.setPath('userData', path.join(os.tmpdir(), `solo-os-selftest-${process.pid}`));
+}
 const DEFAULT_PORT = 45903; // uncommon; scanned upward on conflict, then persisted
 const DASHBOARD_PASSWORD = 'dev'; // fixed local token, matches the frontend default
 const HEALTH_TIMEOUT_MS = 45_000;
@@ -404,9 +411,15 @@ function startService(name, bundleFile, env, cwd) {
   proc.stderr?.on('data', (d) => out.write(d));
 
   proc.on('message', (msg) => {
-    if (msg && msg.type === 'check-for-updates') {
+    if (!msg || typeof msg.type !== 'string') return;
+    if (msg.type === 'check-for-updates') {
       log('server asked for an update check');
       checkForUpdates(true);
+    } else if (msg.type === 'change-vault') {
+      log('settings asked to change the vault folder');
+      changeVaultFlow();
+    } else if (msg.type === 'open-vault') {
+      shell.openPath(vaultRoot);
     }
   });
 
@@ -443,11 +456,14 @@ function startService(name, bundleFile, env, cwd) {
 
 async function startAllServices() {
   const cfg = loadConfig();
-  serverPort = process.env.SOLO_OS_PORT
+  const portFromEnv = !!process.env.SOLO_OS_PORT;
+  serverPort = portFromEnv
     ? Number(process.env.SOLO_OS_PORT)
     : await pickPort(cfg.port ?? DEFAULT_PORT);
   bridgePort = await pickPort(serverPort + 1);
-  if (cfg.port !== serverPort) saveConfig({ port: serverPort });
+  // Persist the port so the origin (and its localStorage) stays stable across
+  // launches - but never persist a temporary env override.
+  if (!portFromEnv && cfg.port !== serverPort) saveConfig({ port: serverPort });
 
   fs.mkdirSync(serverHomeDir(), { recursive: true });
   fs.mkdirSync(logsDir(), { recursive: true });
@@ -652,6 +668,23 @@ function createMainWindow() {
     mainWindow.focus();
     return;
   }
+  // Frameless chrome: the window controls sit INSIDE the app surface (like
+  // Obsidian/Notion), not in a separate grey system bar. mac: hiddenInset
+  // keeps the native traffic lights, overlaid on the app. Windows: a native
+  // overlay draws min/max/close in the top-right corner.
+  const frameless = IS_MAC
+    ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 18 } }
+    : IS_WIN
+      ? {
+          titleBarStyle: 'hidden',
+          titleBarOverlay: {
+            color: nativeTheme.shouldUseDarkColors ? '#16140F' : '#F5F4F0',
+            symbolColor: nativeTheme.shouldUseDarkColors ? '#EDEDE9' : '#16140F',
+            height: 34,
+          },
+        }
+      : {};
+
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 940,
@@ -659,11 +692,33 @@ function createMainWindow() {
     minHeight: 600,
     title: 'Solo OS',
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#16140F' : '#F5F4F0',
+    ...frameless,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
     },
+  });
+
+  // With the system title bar gone, the top strip of the app becomes the drag
+  // handle. Injected from the shell so the web frontend needs no changes -
+  // web installs never see this. Height matches the traffic lights / overlay.
+  // Anything interactive in the app starts below ~50px, so a 34px strip never
+  // steals clicks.
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow?.webContents.insertCSS(
+      [
+        // The drag handle where the title bar used to be.
+        `body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 34px; -webkit-app-region: drag; z-index: 2147483647; }`,
+        // Give the sidebar brand a clear band below the traffic lights, sized
+        // so the brand top-aligns with the today-page selector pill in the
+        // content column - the controls get their own zone, and the first row
+        // of both columns shares one visual line.
+        // !important: injected sheets sort before the app's own bundle in the
+        // cascade, so a plain declaration silently loses the tie.
+        `.nav-rail__inner { padding-top: 66px !important; }`,
+      ].join('\n')
+    );
   });
 
   // Anything that isn't our local dashboard opens in the system browser -
@@ -683,8 +738,10 @@ function createMainWindow() {
     }
   });
 
-  // A renderer crash should heal itself, not strand a white window.
+  // A renderer crash should heal itself, not strand a white window - but
+  // never fight a shutdown in progress.
   mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    if (quitting) return;
     log(`renderer gone (${details.reason}) - reloading`);
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.reload();
   });
@@ -796,6 +853,39 @@ async function checkForUpdates(interactive) {
 
 // ─── menu ───────────────────────────────────────────────────────────────────
 
+// Native folder picker -> save -> relaunch on the new vault. Reached from the
+// Vault menu AND from the Settings page (via the server's /api/desktop relay).
+function changeVaultFlow() {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.focus();
+  const picked = dialog.showOpenDialogSync({
+    title: 'Choose your Solo OS vault folder',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (!picked || !picked[0] || picked[0] === vaultRoot) return;
+  if (!vaultWritable(picked[0])) {
+    dialog.showMessageBoxSync({
+      type: 'error',
+      title: 'Solo OS',
+      message: 'That folder is not writable',
+      detail: 'Solo OS needs to read and write files in your vault. Pick a folder inside your home folder (Desktop or Documents work well).',
+      buttons: ['OK'],
+    });
+    return;
+  }
+  saveConfig({ vaultPath: picked[0] });
+  dialog.showMessageBoxSync({
+    type: 'info',
+    title: 'Solo OS',
+    message: 'Vault changed',
+    detail: `Solo OS will now restart and use:\n${picked[0]}`,
+    buttons: ['Restart'],
+  });
+  app.relaunch();
+  quitting = true;
+  stopAllServices();
+  app.quit();
+}
+
 function buildMenu() {
   const vaultItems = [
     {
@@ -804,25 +894,7 @@ function buildMenu() {
     },
     {
       label: 'Change Vault Folder...',
-      click: async () => {
-        const picked = dialog.showOpenDialogSync({
-          title: 'Choose your Solo OS vault folder',
-          properties: ['openDirectory', 'createDirectory'],
-        });
-        if (!picked || !picked[0] || picked[0] === vaultRoot) return;
-        saveConfig({ vaultPath: picked[0] });
-        dialog.showMessageBoxSync({
-          type: 'info',
-          title: 'Solo OS',
-          message: 'Vault changed',
-          detail: `Solo OS will now restart and use:\n${picked[0]}`,
-          buttons: ['Restart'],
-        });
-        app.relaunch();
-        quitting = true;
-        stopAllServices();
-        app.quit();
-      },
+      click: () => changeVaultFlow(),
     },
     { type: 'separator' },
     {
@@ -913,8 +985,14 @@ async function runSelfTest() {
     verdict.server = true;
     const skills = await httpGet(`http://127.0.0.1:${serverPort}/api/skills`, { 'X-Dashboard-Password': DASHBOARD_PASSWORD }, 10_000);
     verdict.skills = JSON.parse(skills.body).items?.length ?? 0;
-    const frontend = await httpGet(`http://127.0.0.1:${serverPort}/skills`, {}, 5_000);
-    verdict.frontendServed = frontend.status === 200 && frontend.body.includes('<div id="root">');
+    // Check BOTH the root URL (what the window actually loads - an explicit
+    // server route once shadowed it and shipped a JSON page as the "app")
+    // and a deep link (the SPA fallback path).
+    const root = await httpGet(`http://127.0.0.1:${serverPort}/`, {}, 5_000);
+    const deep = await httpGet(`http://127.0.0.1:${serverPort}/skills`, {}, 5_000);
+    verdict.frontendServed =
+      root.status === 200 && root.body.includes('<div id="root">') &&
+      deep.status === 200 && deep.body.includes('<div id="root">');
     const bridge = await httpGet(`http://127.0.0.1:${bridgePort}/health`, {}, 5_000);
     verdict.bridge = bridge.status === 200;
     const bridgeInfo = JSON.parse(bridge.body);
@@ -1004,4 +1082,16 @@ if (!gotLock) {
   process.on('uncaughtException', (err) => {
     log(`uncaught: ${err.stack || err.message}`);
   });
+
+  // A SIGTERM (logout, shutdown, kill) must take the WHOLE app down. Without
+  // this, the signal can kill the children but leave a zombie main process
+  // holding the single-instance lock with a dead server behind a blank window.
+  for (const sig of ['SIGTERM', 'SIGINT']) {
+    process.on(sig, () => {
+      log(`received ${sig} - quitting`);
+      quitting = true;
+      stopAllServices();
+      app.exit(0);
+    });
+  }
 }

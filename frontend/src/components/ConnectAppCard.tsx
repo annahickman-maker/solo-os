@@ -154,9 +154,16 @@ export function ConnectAppCard({ app, onDismiss }: { app: ConnectAppKey; onDismi
     if (app === 'google') return;
     const skillName = SETUP_SKILL_NAME[app];
     // Resolve the id by name (id differs between vault + template packs).
-    api.skills().then(({ items }) => {
+    // includeHidden=true: the setup skills are hidden from the skills page on
+    // purpose, so the default listing would never find them and this button
+    // would silently do nothing.
+    api.skills(true).then(({ items }) => {
       const s = items.find((x) => x.name === skillName);
-      if (s) runSkill(s.id);
+      if (s) {
+        runSkill(s.id);
+      } else {
+        window.alert(`setup skill "${skillName}" is not installed - update solo os and try again.`);
+      }
     });
   };
   let sub = meta.sub;

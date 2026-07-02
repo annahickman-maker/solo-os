@@ -33,6 +33,7 @@ This is the way to run Solo OS: a normal desktop app, like Obsidian or Notion.
 
 1. Download the installer for your machine from the [latest release](https://github.com/annahickman-maker/solo-os/releases/latest): the `.dmg` on a Mac (pick `arm64` for Apple Silicon, `x64` for Intel), the `.exe` on Windows.
 2. Open it. Mac: drag Solo OS into Applications. Windows: the installer runs itself.
+   - **Windows note:** the installer isn't code-signed yet, so SmartScreen shows "Windows protected your PC" the first time. Click **More info**, then **Run anyway**. That's expected - the download comes straight from this repo's releases.
 3. Launch Solo OS. It creates your vault at `~/Desktop/Solo OS` on first run (or adopts the one you already have), asks for your Solopreneur Systems access key, and offers a one-time Claude sign-in for the AI features.
 
 That's the whole install. Everything is inside the app: the dashboard, the local server, and its own copy of Claude Code. No Node, no npm, no git, no terminal. Updates download in the background and apply when you restart the app.

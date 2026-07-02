@@ -15,7 +15,7 @@ import { SkillRow } from '../pages/Skills';
  */
 export function PageSkillLink({ name }: { name: string }) {
   const navigate = useNavigate();
-  const { data } = useQuery({ queryKey: ['skills'], queryFn: api.skills });
+  const { data } = useQuery({ queryKey: ['skills'], queryFn: () => api.skills() });
   const skill = data?.items.find((s) => s.name === name);
   if (!skill) return null;
   return <SkillRow skill={skill} onOpen={() => navigate(`/skills/${skill.id}`)} hideSchedule />;

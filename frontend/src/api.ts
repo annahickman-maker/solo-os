@@ -819,7 +819,10 @@ export const api = {
 
   brainstorm: () => request<BrainstormResponse>('/api/brainstorm'),
 
-  skills: () => request<{ items: SkillListItem[] }>('/api/skills'),
+  // includeHidden: setup/helper skills carry `hidden: true` so they stay off
+  // the skills page, but the connect cards still need to resolve them by name.
+  skills: (includeHidden?: boolean) =>
+    request<{ items: SkillListItem[] }>(includeHidden ? '/api/skills?all=1' : '/api/skills'),
   getSkill: (id: string) => request<SkillFull>(`/api/skills/${id}`),
   createSkill: (body: SkillWrite) =>
     request<{ id: string; name: string }>('/api/skills', { method: 'POST', body: JSON.stringify(body) }),
@@ -1187,6 +1190,12 @@ export const api = {
       restarting?: boolean;
       membership_state?: 'valid' | 'unverified' | 'expired' | 'rejected';
     }>('/api/update-solo-os/pull', { method: 'POST', body: JSON.stringify({ restart: true }) }),
+
+  // Desktop shell bridge - desktop:false on web installs (the Settings page
+  // hides the vault section entirely there).
+  desktopInfo: () => request<{ desktop: boolean; vaultPath: string | null }>('/api/desktop'),
+  desktopChangeVault: () => request<{ ok: boolean }>('/api/desktop/change-vault', { method: 'POST' }),
+  desktopOpenVault: () => request<{ ok: boolean }>('/api/desktop/open-vault', { method: 'POST' }),
 
   // SS membership-key gate. The key validates the user against the SS
   // community for as long as their membership is active. The local token
