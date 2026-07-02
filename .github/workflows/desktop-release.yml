@@ -45,22 +45,34 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
+          # Secrets pasted from `base64` output often carry line wraps or
+          # stray whitespace; BSD base64 on the mac runners refuses wrapped
+          # input, so strip ALL whitespace before decoding.
           if [ -n "$MAC_CERT_P12_BASE64" ]; then
-            echo "$MAC_CERT_P12_BASE64" | base64 -d > "$RUNNER_TEMP/mac-cert.p12"
+            printf '%s' "$MAC_CERT_P12_BASE64" | tr -d ' \n\r\t' | base64 -d > "$RUNNER_TEMP/mac-cert.p12" \
+              || { echo "::error::MAC_CERT_P12_BASE64 is not valid base64 - re-export the .p12 and re-create the secret with: base64 -i cert.p12 | pbcopy"; exit 1; }
+            # Fail HERE with a readable message if the cert or password is
+            # wrong, not twenty minutes later inside electron-builder.
+            openssl pkcs12 -in "$RUNNER_TEMP/mac-cert.p12" -passin "pass:$MAC_CERT_PASSWORD" -info -noout -legacy 2>/dev/null \
+              || openssl pkcs12 -in "$RUNNER_TEMP/mac-cert.p12" -passin "pass:$MAC_CERT_PASSWORD" -info -noout \
+              || { echo "::error::The .p12 decoded but cannot be opened with MAC_CERT_PASSWORD - wrong password or corrupted export."; exit 1; }
             echo "CSC_LINK=$RUNNER_TEMP/mac-cert.p12" >> "$GITHUB_ENV"
             echo "CSC_KEY_PASSWORD=$MAC_CERT_PASSWORD" >> "$GITHUB_ENV"
-            echo "mac signing: ON"
+            echo "mac signing: ON (certificate decoded + password verified)"
           else
             echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
             echo "mac signing: OFF (no MAC_CERT_P12_BASE64 secret)"
           fi
           if [ -n "$APPLE_API_KEY_B64" ]; then
-            echo "$APPLE_API_KEY_B64" | base64 -d > "$RUNNER_TEMP/apple-api-key.p8"
+            printf '%s' "$APPLE_API_KEY_B64" | tr -d ' \n\r\t' | base64 -d > "$RUNNER_TEMP/apple-api-key.p8" \
+              || { echo "::error::APPLE_API_KEY_B64 is not valid base64 - re-create the secret with: base64 -i AuthKey_XXXX.p8 | pbcopy"; exit 1; }
+            grep -q "BEGIN PRIVATE KEY" "$RUNNER_TEMP/apple-api-key.p8" \
+              || { echo "::error::Decoded APPLE_API_KEY_B64 does not look like a .p8 private key."; exit 1; }
             echo "APPLE_API_KEY=$RUNNER_TEMP/apple-api-key.p8" >> "$GITHUB_ENV"
             echo "APPLE_API_KEY_ID=$APPLE_API_KEY_ID" >> "$GITHUB_ENV"
             echo "APPLE_API_ISSUER=$APPLE_API_ISSUER" >> "$GITHUB_ENV"
             echo "NOTARIZE=true" >> "$GITHUB_ENV"
-            echo "mac notarization: ON"
+            echo "mac notarization: ON (API key decoded)"
           else
             echo "NOTARIZE=false" >> "$GITHUB_ENV"
             echo "mac notarization: OFF (no APPLE_API_KEY_B64 secret)"
@@ -100,7 +112,7 @@ jobs:
           WIN_CERT_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
         run: |
           if [ -n "$WIN_CERT_PFX_BASE64" ]; then
-            echo "$WIN_CERT_PFX_BASE64" | base64 -d > "$RUNNER_TEMP/win-cert.pfx"
+            printf '%s' "$WIN_CERT_PFX_BASE64" | tr -d ' \n\r\t' | base64 -d > "$RUNNER_TEMP/win-cert.pfx"
             echo "CSC_LINK=$RUNNER_TEMP/win-cert.pfx" >> "$GITHUB_ENV"
             echo "CSC_KEY_PASSWORD=$WIN_CERT_PASSWORD" >> "$GITHUB_ENV"
             echo "win signing: ON"
