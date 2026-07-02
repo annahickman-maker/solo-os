@@ -13,17 +13,85 @@
  * Auth: relies on `claude auth login` having been run once. The bridge
  * doesn't store credentials itself - it just shells out to the CLI.
  *
- * The claude binary location can be overridden with the CLAUDE_BIN env var.
- * Defaults to `claude` on PATH.
+ * The claude binary is resolved robustly at boot: CLAUDE_BIN env override,
+ * then PATH, then the well-known install locations PATH tends to miss when
+ * the app is launched from Finder (native installer's ~/.local/bin) or on
+ * Windows (npm-global claude.cmd). /health reports whether it was found.
  */
 
 import http from 'node:http';
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const PORT = Number(process.env.BRIDGE_PORT ?? 8789);
-const CLAUDE_BIN = process.env.CLAUDE_BIN ?? 'claude';
+const IS_WINDOWS = process.platform === 'win32';
+
+// How to invoke the claude CLI: spawn `bin` with `prefixArgs` before the real
+// args. `source` is the executable we actually found (for /health + logs).
+type ClaudeResolution = {
+  bin: string;
+  prefixArgs: string[];
+  source: string | null;
+  found: boolean;
+  shell: boolean;
+};
+
+// Turn a found claude executable into something Node's spawn can run. On
+// Windows an npm-global install is a `claude.cmd` shim, which spawn() refuses
+// to exec without a shell (EINVAL since the Node 18 CVE-2024-27980 fix) - and
+// shell:true would mangle multi-line args like the system prompt. So prefer
+// running the shim's real JS entry with our own node. shell:true stays as a
+// last resort for a nonstandard npm layout.
+function toSpawnable(found: string): ClaudeResolution {
+  if (IS_WINDOWS && /\.(cmd|bat)$/i.test(found)) {
+    const cli = path.join(
+      path.dirname(found), 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'
+    );
+    if (existsSync(cli)) {
+      return { bin: process.execPath, prefixArgs: [cli], source: found, found: true, shell: false };
+    }
+    return { bin: found, prefixArgs: [], source: found, found: true, shell: true };
+  }
+  return { bin: found, prefixArgs: [], source: found, found: true, shell: false };
+}
+
+function resolveClaude(): ClaudeResolution {
+  const names = IS_WINDOWS ? ['claude.exe', 'claude.cmd', 'claude.bat'] : ['claude'];
+  const candidates: string[] = [];
+  if (process.env.CLAUDE_BIN) candidates.push(process.env.CLAUDE_BIN);
+  for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
+    if (!dir) continue;
+    for (const name of names) candidates.push(path.join(dir, name));
+  }
+  for (const name of names) candidates.push(path.join(os.homedir(), '.local', 'bin', name));
+  if (IS_WINDOWS && process.env.APPDATA) {
+    candidates.push(path.join(process.env.APPDATA, 'npm', 'claude.cmd'));
+  }
+  for (const c of candidates) {
+    if (existsSync(c)) return toSpawnable(c);
+  }
+  return {
+    bin: process.env.CLAUDE_BIN ?? 'claude',
+    prefixArgs: [],
+    source: null,
+    found: false,
+    shell: false,
+  };
+}
+
+const CLAUDE_NOT_FOUND_MSG =
+  'claude CLI not found - install it from claude.com/code (or: npm install -g @anthropic-ai/claude-code), then restart Solo OS';
+
+// Resolve once at boot; while unresolved, re-check on each use so installing
+// claude later fixes AI features without a bridge restart.
+let claudeResolution = resolveClaude();
+function getClaude(): ClaudeResolution {
+  if (!claudeResolution.found) claudeResolution = resolveClaude();
+  return claudeResolution;
+}
 // The in-dashboard chat runs claude with the vault as its working directory so
 // it can read and write the real vault files (and discover the vault's skills).
 // One-shot AI features (/run) don't care about cwd. The launcher passes
@@ -79,10 +147,17 @@ function runClaude(opts: RunRequest): Promise<{ stdout: string; durationMs: numb
       opts.expectJson ? 'json' : 'text',
     ];
 
+    const cli = getClaude();
+    if (!cli.found) {
+      reject(new Error(CLAUDE_NOT_FOUND_MSG));
+      return;
+    }
+
     const started = Date.now();
-    const child = spawn(CLAUDE_BIN, args, {
+    const child = spawn(cli.bin, [...cli.prefixArgs, ...args], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env },
+      shell: cli.shell,
     });
 
     let stdout = '';
@@ -180,10 +255,18 @@ function handleChat(req: http.IncomingMessage, res: http.ServerResponse, body: C
   const started = Date.now();
   console.log(`[${timestamp()}] chat ${body.resume ? 'resume' : 'new'} ${body.sessionId.slice(0, 8)} (${body.message.length} chars)`);
 
-  const child = spawn(CLAUDE_BIN, args, {
+  const cli = getClaude();
+  if (!cli.found) {
+    sse(res, { type: 'error', message: CLAUDE_NOT_FOUND_MSG });
+    res.end();
+    return;
+  }
+
+  const child = spawn(cli.bin, [...cli.prefixArgs, ...args], {
     stdio: ['pipe', 'pipe', 'pipe'],
     cwd: VAULT_ROOT,
     env: { ...process.env },
+    shell: cli.shell,
   });
 
   let stderr = '';
@@ -271,8 +354,19 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && req.url === '/health') {
+    // ok reflects whether the claude binary ACTUALLY resolves on this
+    // machine, not just what it's configured as - the dashboard's
+    // "AI features are not connected" banner keys off it.
+    const cli = getClaude();
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, claude_bin: CLAUDE_BIN }));
+    res.end(
+      JSON.stringify({
+        ok: cli.found,
+        claude_bin: cli.source ?? process.env.CLAUDE_BIN ?? 'claude',
+        claude_found: cli.found,
+        error: cli.found ? null : CLAUDE_NOT_FOUND_MSG,
+      })
+    );
     return;
   }
 
@@ -347,8 +441,13 @@ process.on('unhandledRejection', (reason) => {
 });
 
 server.listen(PORT, () => {
+  const cli = getClaude();
   console.log(`claude-bridge listening on http://localhost:${PORT}`);
-  console.log(`  claude binary: ${CLAUDE_BIN}`);
+  console.log(
+    cli.found
+      ? `  claude binary: ${cli.source}`
+      : `  claude binary: NOT FOUND (checked CLAUDE_BIN, PATH, ~/.local/bin) - AI features will fail until it's installed`
+  );
   console.log(`  vault root: ${VAULT_ROOT}`);
   console.log(`  if requests fail with "Not logged in", run: claude auth login`);
 });

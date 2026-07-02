@@ -18,15 +18,18 @@ DASH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="/tmp"
 
 # Ensure node/npm are findable when launched via Finder (no shell init).
-# Cover the three common install paths: nvm (any version), Apple Silicon
-# Homebrew (/opt/homebrew/bin), Intel Homebrew (/usr/local/bin). Pick the
-# newest installed nvm version dynamically so we don't break when the user
-# upgrades node or never had v20.20.2 in the first place.
+# Cover the common install paths: nvm (any version), Apple Silicon Homebrew
+# (/opt/homebrew/bin), Intel Homebrew (/usr/local/bin), plus $HOME/.local/bin -
+# that's where the native Claude Code installer (claude.com/code) puts the
+# `claude` CLI, and without it the claude-bridge can't spawn claude when the
+# app is launched from Finder. Pick the newest installed nvm version
+# dynamically so we don't break when the user upgrades node or never had
+# v20.20.2 in the first place.
 NVM_BIN=""
 if [ -d "$HOME/.nvm/versions/node" ]; then
   NVM_BIN=$(ls -d "$HOME"/.nvm/versions/node/v*/bin 2>/dev/null | sort -V | tail -1)
 fi
-export PATH="${NVM_BIN:+$NVM_BIN:}/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+export PATH="${NVM_BIN:+$NVM_BIN:}$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 # Vault root the server reads/writes. Override with the VAULT_ROOT env var
 # (set it before running this script) to point at a different vault folder.

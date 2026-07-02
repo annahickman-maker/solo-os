@@ -182,11 +182,13 @@ LOG_DIR="/tmp"
 
 # Ensure node is findable when launched via Finder (no shell init). Pick the
 # newest installed nvm version dynamically + cover both Homebrew prefixes.
+# \$HOME/.local/bin is where the native Claude Code installer puts \`claude\` -
+# without it the claude-bridge can't find the CLI and AI features fail.
 NVM_BIN=""
 if [ -d "\$HOME/.nvm/versions/node" ]; then
   NVM_BIN=\$(ls -d "\$HOME"/.nvm/versions/node/v*/bin 2>/dev/null | sort -V | tail -1)
 fi
-export PATH="\${NVM_BIN:+\$NVM_BIN:}/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:\$PATH"
+export PATH="\${NVM_BIN:+\$NVM_BIN:}\$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:\$PATH"
 
 # Already running? Just open the browser.
 if lsof -ti:5174 >/dev/null 2>&1; then
