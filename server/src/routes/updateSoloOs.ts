@@ -117,6 +117,28 @@ app.post('/pull', async (c) => {
       403
     );
   }
+  // Desktop app: there is no git checkout - updates are signed installers
+  // handled by the Electron shell (electron-updater). Signal the main process
+  // over the utilityProcess message port and let it drive download + restart.
+  if (process.env.SOLO_OS_DESKTOP) {
+    try {
+      (process as unknown as { parentPort?: { postMessage: (m: unknown) => void } })
+        .parentPort?.postMessage({ type: 'check-for-updates' });
+    } catch {
+      // No parent port (shouldn't happen in the app) - the menu item still works.
+    }
+    return c.json({
+      ok: true,
+      alreadyUpToDate: false,
+      output:
+        'checking for updates... the app downloads updates in the background and offers a restart when one is ready. you can also use the Solo OS menu -> Check for Updates.',
+      exitCode: 0,
+      restarting: false,
+      desktop: true,
+      membership_state: 'valid',
+    });
+  }
+
   const cwd = repoRoot();
   const result = await runGitPull(cwd);
   // Optional one-click restart: when asked and the pull succeeded, fire

@@ -1,0 +1,83 @@
+{
+  "name": "solo-os-desktop",
+  "productName": "Solo OS",
+  "version": "1.0.0",
+  "description": "Solo OS - a local-first operating dashboard for solopreneurs. Your vault of markdown files is the database; this app is the UI over it.",
+  "author": "Anna Hickman <hello@annahickman.com>",
+  "private": true,
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "desktop:bundles": "node desktop/build.mjs",
+    "desktop:frontend": "npm --prefix frontend run build",
+    "desktop:prepare": "npm run desktop:bundles && npm run desktop:frontend",
+    "desktop:dev": "npm run desktop:prepare && electron .",
+    "desktop:selftest": "npm run desktop:prepare && electron . --self-test",
+    "desktop:pack": "npm run desktop:prepare && electron-builder --dir",
+    "desktop:dist": "npm run desktop:prepare && electron-builder"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "@anthropic-ai/claude-code": "^2.0.0",
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0",
+    "esbuild": "^0.25.0"
+  },
+  "build": {
+    "appId": "com.solo-os.dashboard",
+    "productName": "Solo OS",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "buildResources": "desktop/build",
+      "output": "desktop/release"
+    },
+    "files": [
+      "desktop/main.cjs",
+      "package.json"
+    ],
+    "afterPack": "desktop/afterPack.cjs",
+    "extraResources": [
+      { "from": "node_modules/@anthropic-ai/claude-code/bin/claude.exe", "to": "claude/claude.exe" },
+      { "from": "desktop/dist", "to": "server-bundles" },
+      { "from": "frontend/dist", "to": "frontend" },
+      {
+        "from": "sample-vault",
+        "to": "sample-vault",
+        "filter": ["**/*", "!00_System/dashboard-chats/**", "!**/.DS_Store"]
+      },
+      { "from": ".claude/skills", "to": "app-skills", "filter": ["**/*", "!**/.DS_Store"] }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "desktop/build/icon.icns",
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "desktop/entitlements.mac.plist",
+      "entitlementsInherit": "desktop/entitlements.mac.plist",
+      "notarize": false
+    },
+    "dmg": {
+      "writeUpdateInfo": false
+    },
+    "win": {
+      "icon": "desktop/build/icon.png",
+      "target": [{ "target": "nsis", "arch": ["x64"] }]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "annahickman-maker",
+      "repo": "solo-os",
+      "releaseType": "draft"
+    }
+  }
+}

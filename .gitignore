@@ -51,3 +51,6 @@ sample-vault/00_System/dashboard-chats/
 sample-vault/**/.transcript-baseline
 sample-vault/**/.transcript-baseline*
 sample-vault/00_System/reputation-analysis.json
+
+# Desktop app build output
+desktop/release/

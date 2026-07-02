@@ -27,15 +27,23 @@ The dashboard has 13 pages. The important ones:
 
 The foundation is the part to understand: 6 prose files in `01_Core/` describe who you are, who you help, your story, your IP, your offers, your voice. The dashboard parses those into 18+ structured slots, then every other page reads from those slots. Define your foundation once. Every video title, every offer page, every script knows who you are.
 
-## Install (Mac, ~10 minutes)
+## Install the app (Mac and Windows, ~2 minutes)
 
-You need four things first:
-1. **Node 20+** (download from https://nodejs.org)
-2. **A Claude subscription** - Pro ($20/mo) or Max ($100/mo). The dashboard uses YOUR subscription for all AI features. No API key, no metered billing.
-3. **The Claude Code CLI** from https://claude.com/code. After installing, run `claude auth login` once - browser opens, sign in to your Claude account.
-4. **An active [Solopreneur Systems](https://www.skool.com/mastermind-5724/about) membership.** Solo OS is built for SS members - the current access key is pinned at the top of the community. You paste it once on first launch; the dashboard re-checks it when you click "update" inside Settings. If your SS membership lapses the dashboard keeps running with whatever version you have, but updates stop until you rejoin and paste the current key.
+This is the way to run Solo OS: a normal desktop app, like Obsidian or Notion.
 
-**The easy way (one command does everything):** open Terminal, paste this, press Enter.
+1. Download the installer for your machine from the [latest release](https://github.com/annahickman-maker/solo-os/releases/latest): the `.dmg` on a Mac (pick `arm64` for Apple Silicon, `x64` for Intel), the `.exe` on Windows.
+2. Open it. Mac: drag Solo OS into Applications. Windows: the installer runs itself.
+3. Launch Solo OS. It creates your vault at `~/Desktop/Solo OS` on first run (or adopts the one you already have), asks for your Solopreneur Systems access key, and offers a one-time Claude sign-in for the AI features.
+
+That's the whole install. Everything is inside the app: the dashboard, the local server, and its own copy of Claude Code. No Node, no npm, no git, no terminal. Updates download in the background and apply when you restart the app.
+
+You need two things:
+1. **A Claude subscription** - Pro ($20/mo) or Max ($100/mo). The dashboard uses YOUR subscription for all AI features. No API key, no metered billing.
+2. **An active [Solopreneur Systems](https://www.skool.com/mastermind-5724/about) membership.** The current access key is pinned at the top of the community. You paste it once on first launch. If your SS membership lapses the dashboard keeps running with whatever version you have, but updates stop until you rejoin and paste the current key.
+
+## Install from source (the old way - still works)
+
+If you'd rather run from a git checkout (you want to hack on the code, or you were installed this way before the app existed), you need **Node 20+** and the **Claude Code CLI** first, then: open Terminal, paste this, press Enter.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/annahickman-maker/solo-os/main/install.sh | bash
@@ -62,7 +70,7 @@ cd ~/solo-os-src
 
 The first launch takes ~10 seconds to spin up the three services. Then Chrome opens to http://localhost:5174. Password is `dev`.
 
-**Windows users:** see [WINDOWS.md](WINDOWS.md) for the manual install steps (no `.exe` installer yet).
+**Windows users:** the desktop app installer above is the supported path. [WINDOWS.md](WINDOWS.md) documents the old manual source install if you need it.
 
 ## Daily flow
 
@@ -106,7 +114,9 @@ The dashboard is a smart workspace. SS is what makes it work for your specific b
 
 ## Updates
 
-When I ship improvements, open **Settings** in the dashboard and click **"update + restart"**. It pulls the latest code (inside the app) and restarts the services for you. You need a current Solopreneur Systems membership key for updates to run.
+**Desktop app:** updates download in the background and the app offers a restart when one is ready. You can also check manually: Solo OS menu -> Check for Updates, or the "update + restart" button in Settings (same thing).
+
+**Source install:** open **Settings** in the dashboard and click **"update + restart"**. It pulls the latest code (inside the app) and restarts the services for you. You need a current Solopreneur Systems membership key for updates to run.
 
 If you'd rather update from the terminal:
 

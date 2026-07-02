@@ -682,6 +682,7 @@ export const api = {
     patch: {
       title?: string;
       target_value?: number | null;
+      current_value?: number | null;
       target_date?: string | null;
       mrr_target_usd?: number | null;
       avg_member_price_usd?: number | null;

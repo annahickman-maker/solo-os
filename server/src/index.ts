@@ -200,7 +200,66 @@ app.route('/api/nano-banana', nanoBanana);
 // discovered features inherit auth. See featureLoader.ts.
 await mountFeatures(app);
 
-serve({ fetch: app.fetch, port: PORT }, (info) => {
+// ─── Desktop app: serve the built frontend from this same origin ───────────
+// When FRONTEND_DIST is set (the Solo OS desktop app points it at the bundled
+// frontend build), this server IS the web server: same origin, no proxy, no
+// second port. Hand-rolled instead of serveStatic so behaviour is identical
+// across platforms and cwd values. Mounted after every /api route; anything
+// that isn't a real file falls back to index.html (SPA routing). Web installs
+// never set FRONTEND_DIST, so nothing changes for them.
+const FRONTEND_DIST = process.env.FRONTEND_DIST;
+if (FRONTEND_DIST) {
+  const fsStatic = await import('node:fs');
+  const pathStatic = await import('node:path');
+  const MIME: Record<string, string> = {
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.mjs': 'text/javascript; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.json': 'application/json',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.ico': 'image/x-icon',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+    '.ttf': 'font/ttf',
+    '.map': 'application/json',
+    '.txt': 'text/plain; charset=utf-8',
+  };
+  const distRoot = pathStatic.resolve(FRONTEND_DIST);
+  app.get('*', (c) => {
+    const urlPath = decodeURIComponent(new URL(c.req.url).pathname);
+    if (urlPath.startsWith('/api/')) return c.json({ error: 'not found' }, 404);
+    // Resolve inside the dist root only - reject anything that escapes it.
+    const candidate = pathStatic.resolve(pathStatic.join(distRoot, urlPath));
+    const inRoot = candidate === distRoot || candidate.startsWith(distRoot + pathStatic.sep);
+    let filePath = inRoot ? candidate : null;
+    if (!filePath || !fsStatic.existsSync(filePath) || fsStatic.statSync(filePath).isDirectory()) {
+      // SPA fallback: /skills, /focus etc. all serve the app shell.
+      filePath = pathStatic.join(distRoot, 'index.html');
+    }
+    if (!fsStatic.existsSync(filePath)) return c.text('frontend build missing', 500);
+    const ext = pathStatic.extname(filePath).toLowerCase();
+    const isHashedAsset = urlPath.startsWith('/assets/');
+    return c.body(fsStatic.readFileSync(filePath), 200, {
+      'Content-Type': MIME[ext] ?? 'application/octet-stream',
+      // Vite fingerprints /assets/* filenames, so they can cache forever.
+      // index.html must never cache or an app update would serve a stale shell.
+      'Cache-Control': isHashedAsset ? 'public, max-age=31536000, immutable' : 'no-cache',
+    });
+  });
+}
+
+// HOST controls the bind address. The desktop app binds 127.0.0.1 so the
+// dashboard is reachable only from this machine. Unset (web installs) keeps
+// the historical default.
+const HOST = process.env.HOST;
+
+serve({ fetch: app.fetch, port: PORT, ...(HOST ? { hostname: HOST } : {}) }, (info) => {
   console.log(`solo-os-dashboard-server listening on http://localhost:${info.port}`);
   console.log(`  reads/writes vault files directly from VAULT_ROOT`);
   startZoomBackgroundSync();

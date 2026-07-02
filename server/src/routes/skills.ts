@@ -40,6 +40,22 @@ const REPO_ROOT = path.resolve(
 );
 
 function resolveSkillRoots(): { path: string; pack: string }[] {
+  // Highest priority: SKILL_ROOTS_JSON - a JSON array of { path, pack } with
+  // ABSOLUTE paths. The desktop app uses this because its shipped skill pack
+  // lives inside the app resources, not under the vault, and absolute paths
+  // can contain the commas/colons the SKILL_ROOTS string format can't.
+  const json = process.env.SKILL_ROOTS_JSON?.trim();
+  if (json) {
+    try {
+      const parsed = JSON.parse(json) as { path?: string; pack?: string }[];
+      const roots = parsed
+        .filter((r) => typeof r?.path === 'string' && r.path)
+        .map((r) => ({ path: path.resolve(r.path!), pack: r.pack || 'custom' }));
+      if (roots.length) return roots;
+    } catch {
+      console.error('[skills] SKILL_ROOTS_JSON is not valid JSON - ignoring it');
+    }
+  }
   const raw = process.env.SKILL_ROOTS?.trim();
   if (raw) {
     return raw

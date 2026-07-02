@@ -31,12 +31,15 @@ const IS_WINDOWS = process.platform === 'win32';
 
 // How to invoke the claude CLI: spawn `bin` with `prefixArgs` before the real
 // args. `source` is the executable we actually found (for /health + logs).
+// `env` is an extra overlay merged into the child's environment (used by the
+// desktop app to run the bundled CLI under Electron's node).
 type ClaudeResolution = {
   bin: string;
   prefixArgs: string[];
   source: string | null;
   found: boolean;
   shell: boolean;
+  env: Record<string, string>;
 };
 
 // Turn a found claude executable into something Node's spawn can run. On
@@ -51,15 +54,43 @@ function toSpawnable(found: string): ClaudeResolution {
       path.dirname(found), 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'
     );
     if (existsSync(cli)) {
-      return { bin: process.execPath, prefixArgs: [cli], source: found, found: true, shell: false };
+      return { bin: process.execPath, prefixArgs: [cli], source: found, found: true, shell: false, env: nodeRunEnv() };
     }
-    return { bin: found, prefixArgs: [], source: found, found: true, shell: true };
+    return { bin: found, prefixArgs: [], source: found, found: true, shell: true, env: {} };
   }
-  return { bin: found, prefixArgs: [], source: found, found: true, shell: false };
+  return { bin: found, prefixArgs: [], source: found, found: true, shell: false, env: {} };
+}
+
+// When we run a cli.js with our own executable and that executable is
+// Electron (the desktop app), ELECTRON_RUN_AS_NODE makes it behave as plain
+// node. Harmless when the executable is already node (web install).
+function nodeRunEnv(): Record<string, string> {
+  return { ELECTRON_RUN_AS_NODE: '1' };
 }
 
 function resolveClaude(): ClaudeResolution {
   const names = IS_WINDOWS ? ['claude.exe', 'claude.cmd', 'claude.bat'] : ['claude'];
+  // The desktop app ships its own copy of the CLI and points at it with
+  // CLAUDE_BUNDLED_CLI - members never install anything. Highest priority so
+  // a stale system install can't shadow the bundled, version-matched one.
+  // A .js path is run with our own executable as node; anything else is the
+  // native standalone binary and runs directly. DISABLE_AUTOUPDATER because
+  // the bundled copy lives inside a signed app and must not rewrite itself -
+  // it updates when the app updates.
+  const bundled = process.env.CLAUDE_BUNDLED_CLI;
+  if (bundled && existsSync(bundled)) {
+    if (/\.(c|m)?js$/i.test(bundled)) {
+      return {
+        bin: process.execPath,
+        prefixArgs: [bundled],
+        source: bundled,
+        found: true,
+        shell: false,
+        env: { ...nodeRunEnv(), DISABLE_AUTOUPDATER: '1' },
+      };
+    }
+    return { bin: bundled, prefixArgs: [], source: bundled, found: true, shell: false, env: { DISABLE_AUTOUPDATER: '1' } };
+  }
   const candidates: string[] = [];
   if (process.env.CLAUDE_BIN) candidates.push(process.env.CLAUDE_BIN);
   for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
@@ -79,6 +110,7 @@ function resolveClaude(): ClaudeResolution {
     source: null,
     found: false,
     shell: false,
+    env: {},
   };
 }
 
@@ -156,7 +188,7 @@ function runClaude(opts: RunRequest): Promise<{ stdout: string; durationMs: numb
     const started = Date.now();
     const child = spawn(cli.bin, [...cli.prefixArgs, ...args], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
+      env: { ...process.env, ...cli.env },
       shell: cli.shell,
     });
 
@@ -265,7 +297,7 @@ function handleChat(req: http.IncomingMessage, res: http.ServerResponse, body: C
   const child = spawn(cli.bin, [...cli.prefixArgs, ...args], {
     stdio: ['pipe', 'pipe', 'pipe'],
     cwd: VAULT_ROOT,
-    env: { ...process.env },
+    env: { ...process.env, ...cli.env },
     shell: cli.shell,
   });
 
