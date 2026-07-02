@@ -27,10 +27,12 @@ const {
   BrowserWindow,
   dialog,
   Menu,
+  Tray,
   shell,
   clipboard,
   utilityProcess,
   nativeTheme,
+  nativeImage,
 } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -84,8 +86,62 @@ function resPath(name) {
     frontend: path.join(repo, 'frontend', 'dist'),
     'sample-vault': path.join(repo, 'sample-vault'),
     'app-skills': path.join(repo, '.claude', 'skills'),
+    'icon.png': path.join(repo, 'desktop', 'build', 'icon.png'),
   };
   return devMap[name] ?? path.join(repo, name);
+}
+
+// Background mode: when ON (default), closing the window keeps the services
+// alive - scheduled skills, Zoom sync, and the title radar keep running, and
+// the tray icon is the handle to get back in or quit fully.
+function keepRunningInBackground() {
+  return loadConfig().keepRunningInBackground !== false;
+}
+
+// ─── membership (read-only view for the shell) ─────────────────────────────
+// The server owns the membership state machine (verify/recheck against the
+// licensing worker). The shell only needs a yes/no before auto-updating, so
+// lapsed members stop receiving releases - same rule the git-pull update
+// button always enforced.
+
+function membershipTokenValid() {
+  try {
+    const stateDir = process.env.SOLO_OS_STATE_DIR || path.join(os.homedir(), '.solo-os');
+    const token = JSON.parse(fs.readFileSync(path.join(stateDir, 'membership.json'), 'utf8'));
+    return typeof token?.valid_until === 'number' && token.valid_until > Date.now() / 1000;
+  } catch {
+    return false;
+  }
+}
+
+async function membershipValidForUpdates() {
+  // Prefer the server's state machine: /recheck silently refreshes an aging
+  // token with the cached key, so a member in good standing never has their
+  // auto-updates stall just because the cached expiry passed.
+  try {
+    const headers = { 'X-Dashboard-Password': DASHBOARD_PASSWORD };
+    const status = await httpGet(`http://127.0.0.1:${serverPort}/api/membership/status`, headers, 4000);
+    const state = JSON.parse(status.body);
+    if (state?.state === 'valid' && !state.needs_recheck) return true;
+    const recheck = await new Promise((resolve, reject) => {
+      const req = http.request(
+        `http://127.0.0.1:${serverPort}/api/membership/recheck`,
+        { method: 'POST', headers, timeout: 8000 },
+        (res) => {
+          let body = '';
+          res.on('data', (d) => (body += d));
+          res.on('end', () => resolve(body));
+        }
+      );
+      req.on('timeout', () => req.destroy(new Error('timeout')));
+      req.on('error', reject);
+      req.end();
+    });
+    return JSON.parse(recheck)?.state === 'valid';
+  } catch {
+    // Server not up (or offline) - fall back to the cached token on disk.
+    return membershipTokenValid();
+  }
 }
 
 function bundledClaudeCli() {
@@ -825,6 +881,21 @@ async function checkForUpdates(interactive) {
   if (updateCheckInFlight) return;
   updateCheckInFlight = true;
   try {
+    // Updates are a membership benefit, same as the old git-pull button: a
+    // lapsed key pauses releases until the member re-verifies in Settings.
+    if (!(await membershipValidForUpdates())) {
+      log('update check skipped - no valid SS membership');
+      if (interactive) {
+        dialog.showMessageBoxSync({
+          type: 'info',
+          title: 'Solo OS',
+          message: 'Updates need an active Solopreneur Systems membership',
+          detail: 'Open Settings and paste the current access key (pinned in the SS community). The dashboard keeps working either way - only updates pause.',
+          buttons: ['OK'],
+        });
+      }
+      return;
+    }
     const result = await updater.checkForUpdates();
     const latest = result?.updateInfo?.version;
     if (interactive && latest && latest === app.getVersion()) {
@@ -848,6 +919,63 @@ async function checkForUpdates(interactive) {
     }
   } finally {
     updateCheckInFlight = false;
+  }
+}
+
+// ─── tray ───────────────────────────────────────────────────────────────────
+// The handle back into the app while it runs in the background (window closed,
+// services + scheduled skills still alive).
+
+let tray = null;
+
+function trayIcon() {
+  const png = resPath('icon.png');
+  if (fs.existsSync(png)) {
+    const img = nativeImage.createFromPath(png).resize({ width: 18, height: 18 });
+    return img;
+  }
+  return nativeImage.createEmpty();
+}
+
+function rebuildTrayMenu() {
+  if (!tray) return;
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: 'Open Solo OS', click: () => createMainWindow() },
+      { type: 'separator' },
+      {
+        label: 'Keep Running When Window Closes',
+        type: 'checkbox',
+        checked: keepRunningInBackground(),
+        click: (item) => {
+          saveConfig({ keepRunningInBackground: item.checked });
+          rebuildTrayMenu();
+        },
+      },
+      { label: 'Check for Updates...', click: () => checkForUpdates(true) },
+      { type: 'separator' },
+      {
+        label: 'Quit Solo OS Completely',
+        click: () => {
+          quitting = true;
+          stopAllServices();
+          app.quit();
+        },
+      },
+    ])
+  );
+}
+
+function createTray() {
+  if (tray || SELF_TEST) return;
+  try {
+    tray = new Tray(trayIcon());
+    tray.setToolTip('Solo OS - running');
+    rebuildTrayMenu();
+    // Windows convention: single-click on the tray icon opens the app.
+    if (IS_WIN) tray.on('click', () => createMainWindow());
+  } catch (err) {
+    log(`tray unavailable: ${err.message}`);
   }
 }
 
@@ -897,6 +1025,15 @@ function buildMenu() {
       click: () => changeVaultFlow(),
     },
     { type: 'separator' },
+    {
+      label: 'Keep Running When Window Closes',
+      type: 'checkbox',
+      checked: keepRunningInBackground(),
+      click: (item) => {
+        saveConfig({ keepRunningInBackground: item.checked });
+        rebuildTrayMenu();
+      },
+    },
     {
       label: 'Sign In to Claude...',
       click: () => openSignInTerminal(),
@@ -1026,9 +1163,13 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) {
+    // Double-clicking the app while it runs in the background must bring the
+    // dashboard back, not silently no-op.
+    if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
+    } else if (serverPort) {
+      createMainWindow();
     }
   });
 
@@ -1049,6 +1190,7 @@ if (!gotLock) {
 
       cleanupLegacyServices();
       buildMenu();
+      createTray();
       setupAutoUpdater();
 
       await startAllServices();
@@ -1070,8 +1212,14 @@ if (!gotLock) {
   });
 
   app.on('window-all-closed', () => {
-    // Single-purpose app: closing the dashboard quits and stops the services.
-    app.quit();
+    if (quitting || SELF_TEST || !keepRunningInBackground()) {
+      app.quit();
+      return;
+    }
+    // Background mode: the window is gone but the services stay up, so
+    // scheduled skills and syncs keep firing. The tray (and the dock icon on
+    // mac) reopens the dashboard; quitting fully is Cmd+Q or the tray item.
+    log('window closed - staying alive in the background (tray)');
   });
 
   app.on('before-quit', () => {

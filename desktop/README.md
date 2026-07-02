@@ -30,7 +30,14 @@ At runtime `main.cjs`:
 5. loads the window from `http://127.0.0.1:<port>/` - the server serves the
    frontend itself (FRONTEND_DIST), so it is all one origin, no proxy
 6. handles auto-update (electron-updater against GitHub releases; the Settings
-   "update + restart" button routes here via a parentPort message)
+   "update + restart" button routes here via a parentPort message). Updates
+   are MEMBERSHIP-GATED: the shell asks the server's membership state machine
+   (with a silent recheck) before any check, falling back to the cached token
+   at ~/.solo-os/membership.json when the server is unreachable - lapsed keys
+   pause releases, same as the old git-pull button
+7. keeps running in the background when the window closes (default ON, config
+   `keepRunningInBackground`) so scheduled skills and Zoom sync keep firing -
+   a tray icon reopens the dashboard or quits fully; Cmd+Q always fully quits
 7. checks claude auth at boot and walks the member through a one-time
    terminal sign-in if needed
 

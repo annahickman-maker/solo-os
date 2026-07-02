@@ -39,6 +39,7 @@
     "afterPack": "desktop/afterPack.cjs",
     "extraResources": [
       { "from": "node_modules/@anthropic-ai/claude-code/bin/claude.exe", "to": "claude/claude.exe" },
+      { "from": "desktop/build/icon.png", "to": "icon.png" },
       { "from": "desktop/dist", "to": "server-bundles" },
       { "from": "frontend/dist", "to": "frontend" },
       {
